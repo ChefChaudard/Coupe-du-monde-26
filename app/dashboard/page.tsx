@@ -120,7 +120,7 @@ export default async function DashboardPage() {
     );
 
     const averagePoints =
-      allPoints.reduce((sum, pts) => sum + pts, 0) / allPoints.length;
+      allPoints.reduce<number>((sum, pts) => sum + pts, 0) / allPoints.length;
 
     const myPrediction = matchPredictions.find((p) => p.user_id === user.id);
 

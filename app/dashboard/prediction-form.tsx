@@ -92,7 +92,7 @@ export default function PredictionForm({
   }, [matches]);
 
   const [values, setValues] = useState<FormValues>(initialValues);
-  const [savingMatchId, setSavingMatchId] = useState<number | null>(null);
+  const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
   function updateValue(matchId: number, side: "a" | "b", value: string) {
@@ -105,71 +105,59 @@ export default function PredictionForm({
     }));
   }
 
-  async function savePrediction(matchId: number) {
+  async function saveGroup(matchesInGroup: Match[], phase: string) {
     setMessage("");
+    setSavingGroup(phase);
 
-    const entry = values[matchId];
+    for (const match of matchesInGroup) {
+      const entry = values[match.id];
 
-    if (!entry || entry.a === "" || entry.b === "") {
-      setMessage("Merci de saisir les 2 scores.");
-      return;
+      if (!entry || entry.a === "" || entry.b === "") continue;
+
+      const kickoff = new Date(match.kickoff_at).getTime();
+
+      // 🔒 On ne sauvegarde QUE les matchs encore ouverts
+      if (kickoff <= Date.now()) continue;
+
+      const predictedA = Number(entry.a);
+      const predictedB = Number(entry.b);
+
+      if (Number.isNaN(predictedA) || Number.isNaN(predictedB)) continue;
+
+      await supabase.from("predictions").upsert(
+        {
+          user_id: userId,
+          match_id: match.id,
+          predicted_a: predictedA,
+          predicted_b: predictedB,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "user_id,match_id",
+        }
+      );
     }
 
-    const match = matches.find((m) => m.id === matchId);
-
-    if (!match) {
-      setMessage("Match introuvable.");
-      return;
-    }
-
-    if (new Date(match.kickoff_at).getTime() <= Date.now()) {
-      setMessage("Ce pronostic est verrouillé car le match a commencé.");
-      return;
-    }
-
-    const predictedA = Number(entry.a);
-    const predictedB = Number(entry.b);
-
-    if (Number.isNaN(predictedA) || Number.isNaN(predictedB)) {
-      setMessage("Les scores doivent être des nombres.");
-      return;
-    }
-
-    if (predictedA < 0 || predictedB < 0) {
-      setMessage("Les scores doivent être positifs.");
-      return;
-    }
-
-    setSavingMatchId(matchId);
-
-    const { error } = await supabase.from("predictions").upsert(
-      {
-        user_id: userId,
-        match_id: matchId,
-        predicted_a: predictedA,
-        predicted_b: predictedB,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: "user_id,match_id",
-      }
-    );
-
-    setSavingMatchId(null);
-
-    if (error) {
-      setMessage(`Erreur sauvegarde : ${error.message}`);
-      return;
-    }
-
-    setMessage("Pronostic enregistré.");
+    setSavingGroup(null);
+    setMessage(`Pronostics sauvegardés pour ${phase}`);
   }
 
   return (
     <section className="space-y-5">
       {groupedMatches.map(([phase, phaseMatches]) => (
         <div key={phase} className="rounded-xl border p-3">
-          <h3 className="mb-2 text-lg font-bold capitalize">{phase}</h3>
+          {/* HEADER AVEC BOUTON SAVE */}
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-lg font-bold capitalize">{phase}</h3>
+
+            <button
+              onClick={() => saveGroup(phaseMatches, phase)}
+              disabled={savingGroup === phase}
+              className="bg-black text-white px-3 py-1 rounded text-sm"
+            >
+              {savingGroup === phase ? "Saving..." : "SAVE"}
+            </button>
+          </div>
 
           <table className="w-full table-fixed text-xs">
             <thead>
@@ -190,14 +178,11 @@ export default function PredictionForm({
                     <th className="py-2 pl-1 w-[65px]"></th>
                   </>
                 )}
-
-                <th className="py-2 pl-1 w-[45px]"></th>
               </tr>
             </thead>
 
             <tbody>
               {phaseMatches.map((match) => {
-                const isSaving = savingMatchId === match.id;
                 const kickoffDate = new Date(match.kickoff_at);
                 const hasStarted = kickoffDate.getTime() <= Date.now();
                 const canPredict = !hasStarted;
@@ -227,7 +212,7 @@ export default function PredictionForm({
                           updateValue(match.id, "a", e.target.value)
                         }
                         disabled={!canPredict}
-                        className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
+                        className="w-10 border px-1 text-center"
                       />
                     </td>
 
@@ -240,7 +225,7 @@ export default function PredictionForm({
                           updateValue(match.id, "b", e.target.value)
                         }
                         disabled={!canPredict}
-                        className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
+                        className="w-10 border px-1 text-center"
                       />
                     </td>
 
@@ -248,30 +233,30 @@ export default function PredictionForm({
                       {match.team_b}
                     </td>
 
-                    <td className="py-2 px-1 text-gray-600 whitespace-nowrap">
+                    <td className="py-2 px-1">
                       {formatParisDate(kickoffDate)}
                     </td>
 
-                    <td className="py-2 px-1 text-gray-600 whitespace-nowrap">
+                    <td className="py-2 px-1">
                       {formatParisTime(kickoffDate)}
                     </td>
 
-                    <td className="py-2 px-1 text-gray-600 truncate">
+                    <td className="py-2 px-1">
                       {getCityFromVenue(match.venue)}
                     </td>
 
-                    <td className="py-2 px-1 whitespace-nowrap">
+                    <td className="py-2 px-1">
                       {hasOfficialScore ? (
-                        <span className="text-blue-700">
-                          Terminé {match.score_a}-{match.score_b}
+                        <span>
+                          {match.score_a}-{match.score_b}
                           {myPoints !== null && ` • ${myPoints}p`}
                           {averagePoints !== null &&
                             ` • m.${averagePoints.toFixed(1)}`}
                         </span>
                       ) : canPredict ? (
-                        <span className="text-green-600">Ouvert</span>
+                        "Ouvert"
                       ) : (
-                        <span className="text-red-600">Prono bloqué</span>
+                        "Bloqué"
                       )}
                     </td>
 
@@ -279,48 +264,36 @@ export default function PredictionForm({
                       <form action={updateMatchResult} className="contents">
                         <input type="hidden" name="match_id" value={match.id} />
 
-                        <td className="py-2 px-1">
+                        <td>
                           <input
                             name="score_a"
                             type="number"
-                            min={0}
                             defaultValue={match.score_a ?? ""}
                             disabled={!canEnterRealScore}
-                            className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
+                            className="w-10 border text-center"
                           />
                         </td>
 
-                        <td className="py-2 px-1">
+                        <td>
                           <input
                             name="score_b"
                             type="number"
-                            min={0}
                             defaultValue={match.score_b ?? ""}
                             disabled={!canEnterRealScore}
-                            className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
+                            className="w-10 border text-center"
                           />
                         </td>
 
-                        <td className="py-2 pl-1 text-right">
+                        <td>
                           <button
                             disabled={!canEnterRealScore}
-                            className="rounded bg-blue-700 px-2 py-1 text-xs text-white disabled:opacity-40"
+                            className="text-xs bg-blue-600 text-white px-2 py-1 rounded"
                           >
-                            Rés.
+                            OK
                           </button>
                         </td>
                       </form>
                     )}
-
-                    <td className="py-2 pl-1 text-right">
-                      <button
-                        onClick={() => savePrediction(match.id)}
-                        disabled={isSaving || !canPredict}
-                        className="rounded bg-black px-2 py-1 text-xs text-white disabled:opacity-50"
-                      >
-                        {canPredict ? (isSaving ? "..." : "OK") : "Lock"}
-                      </button>
-                    </td>
                   </tr>
                 );
               })}

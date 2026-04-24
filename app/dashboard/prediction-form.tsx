@@ -28,6 +28,15 @@ type MatchStats = {
 
 type FormValues = Record<number, { a: string; b: string }>;
 
+type GroupStanding = {
+  team: string;
+  played: number;
+  points: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+};
+
 function getCityFromVenue(venue?: string | null) {
   if (!venue) return "-";
   return venue.split("-")[0].trim();
@@ -47,6 +56,133 @@ function formatParisTime(date: Date) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function computeGroupStandings(
+  matches: Match[],
+  values: FormValues
+): GroupStanding[] {
+  const standings = new Map<string, GroupStanding>();
+
+  function ensureTeam(team: string) {
+    if (!standings.has(team)) {
+      standings.set(team, {
+        team,
+        played: 0,
+        points: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        goalDifference: 0,
+      });
+    }
+
+    return standings.get(team)!;
+  }
+
+  for (const match of matches) {
+    const prediction = values[match.id];
+
+    if (!prediction || prediction.a === "" || prediction.b === "") {
+      ensureTeam(match.team_a);
+      ensureTeam(match.team_b);
+      continue;
+    }
+
+    const scoreA = Number(prediction.a);
+    const scoreB = Number(prediction.b);
+
+    if (Number.isNaN(scoreA) || Number.isNaN(scoreB)) {
+      continue;
+    }
+
+    const teamA = ensureTeam(match.team_a);
+    const teamB = ensureTeam(match.team_b);
+
+    teamA.played += 1;
+    teamB.played += 1;
+
+    teamA.goalsFor += scoreA;
+    teamA.goalsAgainst += scoreB;
+
+    teamB.goalsFor += scoreB;
+    teamB.goalsAgainst += scoreA;
+
+    if (scoreA > scoreB) {
+      teamA.points += 3;
+    } else if (scoreA < scoreB) {
+      teamB.points += 3;
+    } else {
+      teamA.points += 1;
+      teamB.points += 1;
+    }
+  }
+
+  return Array.from(standings.values())
+    .map((team) => ({
+      ...team,
+      goalDifference: team.goalsFor - team.goalsAgainst,
+    }))
+    .sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.goalDifference !== a.goalDifference) {
+        return b.goalDifference - a.goalDifference;
+      }
+      if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
+      return a.team.localeCompare(b.team);
+    });
+}
+
+function GroupStandingTooltip({
+  phaseMatches,
+  values,
+}: {
+  phaseMatches: Match[];
+  values: FormValues;
+}) {
+  const standings = computeGroupStandings(phaseMatches, values);
+
+  return (
+    <div className="absolute left-0 top-8 z-50 hidden w-[360px] rounded-xl border bg-white p-3 text-xs shadow-xl group-hover:block">
+      <div className="mb-2 font-bold text-gray-900">
+        Classement selon tes pronostics
+      </div>
+
+      <table className="w-full">
+        <thead>
+          <tr className="border-b text-left text-gray-500">
+            <th className="py-1">#</th>
+            <th className="py-1">Équipe</th>
+            <th className="py-1 text-center">J</th>
+            <th className="py-1 text-center">Pts</th>
+            <th className="py-1 text-center">Diff</th>
+            <th className="py-1 text-center">BP</th>
+            <th className="py-1 text-center">BC</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {standings.map((row, index) => (
+            <tr key={row.team} className="border-b last:border-b-0">
+              <td className="py-1">{index + 1}</td>
+              <td className="py-1 font-medium">{row.team}</td>
+              <td className="py-1 text-center">{row.played}</td>
+              <td className="py-1 text-center font-bold">{row.points}</td>
+              <td className="py-1 text-center">
+                {row.goalDifference > 0 ? "+" : ""}
+                {row.goalDifference}
+              </td>
+              <td className="py-1 text-center">{row.goalsFor}</td>
+              <td className="py-1 text-center">{row.goalsAgainst}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <p className="mt-2 text-[11px] text-gray-500">
+        Le classement se met à jour avec les scores saisis, même avant sauvegarde.
+      </p>
+    </div>
+  );
 }
 
 export default function PredictionForm({
@@ -169,7 +305,16 @@ export default function PredictionForm({
       {groupedMatches.map(([phase, phaseMatches]) => (
         <div key={phase} className="rounded-xl border p-3">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-lg font-bold capitalize">{phase}</h3>
+            <div className="group relative">
+              <h3 className="cursor-help text-lg font-bold capitalize underline decoration-dotted underline-offset-4">
+                {phase}
+              </h3>
+
+              <GroupStandingTooltip
+                phaseMatches={phaseMatches}
+                values={values}
+              />
+            </div>
 
             <button
               onClick={() => saveGroup(phaseMatches, phase)}

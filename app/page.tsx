@@ -5,16 +5,16 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 
 export default function Home() {
-  const [user, setUser] = useState<any>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
+      setUserEmail(data.user?.email ?? null);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        setUser(session?.user ?? null);
+        setUserEmail(session?.user?.email ?? null);
       }
     );
 
@@ -34,7 +34,7 @@ export default function Home() {
         <h1 className="text-4xl font-bold">Coupe du Monde 2026</h1>
         <p className="text-xl">Site de pronostics entre amis</p>
 
-        <div className="flex gap-4 justify-center flex-wrap">
+        <div className="flex flex-wrap justify-center gap-4">
           <Link
             href="/dashboard"
             className="rounded bg-white px-6 py-3 font-semibold text-green-900 hover:bg-gray-100"
@@ -42,26 +42,33 @@ export default function Home() {
             Accéder au dashboard
           </Link>
 
-          {!user ? (
+          {!userEmail ? (
             <Link
               href="/login"
-              className="rounded bg-blue-600 px-6 py-3 font-semibold text-white"
+              className="rounded bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700"
             >
               Se connecter
             </Link>
           ) : (
             <button
               onClick={handleLogout}
-              className="rounded bg-red-600 px-6 py-3 font-semibold text-white"
+              className="rounded bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700"
             >
               Se déconnecter
             </button>
           )}
+
+          <Link
+            href="/admin/users"
+            className="rounded bg-yellow-400 px-6 py-3 font-semibold text-green-950 hover:bg-yellow-300"
+          >
+            Créer un utilisateur
+          </Link>
         </div>
 
-        {user && (
+        {userEmail && (
           <p className="text-sm text-gray-200">
-            Connecté en tant que : {user.email}
+            Connecté en tant que : {userEmail}
           </p>
         )}
       </div>

@@ -1,5 +1,5 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import PredictionForm from "./prediction-form";
 import Leaderboard from "./leaderboard";
@@ -18,14 +18,20 @@ function getPointsForPrediction(
 ) {
   if (!isFinished) return 0;
 
-  if (predictedA === actualA && predictedB === actualB) return 3;
+  if (predictedA === actualA && predictedB === actualB) {
+    return 3;
+  }
 
   const predictedOutcome =
     predictedA > predictedB ? "A" : predictedA < predictedB ? "B" : "D";
   const actualOutcome =
     actualA > actualB ? "A" : actualA < actualB ? "B" : "D";
 
-  return predictedOutcome === actualOutcome ? 1 : 0;
+  if (predictedOutcome === actualOutcome) {
+    return 1;
+  }
+
+  return 0;
 }
 
 export default async function DashboardPage() {
@@ -36,68 +42,49 @@ export default async function DashboardPage() {
     error: userError,
   } = await supabase.auth.getUser();
 
-  if (userError || !user) redirect("/login");
+  if (userError || !user) {
+    redirect("/login");
+  }
 
-  const nickname = user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`;
+  const nickname =
+    user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`;
 
   await supabase.from("profiles").upsert({
     id: user.id,
     nickname,
   });
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", user.id)
-    .single();
-
-  const isAdmin = profile?.is_admin === true;
-
-  const { data: matches, error: matchesError } = await supabase
+  const { data: matches } = await supabase
     .from("matches")
     .select("*")
     .order("kickoff_at", { ascending: true });
 
-  const { data: predictions, error: predictionsError } = await supabase
+  const { data: predictions } = await supabase
     .from("predictions")
     .select("user_id, match_id, predicted_a, predicted_b");
 
-  if (matchesError) {
-    return (
-      <main className="p-10">
-        <h1 className="text-4xl font-bold mb-6">Tableau de bord</h1>
-        <p>Erreur chargement matchs : {matchesError.message}</p>
-      </main>
-    );
-  }
-
-  if (predictionsError) {
-    return (
-      <main className="p-10">
-        <h1 className="text-4xl font-bold mb-6">Tableau de bord</h1>
-        <p>Erreur chargement pronostics : {predictionsError.message}</p>
-      </main>
-    );
-  }
-
-  const myPredictions = (predictions ?? []).filter((p) => p.user_id === user.id);
+  const myPredictions = (predictions ?? []).filter(
+    (p) => p.user_id === user.id
+  );
 
   const matchStats: Record<number, MatchStats> = {};
 
   for (const match of matches ?? []) {
-    if (!match.is_finished || match.score_a === null || match.score_b === null) {
-      matchStats[match.id] = { myPoints: null, averagePoints: null };
+    if (
+      !match.is_finished ||
+      match.score_a === null ||
+      match.score_b === null
+    ) {
+      matchStats[match.id] = {
+        myPoints: null,
+        averagePoints: null,
+      };
       continue;
     }
 
     const matchPredictions = (predictions ?? []).filter(
       (p) => p.match_id === match.id
     );
-
-    if (matchPredictions.length === 0) {
-      matchStats[match.id] = { myPoints: null, averagePoints: null };
-      continue;
-    }
 
     const allPoints = matchPredictions.map((prediction) =>
       getPointsForPrediction(
@@ -110,9 +97,12 @@ export default async function DashboardPage() {
     );
 
     const averagePoints =
-      allPoints.reduce<number>((sum, pts) => sum + pts, 0) / allPoints.length;
+      allPoints.reduce<number>((sum, pts) => sum + pts, 0) /
+      (allPoints.length || 1);
 
-    const myPrediction = matchPredictions.find((p) => p.user_id === user.id);
+    const myPrediction = matchPredictions.find(
+      (p) => p.user_id === user.id
+    );
 
     const myPoints = myPrediction
       ? getPointsForPrediction(
@@ -124,124 +114,39 @@ export default async function DashboardPage() {
         )
       : null;
 
-    matchStats[match.id] = { myPoints, averagePoints };
+    matchStats[match.id] = {
+      myPoints,
+      averagePoints,
+    };
   }
-
-  async function updateMatchResult(formData: FormData) {
-    "use server";
-
-    const supabase = await createClient();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/login");
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_admin")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile?.is_admin) {
-      throw new Error("Accès admin refusé");
-    }
-
-    const matchId = Number(formData.get("match_id"));
-    const scoreA = Number(formData.get("score_a"));
-    const scoreB = Number(formData.get("score_b"));
-
-    await supabase
-      .from("matches")
-      .update({
-        score_a: scoreA,
-        score_b: scoreB,
-        is_finished: true,
-      })
-      .eq("id", matchId);
-
-    revalidatePath("/dashboard");
-  }
-
-  const now = new Date();
-
-  const pastMatches = (matches ?? []).filter(
-    (match) => new Date(match.kickoff_at) <= now
-  );
 
   return (
-    <main className="p-10 max-w-7xl mx-auto">
-      <h1 className="text-4xl font-bold mb-8">Tableau de bord</h1>
+    <main className="p-10 max-w-7xl mx-auto space-y-6">
+      {/* 🔥 NAVIGATION */}
+      <div className="flex justify-between items-center">
+        <Link
+          href="/"
+          className="text-blue-600 hover:underline font-medium"
+        >
+          ← Retour à l’accueil
+        </Link>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {isAdmin && (
-          <section>
-            <h2 className="text-2xl font-bold mb-4">Résultats à saisir</h2>
+        <span className="text-sm text-gray-500">
+          {user.email}
+        </span>
+      </div>
 
-            <div className="space-y-4">
-              {pastMatches.map((match) => (
-                <form
-                  key={match.id}
-                  action={updateMatchResult}
-                  className="border rounded-2xl p-4 space-y-4"
-                >
-                  <input type="hidden" name="match_id" value={match.id} />
+      <h1 className="text-4xl font-bold">Tableau de bord</h1>
 
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      {match.phase} •{" "}
-                      {new Date(match.kickoff_at).toLocaleString("fr-FR")}
-                    </p>
-                    <h3 className="font-bold">
-                      {match.team_a} vs {match.team_b}
-                    </h3>
-                  </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-8">
+        <PredictionForm
+          matches={matches ?? []}
+          existingPredictions={myPredictions}
+          userId={user.id}
+          matchStats={matchStats}
+        />
 
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span>{match.team_a}</span>
-                    <input
-                      name="score_a"
-                      type="number"
-                      min={0}
-                      defaultValue={match.score_a ?? ""}
-                      className="w-16 border rounded p-2"
-                    />
-                    <span>-</span>
-                    <input
-                      name="score_b"
-                      type="number"
-                      min={0}
-                      defaultValue={match.score_b ?? ""}
-                      className="w-16 border rounded p-2"
-                    />
-                    <span>{match.team_b}</span>
-                  </div>
-
-                  <button className="bg-black text-white px-4 py-2 rounded">
-                    Valider résultat
-                  </button>
-                </form>
-              ))}
-            </div>
-          </section>
-        )}
-
-        <section>
-          <h2 className="text-2xl font-bold mb-4">Mes pronostics</h2>
-
-          <PredictionForm
-            matches={matches ?? []}
-            existingPredictions={myPredictions ?? []}
-            userId={user.id}
-            matchStats={matchStats}
-          />
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-bold mb-4">Classement live</h2>
-          <Leaderboard />
-        </section>
+        <Leaderboard />
       </div>
     </main>
   );

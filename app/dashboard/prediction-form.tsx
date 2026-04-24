@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 
@@ -28,18 +29,28 @@ type MatchStats = {
 
 type FormValues = Record<number, { a: string; b: string }>;
 
-type GroupStanding = {
-  team: string;
-  played: number;
-  points: number;
-  goalsFor: number;
-  goalsAgainst: number;
-  goalDifference: number;
-};
-
 function getCityFromVenue(venue?: string | null) {
   if (!venue) return "-";
   return venue.split("-")[0].trim();
+}
+
+function toDatetimeLocalValue(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate()
+  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatDashboardDate(value: string) {
+  const date = new Date(value);
+
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = date.toLocaleDateString("fr-FR", { month: "long" });
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+
+  return `${day} ${month} - ${hours}h${minutes}`;
 }
 
 function formatParisDate(date: Date) {
@@ -58,137 +69,11 @@ function formatParisTime(date: Date) {
   }).format(date);
 }
 
-function toDatetimeLocalValue(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-    date.getDate()
-  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function computeGroupStandings(
-  matches: Match[],
-  values: FormValues
-): GroupStanding[] {
-  const standings = new Map<string, GroupStanding>();
-
-  function ensureTeam(team: string) {
-    if (!standings.has(team)) {
-      standings.set(team, {
-        team,
-        played: 0,
-        points: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-        goalDifference: 0,
-      });
-    }
-
-    return standings.get(team)!;
-  }
-
-  for (const match of matches) {
-    const prediction = values[match.id];
-
-    if (!prediction || prediction.a === "" || prediction.b === "") {
-      ensureTeam(match.team_a);
-      ensureTeam(match.team_b);
-      continue;
-    }
-
-    const scoreA = Number(prediction.a);
-    const scoreB = Number(prediction.b);
-
-    if (Number.isNaN(scoreA) || Number.isNaN(scoreB)) continue;
-
-    const teamA = ensureTeam(match.team_a);
-    const teamB = ensureTeam(match.team_b);
-
-    teamA.played += 1;
-    teamB.played += 1;
-
-    teamA.goalsFor += scoreA;
-    teamA.goalsAgainst += scoreB;
-
-    teamB.goalsFor += scoreB;
-    teamB.goalsAgainst += scoreA;
-
-    if (scoreA > scoreB) teamA.points += 3;
-    else if (scoreA < scoreB) teamB.points += 3;
-    else {
-      teamA.points += 1;
-      teamB.points += 1;
-    }
-  }
-
-  return Array.from(standings.values())
-    .map((team) => ({
-      ...team,
-      goalDifference: team.goalsFor - team.goalsAgainst,
-    }))
-    .sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points;
-      if (b.goalDifference !== a.goalDifference) {
-        return b.goalDifference - a.goalDifference;
-      }
-      if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
-      return a.team.localeCompare(b.team);
-    });
-}
-
-function GroupStandingTooltip({
-  phaseMatches,
-  values,
-}: {
-  phaseMatches: Match[];
-  values: FormValues;
-}) {
-  const standings = computeGroupStandings(phaseMatches, values);
-
-  return (
-    <div className="absolute left-0 top-8 z-50 hidden w-[360px] rounded-xl border bg-white p-3 text-xs shadow-xl group-hover:block">
-      <div className="mb-2 font-bold text-gray-900">
-        Classement selon tes pronostics
-      </div>
-
-      <table className="w-full">
-        <thead>
-          <tr className="border-b text-left text-gray-500">
-            <th className="py-1">#</th>
-            <th className="py-1">Équipe</th>
-            <th className="py-1 text-center">J</th>
-            <th className="py-1 text-center">Pts</th>
-            <th className="py-1 text-center">Diff</th>
-            <th className="py-1 text-center">BP</th>
-            <th className="py-1 text-center">BC</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {standings.map((row, index) => (
-            <tr key={row.team} className="border-b last:border-b-0">
-              <td className="py-1">{index + 1}</td>
-              <td className="py-1 font-medium">{row.team}</td>
-              <td className="py-1 text-center">{row.played}</td>
-              <td className="py-1 text-center font-bold">{row.points}</td>
-              <td className="py-1 text-center">
-                {row.goalDifference > 0 ? "+" : ""}
-                {row.goalDifference}
-              </td>
-              <td className="py-1 text-center">{row.goalsFor}</td>
-              <td className="py-1 text-center">{row.goalsAgainst}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 export default function PredictionForm({
   matches,
   existingPredictions,
   userId,
+  userEmail,
   matchStats,
   isAdmin,
   updateMatchResult,
@@ -196,6 +81,7 @@ export default function PredictionForm({
   matches: Match[];
   existingPredictions: Prediction[];
   userId: string;
+  userEmail: string;
   matchStats: Record<number, MatchStats>;
   isAdmin: boolean;
   updateMatchResult: (formData: FormData) => Promise<void>;
@@ -231,8 +117,7 @@ export default function PredictionForm({
     toDatetimeLocalValue(new Date())
   );
 
-  const appNow = isAdmin ? new Date(simulatedNow) : new Date();
-  const appNowTime = appNow.getTime();
+  const appNowTime = new Date(simulatedNow).getTime();
 
   function updateValue(matchId: number, side: "a" | "b", value: string) {
     setValues((prev) => ({
@@ -252,7 +137,6 @@ export default function PredictionForm({
 
     for (const match of matchesInGroup) {
       const entry = values[match.id];
-
       if (!entry || entry.a === "" || entry.b === "") continue;
 
       const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
@@ -294,7 +178,19 @@ export default function PredictionForm({
   }
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-6">
+      <div className="flex justify-between items-center">
+        <Link href="/" className="text-blue-600 hover:underline font-medium">
+          ← Retour à l’accueil
+        </Link>
+
+        <span className="text-sm text-gray-500">{userEmail}</span>
+      </div>
+
+      <h1 className="text-4xl font-bold">
+        Tableau de bord au {formatDashboardDate(simulatedNow)}
+      </h1>
+
       {isAdmin && (
         <div className="rounded-xl border bg-yellow-50 p-4">
           <label className="mb-2 block text-sm font-semibold text-yellow-900">
@@ -307,27 +203,15 @@ export default function PredictionForm({
             onChange={(e) => setSimulatedNow(e.target.value)}
             className="rounded border px-3 py-2"
           />
-
-          <p className="mt-2 text-xs text-yellow-800">
-            Cette date remplace la date système pour tester le verrouillage des
-            pronostics et la saisie des scores réels.
-          </p>
         </div>
       )}
+
+      <h2 className="text-2xl font-bold">Mes pronostics</h2>
 
       {groupedMatches.map(([phase, phaseMatches]) => (
         <div key={phase} className="rounded-xl border p-3">
           <div className="mb-2 flex items-center justify-between">
-            <div className="group relative">
-              <h3 className="cursor-help text-lg font-bold capitalize underline decoration-dotted underline-offset-4">
-                {phase}
-              </h3>
-
-              <GroupStandingTooltip
-                phaseMatches={phaseMatches}
-                values={values}
-              />
-            </div>
+            <h3 className="text-lg font-bold capitalize">{phase}</h3>
 
             <button
               onClick={() => saveGroup(phaseMatches, phase)}

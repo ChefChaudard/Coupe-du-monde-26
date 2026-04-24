@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -150,40 +149,15 @@ export default async function DashboardPage() {
     revalidatePath("/dashboard");
   }
 
-  const dashboardDate = new Date();
-  const formattedDate = dashboardDate.toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "long",
-  });
-  const formattedTime = dashboardDate
-    .toLocaleTimeString("fr-FR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-    .replace(":", "h");
-
   return (
     <main className="p-6 max-w-[1800px] mx-auto space-y-6">
-      <div className="flex justify-between items-center">
-        <Link href="/" className="text-blue-600 hover:underline font-medium">
-          ← Retour à l’accueil
-        </Link>
-
-        <span className="text-sm text-gray-500">{user.email}</span>
-      </div>
-
-      <h1 className="text-4xl font-bold">
-        Tableau de bord au {formattedDate} - {formattedTime}
-      </h1>
-
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-6">
         <section>
-          <h2 className="text-2xl font-bold mb-4">Mes pronostics</h2>
-
           <PredictionForm
             matches={matches ?? []}
             existingPredictions={myPredictions}
             userId={user.id}
+            userEmail={user.email ?? ""}
             matchStats={matchStats}
             isAdmin={isAdmin}
             updateMatchResult={updateMatchResult}

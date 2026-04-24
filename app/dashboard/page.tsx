@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import PredictionForm from "./prediction-form";
 import Leaderboard from "./leaderboard";
@@ -17,21 +18,14 @@ function getPointsForPrediction(
   isFinished: boolean | null
 ) {
   if (!isFinished) return 0;
-
-  if (predictedA === actualA && predictedB === actualB) {
-    return 3;
-  }
+  if (predictedA === actualA && predictedB === actualB) return 3;
 
   const predictedOutcome =
     predictedA > predictedB ? "A" : predictedA < predictedB ? "B" : "D";
   const actualOutcome =
     actualA > actualB ? "A" : actualA < actualB ? "B" : "D";
 
-  if (predictedOutcome === actualOutcome) {
-    return 1;
-  }
-
-  return 0;
+  return predictedOutcome === actualOutcome ? 1 : 0;
 }
 
 export default async function DashboardPage() {
@@ -42,17 +36,22 @@ export default async function DashboardPage() {
     error: userError,
   } = await supabase.auth.getUser();
 
-  if (userError || !user) {
-    redirect("/login");
-  }
+  if (userError || !user) redirect("/login");
 
-  const nickname =
-    user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`;
+  const nickname = user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`;
 
   await supabase.from("profiles").upsert({
     id: user.id,
     nickname,
   });
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single();
+
+  const isAdmin = profile?.is_admin === true;
 
   const { data: matches } = await supabase
     .from("matches")
@@ -70,11 +69,7 @@ export default async function DashboardPage() {
   const matchStats: Record<number, MatchStats> = {};
 
   for (const match of matches ?? []) {
-    if (
-      !match.is_finished ||
-      match.score_a === null ||
-      match.score_b === null
-    ) {
+    if (!match.is_finished || match.score_a === null || match.score_b === null) {
       matchStats[match.id] = {
         myPoints: null,
         averagePoints: null,
@@ -100,9 +95,7 @@ export default async function DashboardPage() {
       allPoints.reduce<number>((sum, pts) => sum + pts, 0) /
       (allPoints.length || 1);
 
-    const myPrediction = matchPredictions.find(
-      (p) => p.user_id === user.id
-    );
+    const myPrediction = matchPredictions.find((p) => p.user_id === user.id);
 
     const myPoints = myPrediction
       ? getPointsForPrediction(
@@ -120,52 +113,87 @@ export default async function DashboardPage() {
     };
   }
 
-  // ✅ 👉 FORMATAGE DATE (IMPORTANT : AVANT return)
-  const simulatedDate = new Date();
+  async function updateMatchResult(formData: FormData) {
+    "use server";
 
-  const day = simulatedDate.getDate().toString().padStart(2, "0");
+    const supabase = await createClient();
 
-  const monthRaw = simulatedDate.toLocaleDateString("fr-FR", {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) redirect("/login");
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.is_admin) {
+      throw new Error("Accès admin refusé");
+    }
+
+    const matchId = Number(formData.get("match_id"));
+    const scoreA = Number(formData.get("score_a"));
+    const scoreB = Number(formData.get("score_b"));
+
+    await supabase
+      .from("matches")
+      .update({
+        score_a: scoreA,
+        score_b: scoreB,
+        is_finished: true,
+      })
+      .eq("id", matchId);
+
+    revalidatePath("/dashboard");
+  }
+
+  const dashboardDate = new Date();
+  const formattedDate = dashboardDate.toLocaleDateString("fr-FR", {
+    day: "2-digit",
     month: "long",
   });
-
-  const month = monthRaw.charAt(0).toLowerCase() + monthRaw.slice(1);
-
-  const hours = simulatedDate.getHours().toString().padStart(2, "0");
-  const minutes = simulatedDate.getMinutes().toString().padStart(2, "0");
-
-  const formattedDate = `${day} ${month} - ${hours}h${minutes}`;
+  const formattedTime = dashboardDate
+    .toLocaleTimeString("fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    .replace(":", "h");
 
   return (
-    <main className="p-10 max-w-7xl mx-auto space-y-6">
-      {/* NAV */}
+    <main className="p-6 max-w-[1800px] mx-auto space-y-6">
       <div className="flex justify-between items-center">
-        <Link
-          href="/"
-          className="text-blue-600 hover:underline font-medium"
-        >
+        <Link href="/" className="text-blue-600 hover:underline font-medium">
           ← Retour à l’accueil
         </Link>
 
-        <span className="text-sm text-gray-500">
-          {user.email}
-        </span>
+        <span className="text-sm text-gray-500">{user.email}</span>
       </div>
 
-      {/* ✅ TITRE CORRIGÉ */}
       <h1 className="text-4xl font-bold">
-        Tableau de bord au {formattedDate}
+        Tableau de bord au {formattedDate} - {formattedTime}
       </h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-8">
-        <PredictionForm
-          matches={matches ?? []}
-          existingPredictions={myPredictions}
-          userId={user.id}
-          matchStats={matchStats}
-        />
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-6">
+        <section>
+          <h2 className="text-2xl font-bold mb-4">Mes pronostics</h2>
 
-        <Leaderboard />
+          <PredictionForm
+            matches={matches ?? []}
+            existingPredictions={myPredictions}
+            userId={user.id}
+            matchStats={matchStats}
+            isAdmin={isAdmin}
+            updateMatchResult={updateMatchResult}
+          />
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-bold mb-4">Classement live</h2>
+          <Leaderboard />
+        </section>
       </div>
     </main>
   );

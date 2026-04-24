@@ -9,6 +9,7 @@ type Match = {
   team_a: string;
   team_b: string;
   kickoff_at: string;
+  venue?: string | null;
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
@@ -140,123 +141,113 @@ export default function PredictionForm({
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       {groupedMatches.map(([phase, phaseMatches]) => (
-        <div key={phase} className="rounded-2xl border p-4">
-          <h3 className="mb-4 text-xl font-bold capitalize">{phase}</h3>
+        <div key={phase} className="rounded-xl border p-3">
+          <h3 className="mb-2 text-lg font-bold capitalize">{phase}</h3>
 
-          <div className="space-y-3">
-            {phaseMatches.map((match) => {
-              const isSaving = savingMatchId === match.id;
-              const kickoffDate = new Date(match.kickoff_at);
-              const isLocked = kickoffDate.getTime() <= Date.now();
-              const hasOfficialScore =
-                match.is_finished &&
-                match.score_a !== null &&
-                match.score_b !== null;
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-gray-500">
+                  <th className="py-2 pr-2">Équipe A</th>
+                  <th className="py-2 px-1 text-center">A</th>
+                  <th className="py-2 px-1 text-center">B</th>
+                  <th className="py-2 px-2">Équipe B</th>
+                  <th className="py-2 px-2">Date</th>
+                  <th className="py-2 px-2">Lieu</th>
+                  <th className="py-2 px-2">Statut</th>
+                  <th className="py-2 pl-2"></th>
+                </tr>
+              </thead>
 
-              const stats = matchStats[match.id];
-              const myPoints = stats?.myPoints ?? null;
-              const averagePoints = stats?.averagePoints ?? null;
+              <tbody>
+                {phaseMatches.map((match) => {
+                  const isSaving = savingMatchId === match.id;
+                  const kickoffDate = new Date(match.kickoff_at);
+                  const isLocked = kickoffDate.getTime() <= Date.now();
+                  const hasOfficialScore =
+                    match.is_finished &&
+                    match.score_a !== null &&
+                    match.score_b !== null;
 
-              return (
-                <div
-                  key={match.id}
-                  className="rounded-xl border bg-white p-3"
-                >
-                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                    <span className="text-gray-500">
-                      {kickoffDate.toLocaleString("fr-FR")}
-                    </span>
+                  const stats = matchStats[match.id];
+                  const myPoints = stats?.myPoints ?? null;
+                  const averagePoints = stats?.averagePoints ?? null;
 
-                    {hasOfficialScore ? (
-                      <span className="font-medium text-blue-700">
-                        Match terminé
-                      </span>
-                    ) : isLocked ? (
-                      <span className="font-medium text-red-600">
-                        Verrouillé
-                      </span>
-                    ) : (
-                      <span className="font-medium text-green-600">
-                        Ouvert
-                      </span>
-                    )}
-                  </div>
+                  return (
+                    <tr key={match.id} className="border-b last:border-b-0">
+                      <td className="py-2 pr-2 font-medium whitespace-nowrap">
+                        {match.team_a}
+                      </td>
 
-                  <div className="grid grid-cols-1 items-center gap-3 xl:grid-cols-[1fr_auto_auto_auto_1fr_auto]">
-                    <span className="font-medium">{match.team_a}</span>
+                      <td className="py-2 px-1">
+                        <input
+                          type="number"
+                          min={0}
+                          value={values[match.id]?.a ?? ""}
+                          onChange={(e) =>
+                            updateValue(match.id, "a", e.target.value)
+                          }
+                          disabled={isLocked}
+                          className="w-12 rounded border px-2 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
+                        />
+                      </td>
 
-                    <input
-                      type="number"
-                      min={0}
-                      value={values[match.id]?.a ?? ""}
-                      onChange={(e) =>
-                        updateValue(match.id, "a", e.target.value)
-                      }
-                      disabled={isLocked}
-                      className="w-16 rounded border px-2 py-1 disabled:bg-gray-100 disabled:text-gray-500"
-                    />
+                      <td className="py-2 px-1">
+                        <input
+                          type="number"
+                          min={0}
+                          value={values[match.id]?.b ?? ""}
+                          onChange={(e) =>
+                            updateValue(match.id, "b", e.target.value)
+                          }
+                          disabled={isLocked}
+                          className="w-12 rounded border px-2 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
+                        />
+                      </td>
 
-                    <span className="text-center">-</span>
+                      <td className="py-2 px-2 font-medium whitespace-nowrap">
+                        {match.team_b}
+                      </td>
 
-                    <input
-                      type="number"
-                      min={0}
-                      value={values[match.id]?.b ?? ""}
-                      onChange={(e) =>
-                        updateValue(match.id, "b", e.target.value)
-                      }
-                      disabled={isLocked}
-                      className="w-16 rounded border px-2 py-1 disabled:bg-gray-100 disabled:text-gray-500"
-                    />
+                      <td className="py-2 px-2 whitespace-nowrap text-gray-600">
+                        {kickoffDate.toLocaleDateString("fr-FR")}
+                      </td>
 
-                    <span className="font-medium">{match.team_b}</span>
+                      <td className="py-2 px-2 text-gray-600">
+                        {match.venue ?? "-"}
+                      </td>
 
-                    <button
-                      onClick={() => savePrediction(match.id)}
-                      disabled={isSaving || isLocked}
-                      className="rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
-                    >
-                      {isLocked
-                        ? "Verrouillé"
-                        : isSaving
-                        ? "..."
-                        : "OK"}
-                    </button>
-                  </div>
+                      <td className="py-2 px-2 whitespace-nowrap">
+                        {hasOfficialScore ? (
+                          <span className="text-blue-700">
+                            Terminé {match.score_a}-{match.score_b}
+                            {myPoints !== null && ` • ${myPoints} pts`}
+                            {averagePoints !== null &&
+                              ` • moy. ${averagePoints.toFixed(1)}`}
+                          </span>
+                        ) : isLocked ? (
+                          <span className="text-red-600">Verrouillé</span>
+                        ) : (
+                          <span className="text-green-600">Ouvert</span>
+                        )}
+                      </td>
 
-                  {hasOfficialScore && (
-                    <div className="mt-3 grid grid-cols-1 gap-2 rounded-lg bg-blue-50 p-3 text-sm md:grid-cols-3">
-                      <div>
-                        <span className="text-blue-700">Résultat : </span>
-                        <strong>
-                          {match.score_a} - {match.score_b}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <span className="text-gray-600">Tes points : </span>
-                        <strong>
-                          {myPoints !== null
-                            ? `${myPoints} pt${myPoints > 1 ? "s" : ""}`
-                            : "-"}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <span className="text-gray-600">Moyenne : </span>
-                        <strong>
-                          {averagePoints !== null
-                            ? `${averagePoints.toFixed(1)} pts`
-                            : "-"}
-                        </strong>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                      <td className="py-2 pl-2 text-right">
+                        <button
+                          onClick={() => savePrediction(match.id)}
+                          disabled={isSaving || isLocked}
+                          className="rounded bg-black px-3 py-1 text-xs text-white disabled:opacity-50"
+                        >
+                          {isLocked ? "Lock" : isSaving ? "..." : "OK"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       ))}

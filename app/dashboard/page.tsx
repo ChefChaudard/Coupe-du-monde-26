@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import PredictionForm from "./prediction-form";
 import Leaderboard from "./leaderboard";
@@ -18,14 +17,21 @@ function getPointsForPrediction(
   isFinished: boolean | null
 ) {
   if (!isFinished) return 0;
-  if (predictedA === actualA && predictedB === actualB) return 3;
+
+  if (predictedA === actualA && predictedB === actualB) {
+    return 3;
+  }
 
   const predictedOutcome =
     predictedA > predictedB ? "A" : predictedA < predictedB ? "B" : "D";
   const actualOutcome =
     actualA > actualB ? "A" : actualA < actualB ? "B" : "D";
 
-  return predictedOutcome === actualOutcome ? 1 : 0;
+  if (predictedOutcome === actualOutcome) {
+    return 1;
+  }
+
+  return 0;
 }
 
 export default async function DashboardPage() {
@@ -36,22 +42,17 @@ export default async function DashboardPage() {
     error: userError,
   } = await supabase.auth.getUser();
 
-  if (userError || !user) redirect("/login");
+  if (userError || !user) {
+    redirect("/login");
+  }
 
-  const nickname = user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`;
+  const nickname =
+    user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`;
 
   await supabase.from("profiles").upsert({
     id: user.id,
     nickname,
   });
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", user.id)
-    .single();
-
-  const isAdmin = profile?.is_admin === true;
 
   const { data: matches } = await supabase
     .from("matches")
@@ -69,7 +70,11 @@ export default async function DashboardPage() {
   const matchStats: Record<number, MatchStats> = {};
 
   for (const match of matches ?? []) {
-    if (!match.is_finished || match.score_a === null || match.score_b === null) {
+    if (
+      !match.is_finished ||
+      match.score_a === null ||
+      match.score_b === null
+    ) {
       matchStats[match.id] = {
         myPoints: null,
         averagePoints: null,
@@ -95,7 +100,9 @@ export default async function DashboardPage() {
       allPoints.reduce<number>((sum, pts) => sum + pts, 0) /
       (allPoints.length || 1);
 
-    const myPrediction = matchPredictions.find((p) => p.user_id === user.id);
+    const myPrediction = matchPredictions.find(
+      (p) => p.user_id === user.id
+    );
 
     const myPoints = myPrediction
       ? getPointsForPrediction(
@@ -113,90 +120,52 @@ export default async function DashboardPage() {
     };
   }
 
-  async function updateMatchResult(formData: FormData) {
-    "use server";
+  // ✅ 👉 FORMATAGE DATE (IMPORTANT : AVANT return)
+  const simulatedDate = new Date();
 
-    const supabase = await createClient();
+  const day = simulatedDate.getDate().toString().padStart(2, "0");
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  const monthRaw = simulatedDate.toLocaleDateString("fr-FR", {
+    month: "long",
+  });
 
-    if (!user) redirect("/login");
+  const month = monthRaw.charAt(0).toLowerCase() + monthRaw.slice(1);
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_admin")
-      .eq("id", user.id)
-      .single();
+  const hours = simulatedDate.getHours().toString().padStart(2, "0");
+  const minutes = simulatedDate.getMinutes().toString().padStart(2, "0");
 
-    if (!profile?.is_admin) {
-      throw new Error("Accès admin refusé");
-    }
-
-    const matchId = Number(formData.get("match_id"));
-    const scoreA = Number(formData.get("score_a"));
-    const scoreB = Number(formData.get("score_b"));
-
-    await supabase
-      .from("matches")
-      .update({
-        score_a: scoreA,
-        score_b: scoreB,
-        is_finished: true,
-      })
-      .eq("id", matchId);
-
-    revalidatePath("/dashboard");
-  }
+  const formattedDate = `${day} ${month} - ${hours}h${minutes}`;
 
   return (
-    <main className="p-6 max-w-[1800px] mx-auto space-y-6">
+    <main className="p-10 max-w-7xl mx-auto space-y-6">
+      {/* NAV */}
       <div className="flex justify-between items-center">
-        <Link href="/" className="text-blue-600 hover:underline font-medium">
+        <Link
+          href="/"
+          className="text-blue-600 hover:underline font-medium"
+        >
           ← Retour à l’accueil
         </Link>
 
-        <span className="text-sm text-gray-500">{user.email}</span>
+        <span className="text-sm text-gray-500">
+          {user.email}
+        </span>
       </div>
 
-      const simulatedDate = new Date(simulatedNow);
+      {/* ✅ TITRE CORRIGÉ */}
+      <h1 className="text-4xl font-bold">
+        Tableau de bord au {formattedDate}
+      </h1>
 
-const day = simulatedDate.getDate().toString().padStart(2, "0");
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-8">
+        <PredictionForm
+          matches={matches ?? []}
+          existingPredictions={myPredictions}
+          userId={user.id}
+          matchStats={matchStats}
+        />
 
-const monthRaw = simulatedDate.toLocaleDateString("fr-FR", {
-  month: "long",
-});
-
-const month = monthRaw.charAt(0).toLowerCase() + monthRaw.slice(1);
-
-const hours = simulatedDate.getHours().toString().padStart(2, "0");
-const minutes = simulatedDate.getMinutes().toString().padStart(2, "0");
-
-const formattedDate = `${day} ${month} - ${hours}h${minutes}`;
-
-<h1 className="text-4xl font-bold">
-  Tableau de bord au {formattedDate}
-</h1>
-
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-6">
-        <section>
-          <h2 className="text-2xl font-bold mb-4">Mes pronostics</h2>
-
-          <PredictionForm
-            matches={matches ?? []}
-            existingPredictions={myPredictions}
-            userId={user.id}
-            matchStats={matchStats}
-            isAdmin={isAdmin}
-            updateMatchResult={updateMatchResult}
-          />
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-bold mb-4">Classement live</h2>
-          <Leaderboard />
-        </section>
+        <Leaderboard />
       </div>
     </main>
   );

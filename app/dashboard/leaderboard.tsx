@@ -30,7 +30,7 @@ export default function Leaderboard() {
       .order("points", { ascending: false });
 
     if (scoresError) {
-      setMessage(`Erreur scores: ${scoresError.message}`);
+      setMessage(`Erreur scores : ${scoresError.message}`);
       return;
     }
 
@@ -48,12 +48,15 @@ export default function Leaderboard() {
       .in("id", userIds);
 
     if (profilesError) {
-      setMessage(`Erreur profils: ${profilesError.message}`);
+      setMessage(`Erreur profils : ${profilesError.message}`);
       return;
     }
 
     const profileMap = new Map(
-      (profiles ?? []).map((profile: ProfileRow) => [profile.id, profile.nickname])
+      (profiles ?? []).map((profile: ProfileRow) => [
+        profile.id,
+        profile.nickname,
+      ])
     );
 
     const merged = (scores as ScoreRow[]).map((score) => ({
@@ -90,25 +93,21 @@ export default function Leaderboard() {
   }, []);
 
   return (
-    <section className="border rounded-2xl p-6 h-fit">
-      <h2 className="text-2xl font-bold mb-4">Classement live</h2>
-
+    <section className="space-y-3">
       {message ? (
         <p>{message}</p>
       ) : (
-        <div className="space-y-3">
-          {rows.map((row, index) => (
-            <div
-              key={row.user_id}
-              className="flex items-center justify-between border rounded-xl px-4 py-3"
-            >
-              <span>
-                #{index + 1} — {row.nickname}
-              </span>
-              <strong>{row.points} pts</strong>
-            </div>
-          ))}
-        </div>
+        rows.map((row, index) => (
+          <div
+            key={row.user_id}
+            className="flex items-center justify-between border rounded-xl px-4 py-3"
+          >
+            <span>
+              #{index + 1} — {row.nickname}
+            </span>
+            <strong>{row.points} pts</strong>
+          </div>
+        ))
       )}
     </section>
   );

@@ -127,16 +127,12 @@ export default function PredictionForm({
 
   return (
     <section className="space-y-4">
-      <h2 className="text-2xl font-bold">Mes pronostics</h2>
-
       {matches.map((match) => {
         const isSaving = savingMatchId === match.id;
         const kickoffDate = new Date(match.kickoff_at);
         const isLocked = kickoffDate.getTime() <= Date.now();
         const hasOfficialScore =
-          match.is_finished &&
-          match.score_a !== null &&
-          match.score_b !== null;
+          match.is_finished && match.score_a !== null && match.score_b !== null;
 
         const stats = matchStats[match.id];
         const myPoints = stats?.myPoints ?? null;
@@ -182,7 +178,8 @@ export default function PredictionForm({
                     Résultat réel
                   </div>
                   <div className="text-lg font-semibold text-blue-900">
-                    {match.team_a} {match.score_a} - {match.score_b} {match.team_b}
+                    {match.team_a} {match.score_a} - {match.score_b}{" "}
+                    {match.team_b}
                   </div>
                 </div>
 
@@ -190,7 +187,9 @@ export default function PredictionForm({
                   <div className="rounded-lg bg-white px-3 py-2 border">
                     <div className="text-sm text-gray-500">Tes points</div>
                     <div className="text-lg font-semibold">
-                      {myPoints !== null ? `${myPoints} pt${myPoints > 1 ? "s" : ""}` : "-"}
+                      {myPoints !== null
+                        ? `${myPoints} pt${myPoints > 1 ? "s" : ""}`
+                        : "-"}
                     </div>
                   </div>
 

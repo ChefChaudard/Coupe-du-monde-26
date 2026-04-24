@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import PredictionForm from "./prediction-form";
 import Leaderboard from "./leaderboard";
-import { revalidatePath } from "next/cache";
 
 type MatchStats = {
   myPoints: number | null;
@@ -18,20 +18,14 @@ function getPointsForPrediction(
 ) {
   if (!isFinished) return 0;
 
-  if (predictedA === actualA && predictedB === actualB) {
-    return 3;
-  }
+  if (predictedA === actualA && predictedB === actualB) return 3;
 
   const predictedOutcome =
     predictedA > predictedB ? "A" : predictedA < predictedB ? "B" : "D";
   const actualOutcome =
     actualA > actualB ? "A" : actualA < actualB ? "B" : "D";
 
-  if (predictedOutcome === actualOutcome) {
-    return 1;
-  }
-
-  return 0;
+  return predictedOutcome === actualOutcome ? 1 : 0;
 }
 
 export default async function DashboardPage() {
@@ -42,12 +36,9 @@ export default async function DashboardPage() {
     error: userError,
   } = await supabase.auth.getUser();
 
-  if (userError || !user) {
-    redirect("/login");
-  }
+  if (userError || !user) redirect("/login");
 
-  const nickname =
-    user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`;
+  const nickname = user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`;
 
   await supabase.from("profiles").upsert({
     id: user.id,
@@ -89,22 +80,13 @@ export default async function DashboardPage() {
     );
   }
 
-  const myPredictions = (predictions ?? []).filter(
-    (p) => p.user_id === user.id
-  );
+  const myPredictions = (predictions ?? []).filter((p) => p.user_id === user.id);
 
   const matchStats: Record<number, MatchStats> = {};
 
   for (const match of matches ?? []) {
-    if (
-      !match.is_finished ||
-      match.score_a === null ||
-      match.score_b === null
-    ) {
-      matchStats[match.id] = {
-        myPoints: null,
-        averagePoints: null,
-      };
+    if (!match.is_finished || match.score_a === null || match.score_b === null) {
+      matchStats[match.id] = { myPoints: null, averagePoints: null };
       continue;
     }
 
@@ -113,10 +95,7 @@ export default async function DashboardPage() {
     );
 
     if (matchPredictions.length === 0) {
-      matchStats[match.id] = {
-        myPoints: null,
-        averagePoints: null,
-      };
+      matchStats[match.id] = { myPoints: null, averagePoints: null };
       continue;
     }
 
@@ -131,12 +110,9 @@ export default async function DashboardPage() {
     );
 
     const averagePoints =
-      allPoints.reduce<number>((sum, pts) => sum + pts, 0) /
-      allPoints.length;
+      allPoints.reduce<number>((sum, pts) => sum + pts, 0) / allPoints.length;
 
-    const myPrediction = matchPredictions.find(
-      (p) => p.user_id === user.id
-    );
+    const myPrediction = matchPredictions.find((p) => p.user_id === user.id);
 
     const myPoints = myPrediction
       ? getPointsForPrediction(
@@ -148,10 +124,7 @@ export default async function DashboardPage() {
         )
       : null;
 
-    matchStats[match.id] = {
-      myPoints,
-      averagePoints,
-    };
+    matchStats[match.id] = { myPoints, averagePoints };
   }
 
   async function updateMatchResult(formData: FormData) {
@@ -197,10 +170,6 @@ export default async function DashboardPage() {
     (match) => new Date(match.kickoff_at) <= now
   );
 
-  const futureMatches = (matches ?? []).filter(
-    (match) => !match.is_finished && new Date(match.kickoff_at) > now
-  );
-
   return (
     <main className="p-10 max-w-7xl mx-auto">
       <h1 className="text-4xl font-bold mb-8">Tableau de bord</h1>
@@ -208,9 +177,7 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {isAdmin && (
           <section>
-            <h2 className="text-2xl font-bold mb-4">
-              Résultats à saisir
-            </h2>
+            <h2 className="text-2xl font-bold mb-4">Résultats à saisir</h2>
 
             <div className="space-y-4">
               {pastMatches.map((match) => (
@@ -219,25 +186,19 @@ export default async function DashboardPage() {
                   action={updateMatchResult}
                   className="border rounded-2xl p-4 space-y-4"
                 >
-                  <input
-                    type="hidden"
-                    name="match_id"
-                    value={match.id}
-                  />
+                  <input type="hidden" name="match_id" value={match.id} />
 
                   <div>
                     <p className="text-sm text-gray-500">
                       {match.phase} •{" "}
-                      {new Date(match.kickoff_at).toLocaleString(
-                        "fr-FR"
-                      )}
+                      {new Date(match.kickoff_at).toLocaleString("fr-FR")}
                     </p>
                     <h3 className="font-bold">
                       {match.team_a} vs {match.team_b}
                     </h3>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <span>{match.team_a}</span>
                     <input
                       name="score_a"
@@ -267,12 +228,10 @@ export default async function DashboardPage() {
         )}
 
         <section>
-          <h2 className="text-2xl font-bold mb-4">
-            Mes pronostics
-          </h2>
+          <h2 className="text-2xl font-bold mb-4">Mes pronostics</h2>
 
           <PredictionForm
-            matches={futureMatches}
+            matches={matches ?? []}
             existingPredictions={myPredictions ?? []}
             userId={user.id}
             matchStats={matchStats}
@@ -280,6 +239,7 @@ export default async function DashboardPage() {
         </section>
 
         <section>
+          <h2 className="text-2xl font-bold mb-4">Classement live</h2>
           <Leaderboard />
         </section>
       </div>

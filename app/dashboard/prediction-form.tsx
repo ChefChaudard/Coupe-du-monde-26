@@ -109,51 +109,72 @@ export default function PredictionForm({
     setMessage("");
     setSavingGroup(phase);
 
+    const rowsToSave = [];
+
     for (const match of matchesInGroup) {
       const entry = values[match.id];
 
-      if (!entry || entry.a === "" || entry.b === "") continue;
+      if (!entry || entry.a === "" || entry.b === "") {
+        continue;
+      }
 
-      const kickoff = new Date(match.kickoff_at).getTime();
+      const hasStarted = new Date(match.kickoff_at).getTime() <= Date.now();
 
-      // 🔒 On ne sauvegarde QUE les matchs encore ouverts
-      if (kickoff <= Date.now()) continue;
+      if (hasStarted) {
+        continue;
+      }
 
       const predictedA = Number(entry.a);
       const predictedB = Number(entry.b);
 
-      if (Number.isNaN(predictedA) || Number.isNaN(predictedB)) continue;
+      if (Number.isNaN(predictedA) || Number.isNaN(predictedB)) {
+        continue;
+      }
 
-      await supabase.from("predictions").upsert(
-        {
-          user_id: userId,
-          match_id: match.id,
-          predicted_a: predictedA,
-          predicted_b: predictedB,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "user_id,match_id",
-        }
-      );
+      if (predictedA < 0 || predictedB < 0) {
+        continue;
+      }
+
+      rowsToSave.push({
+        user_id: userId,
+        match_id: match.id,
+        predicted_a: predictedA,
+        predicted_b: predictedB,
+        updated_at: new Date().toISOString(),
+      });
     }
 
+    if (rowsToSave.length === 0) {
+      setSavingGroup(null);
+      setMessage(`Aucun pronostic à sauvegarder pour ${phase}.`);
+      return;
+    }
+
+    const { error } = await supabase.from("predictions").upsert(rowsToSave, {
+      onConflict: "user_id,match_id",
+    });
+
     setSavingGroup(null);
-    setMessage(`Pronostics sauvegardés pour ${phase}`);
+
+    if (error) {
+      setMessage(`Erreur sauvegarde : ${error.message}`);
+      return;
+    }
+
+    setMessage(`Pronostics sauvegardés pour ${phase}.`);
   }
 
   return (
     <section className="space-y-5">
       {groupedMatches.map(([phase, phaseMatches]) => (
         <div key={phase} className="rounded-xl border p-3">
-          {/* HEADER AVEC BOUTON SAVE */}
-          <div className="flex justify-between items-center mb-2">
+          <div className="mb-2 flex items-center justify-between">
             <h3 className="text-lg font-bold capitalize">{phase}</h3>
 
             <button
               onClick={() => saveGroup(phaseMatches, phase)}
               disabled={savingGroup === phase}
-              className="bg-black text-white px-3 py-1 rounded text-sm"
+              className="rounded bg-black px-3 py-1 text-sm text-white disabled:opacity-50"
             >
               {savingGroup === phase ? "Saving..." : "SAVE"}
             </button>
@@ -162,20 +183,22 @@ export default function PredictionForm({
           <table className="w-full table-fixed text-xs">
             <thead>
               <tr className="border-b text-left text-gray-500">
-                <th className="py-2 pr-1 w-[14%]">Équipe A</th>
-                <th className="py-2 px-1 text-center w-[44px]">A</th>
-                <th className="py-2 px-1 text-center w-[44px]">B</th>
-                <th className="py-2 px-1 w-[14%]">Équipe B</th>
-                <th className="py-2 px-1 w-[62px]">Date</th>
-                <th className="py-2 px-1 w-[60px]">H. Paris</th>
-                <th className="py-2 px-1 w-[85px]">Ville</th>
-                <th className="py-2 px-1 w-[120px]">Statut</th>
+                <th className="w-[13%] py-2 pr-1">Équipe A</th>
+                <th className="w-[44px] px-1 py-2 text-center">A</th>
+                <th className="w-[44px] px-1 py-2 text-center">B</th>
+                <th className="w-[13%] px-1 py-2">Équipe B</th>
+                <th className="w-[62px] px-1 py-2">Date</th>
+                <th className="w-[60px] px-1 py-2">H. Paris</th>
+                <th className="w-[80px] px-1 py-2">Ville</th>
+                <th className="w-[75px] px-1 py-2">Statut</th>
+                <th className="w-[55px] px-1 py-2 text-center">Mes pts</th>
+                <th className="w-[65px] px-1 py-2 text-center">Moy. pts</th>
 
                 {isAdmin && (
                   <>
-                    <th className="py-2 px-1 text-center w-[55px]">A réel</th>
-                    <th className="py-2 px-1 text-center w-[55px]">B réel</th>
-                    <th className="py-2 pl-1 w-[65px]"></th>
+                    <th className="w-[55px] px-1 py-2 text-center">A réel</th>
+                    <th className="w-[55px] px-1 py-2 text-center">B réel</th>
+                    <th className="w-[65px] py-2 pl-1"></th>
                   </>
                 )}
               </tr>
@@ -203,7 +226,7 @@ export default function PredictionForm({
                       {match.team_a}
                     </td>
 
-                    <td className="py-2 px-1">
+                    <td className="px-1 py-2">
                       <input
                         type="number"
                         min={0}
@@ -212,11 +235,11 @@ export default function PredictionForm({
                           updateValue(match.id, "a", e.target.value)
                         }
                         disabled={!canPredict}
-                        className="w-10 border px-1 text-center"
+                        className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
                       />
                     </td>
 
-                    <td className="py-2 px-1">
+                    <td className="px-1 py-2">
                       <input
                         type="number"
                         min={0}
@@ -225,71 +248,78 @@ export default function PredictionForm({
                           updateValue(match.id, "b", e.target.value)
                         }
                         disabled={!canPredict}
-                        className="w-10 border px-1 text-center"
+                        className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
                       />
                     </td>
 
-                    <td className="py-2 px-1 font-medium truncate">
+                    <td className="px-1 py-2 font-medium truncate">
                       {match.team_b}
                     </td>
 
-                    <td className="py-2 px-1">
+                    <td className="px-1 py-2 whitespace-nowrap text-gray-600">
                       {formatParisDate(kickoffDate)}
                     </td>
 
-                    <td className="py-2 px-1">
+                    <td className="px-1 py-2 whitespace-nowrap text-gray-600">
                       {formatParisTime(kickoffDate)}
                     </td>
 
-                    <td className="py-2 px-1">
+                    <td className="px-1 py-2 truncate text-gray-600">
                       {getCityFromVenue(match.venue)}
                     </td>
 
-                    <td className="py-2 px-1">
+                    <td className="px-1 py-2 whitespace-nowrap">
                       {hasOfficialScore ? (
-                        <span>
-                          {match.score_a}-{match.score_b}
-                          {myPoints !== null && ` • ${myPoints}p`}
-                          {averagePoints !== null &&
-                            ` • m.${averagePoints.toFixed(1)}`}
-                        </span>
+                        <span className="text-blue-700">Terminé</span>
                       ) : canPredict ? (
-                        "Ouvert"
+                        <span className="text-green-600">Ouvert</span>
                       ) : (
-                        "Bloqué"
+                        <span className="text-red-600">Bloqué</span>
                       )}
+                    </td>
+
+                    <td className="px-1 py-2 text-center font-semibold">
+                      {myPoints !== null ? myPoints : "-"}
+                    </td>
+
+                    <td className="px-1 py-2 text-center">
+                      {averagePoints !== null
+                        ? averagePoints.toFixed(1)
+                        : "-"}
                     </td>
 
                     {isAdmin && (
                       <form action={updateMatchResult} className="contents">
                         <input type="hidden" name="match_id" value={match.id} />
 
-                        <td>
+                        <td className="px-1 py-2">
                           <input
                             name="score_a"
                             type="number"
+                            min={0}
                             defaultValue={match.score_a ?? ""}
                             disabled={!canEnterRealScore}
-                            className="w-10 border text-center"
+                            className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
                           />
                         </td>
 
-                        <td>
+                        <td className="px-1 py-2">
                           <input
                             name="score_b"
                             type="number"
+                            min={0}
                             defaultValue={match.score_b ?? ""}
                             disabled={!canEnterRealScore}
-                            className="w-10 border text-center"
+                            className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
                           />
                         </td>
 
-                        <td>
+                        <td className="py-2 pl-1 text-right">
                           <button
                             disabled={!canEnterRealScore}
-                            className="text-xs bg-blue-600 text-white px-2 py-1 rounded"
+                            className="rounded bg-blue-700 px-2 py-1 text-xs text-white disabled:opacity-40"
                           >
-                            OK
+                            Rés.
                           </button>
                         </td>
                       </form>

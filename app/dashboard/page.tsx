@@ -150,12 +150,6 @@ export default async function DashboardPage() {
     revalidatePath("/dashboard");
   }
 
-  const now = new Date();
-
-  const pastMatches = (matches ?? []).filter(
-    (match) => new Date(match.kickoff_at) <= now
-  );
-
   return (
     <main className="p-6 max-w-[1800px] mx-auto space-y-6">
       <div className="flex justify-between items-center">
@@ -168,59 +162,7 @@ export default async function DashboardPage() {
 
       <h1 className="text-4xl font-bold">Tableau de bord</h1>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[260px_minmax(0,1fr)_260px] gap-6">
-        {isAdmin && (
-          <section>
-            <h2 className="text-2xl font-bold mb-4">Résultats à saisir</h2>
-
-            <div className="space-y-4">
-              {pastMatches.map((match) => (
-                <form
-                  key={match.id}
-                  action={updateMatchResult}
-                  className="border rounded-2xl p-4 space-y-4"
-                >
-                  <input type="hidden" name="match_id" value={match.id} />
-
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      {match.phase} •{" "}
-                      {new Date(match.kickoff_at).toLocaleString("fr-FR")}
-                    </p>
-                    <h3 className="font-bold">
-                      {match.team_a} vs {match.team_b}
-                    </h3>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span>{match.team_a}</span>
-                    <input
-                      name="score_a"
-                      type="number"
-                      min={0}
-                      defaultValue={match.score_a ?? ""}
-                      className="w-14 border rounded p-2"
-                    />
-                    <span>-</span>
-                    <input
-                      name="score_b"
-                      type="number"
-                      min={0}
-                      defaultValue={match.score_b ?? ""}
-                      className="w-14 border rounded p-2"
-                    />
-                    <span>{match.team_b}</span>
-                  </div>
-
-                  <button className="bg-black text-white px-4 py-2 rounded">
-                    Valider
-                  </button>
-                </form>
-              ))}
-            </div>
-          </section>
-        )}
-
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-6">
         <section>
           <h2 className="text-2xl font-bold mb-4">Mes pronostics</h2>
 
@@ -229,6 +171,8 @@ export default async function DashboardPage() {
             existingPredictions={myPredictions}
             userId={user.id}
             matchStats={matchStats}
+            isAdmin={isAdmin}
+            updateMatchResult={updateMatchResult}
           />
         </section>
 

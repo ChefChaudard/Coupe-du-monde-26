@@ -54,11 +54,15 @@ export default function PredictionForm({
   existingPredictions,
   userId,
   matchStats,
+  isAdmin,
+  updateMatchResult,
 }: {
   matches: Match[];
   existingPredictions: Prediction[];
   userId: string;
   matchStats: Record<number, MatchStats>;
+  isAdmin: boolean;
+  updateMatchResult: (formData: FormData) => Promise<void>;
 }) {
   const initialValues = useMemo(() => {
     const values: FormValues = {};
@@ -170,14 +174,23 @@ export default function PredictionForm({
           <table className="w-full table-fixed text-xs">
             <thead>
               <tr className="border-b text-left text-gray-500">
-                <th className="py-2 pr-1 w-[16%]">Équipe A</th>
-                <th className="py-2 px-1 text-center w-[48px]">A</th>
-                <th className="py-2 px-1 text-center w-[48px]">B</th>
-                <th className="py-2 px-1 w-[16%]">Équipe B</th>
-                <th className="py-2 px-1 w-[70px]">Date</th>
+                <th className="py-2 pr-1 w-[14%]">Équipe A</th>
+                <th className="py-2 px-1 text-center w-[44px]">A</th>
+                <th className="py-2 px-1 text-center w-[44px]">B</th>
+                <th className="py-2 px-1 w-[14%]">Équipe B</th>
+                <th className="py-2 px-1 w-[62px]">Date</th>
                 <th className="py-2 px-1 w-[60px]">H. Paris</th>
-                <th className="py-2 px-1 w-[90px]">Ville</th>
-                <th className="py-2 px-1 w-[130px]">Statut</th>
+                <th className="py-2 px-1 w-[85px]">Ville</th>
+                <th className="py-2 px-1 w-[120px]">Statut</th>
+
+                {isAdmin && (
+                  <>
+                    <th className="py-2 px-1 text-center w-[55px]">A réel</th>
+                    <th className="py-2 px-1 text-center w-[55px]">B réel</th>
+                    <th className="py-2 pl-1 w-[65px]"></th>
+                  </>
+                )}
+
                 <th className="py-2 pl-1 w-[45px]"></th>
               </tr>
             </thead>
@@ -186,7 +199,10 @@ export default function PredictionForm({
               {phaseMatches.map((match) => {
                 const isSaving = savingMatchId === match.id;
                 const kickoffDate = new Date(match.kickoff_at);
-                const isLocked = kickoffDate.getTime() <= Date.now();
+                const hasStarted = kickoffDate.getTime() <= Date.now();
+                const canPredict = !hasStarted;
+                const canEnterRealScore = isAdmin && hasStarted;
+
                 const hasOfficialScore =
                   match.is_finished &&
                   match.score_a !== null &&
@@ -210,7 +226,7 @@ export default function PredictionForm({
                         onChange={(e) =>
                           updateValue(match.id, "a", e.target.value)
                         }
-                        disabled={isLocked}
+                        disabled={!canPredict}
                         className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
                       />
                     </td>
@@ -223,7 +239,7 @@ export default function PredictionForm({
                         onChange={(e) =>
                           updateValue(match.id, "b", e.target.value)
                         }
-                        disabled={isLocked}
+                        disabled={!canPredict}
                         className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
                       />
                     </td>
@@ -247,25 +263,62 @@ export default function PredictionForm({
                     <td className="py-2 px-1 whitespace-nowrap">
                       {hasOfficialScore ? (
                         <span className="text-blue-700">
-                          {match.score_a}-{match.score_b}
+                          Terminé {match.score_a}-{match.score_b}
                           {myPoints !== null && ` • ${myPoints}p`}
                           {averagePoints !== null &&
                             ` • m.${averagePoints.toFixed(1)}`}
                         </span>
-                      ) : isLocked ? (
-                        <span className="text-red-600">Verrouillé</span>
-                      ) : (
+                      ) : canPredict ? (
                         <span className="text-green-600">Ouvert</span>
+                      ) : (
+                        <span className="text-red-600">Prono bloqué</span>
                       )}
                     </td>
+
+                    {isAdmin && (
+                      <form action={updateMatchResult} className="contents">
+                        <input type="hidden" name="match_id" value={match.id} />
+
+                        <td className="py-2 px-1">
+                          <input
+                            name="score_a"
+                            type="number"
+                            min={0}
+                            defaultValue={match.score_a ?? ""}
+                            disabled={!canEnterRealScore}
+                            className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
+                          />
+                        </td>
+
+                        <td className="py-2 px-1">
+                          <input
+                            name="score_b"
+                            type="number"
+                            min={0}
+                            defaultValue={match.score_b ?? ""}
+                            disabled={!canEnterRealScore}
+                            className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
+                          />
+                        </td>
+
+                        <td className="py-2 pl-1 text-right">
+                          <button
+                            disabled={!canEnterRealScore}
+                            className="rounded bg-blue-700 px-2 py-1 text-xs text-white disabled:opacity-40"
+                          >
+                            Rés.
+                          </button>
+                        </td>
+                      </form>
+                    )}
 
                     <td className="py-2 pl-1 text-right">
                       <button
                         onClick={() => savePrediction(match.id)}
-                        disabled={isSaving || isLocked}
+                        disabled={isSaving || !canPredict}
                         className="rounded bg-black px-2 py-1 text-xs text-white disabled:opacity-50"
                       >
-                        {isLocked ? "L" : isSaving ? "..." : "OK"}
+                        {canPredict ? (isSaving ? "..." : "OK") : "Lock"}
                       </button>
                     </td>
                   </tr>

@@ -58,6 +58,14 @@ function formatParisTime(date: Date) {
   }).format(date);
 }
 
+function toDatetimeLocalValue(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate()
+  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function computeGroupStandings(
   matches: Match[],
   values: FormValues
@@ -91,9 +99,7 @@ function computeGroupStandings(
     const scoreA = Number(prediction.a);
     const scoreB = Number(prediction.b);
 
-    if (Number.isNaN(scoreA) || Number.isNaN(scoreB)) {
-      continue;
-    }
+    if (Number.isNaN(scoreA) || Number.isNaN(scoreB)) continue;
 
     const teamA = ensureTeam(match.team_a);
     const teamB = ensureTeam(match.team_b);
@@ -107,11 +113,9 @@ function computeGroupStandings(
     teamB.goalsFor += scoreB;
     teamB.goalsAgainst += scoreA;
 
-    if (scoreA > scoreB) {
-      teamA.points += 3;
-    } else if (scoreA < scoreB) {
-      teamB.points += 3;
-    } else {
+    if (scoreA > scoreB) teamA.points += 3;
+    else if (scoreA < scoreB) teamB.points += 3;
+    else {
       teamA.points += 1;
       teamB.points += 1;
     }
@@ -177,10 +181,6 @@ function GroupStandingTooltip({
           ))}
         </tbody>
       </table>
-
-      <p className="mt-2 text-[11px] text-gray-500">
-        Le classement se met à jour avec les scores saisis, même avant sauvegarde.
-      </p>
     </div>
   );
 }
@@ -217,10 +217,7 @@ export default function PredictionForm({
     const groups: Record<string, Match[]> = {};
 
     for (const match of matches) {
-      if (!groups[match.phase]) {
-        groups[match.phase] = [];
-      }
-
+      if (!groups[match.phase]) groups[match.phase] = [];
       groups[match.phase].push(match);
     }
 
@@ -230,6 +227,12 @@ export default function PredictionForm({
   const [values, setValues] = useState<FormValues>(initialValues);
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [simulatedNow, setSimulatedNow] = useState(
+    toDatetimeLocalValue(new Date())
+  );
+
+  const appNow = isAdmin ? new Date(simulatedNow) : new Date();
+  const appNowTime = appNow.getTime();
 
   function updateValue(matchId: number, side: "a" | "b", value: string) {
     setValues((prev) => ({
@@ -250,26 +253,16 @@ export default function PredictionForm({
     for (const match of matchesInGroup) {
       const entry = values[match.id];
 
-      if (!entry || entry.a === "" || entry.b === "") {
-        continue;
-      }
+      if (!entry || entry.a === "" || entry.b === "") continue;
 
-      const hasStarted = new Date(match.kickoff_at).getTime() <= Date.now();
-
-      if (hasStarted) {
-        continue;
-      }
+      const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
+      if (hasStarted) continue;
 
       const predictedA = Number(entry.a);
       const predictedB = Number(entry.b);
 
-      if (Number.isNaN(predictedA) || Number.isNaN(predictedB)) {
-        continue;
-      }
-
-      if (predictedA < 0 || predictedB < 0) {
-        continue;
-      }
+      if (Number.isNaN(predictedA) || Number.isNaN(predictedB)) continue;
+      if (predictedA < 0 || predictedB < 0) continue;
 
       rowsToSave.push({
         user_id: userId,
@@ -302,6 +295,26 @@ export default function PredictionForm({
 
   return (
     <section className="space-y-5">
+      {isAdmin && (
+        <div className="rounded-xl border bg-yellow-50 p-4">
+          <label className="mb-2 block text-sm font-semibold text-yellow-900">
+            Date simulée utilisée par l’application
+          </label>
+
+          <input
+            type="datetime-local"
+            value={simulatedNow}
+            onChange={(e) => setSimulatedNow(e.target.value)}
+            className="rounded border px-3 py-2"
+          />
+
+          <p className="mt-2 text-xs text-yellow-800">
+            Cette date remplace la date système pour tester le verrouillage des
+            pronostics et la saisie des scores réels.
+          </p>
+        </div>
+      )}
+
       {groupedMatches.map(([phase, phaseMatches]) => (
         <div key={phase} className="rounded-xl border p-3">
           <div className="mb-2 flex items-center justify-between">
@@ -352,7 +365,7 @@ export default function PredictionForm({
             <tbody>
               {phaseMatches.map((match) => {
                 const kickoffDate = new Date(match.kickoff_at);
-                const hasStarted = kickoffDate.getTime() <= Date.now();
+                const hasStarted = kickoffDate.getTime() <= appNowTime;
                 const canPredict = !hasStarted;
                 const canEnterRealScore = isAdmin && hasStarted;
 

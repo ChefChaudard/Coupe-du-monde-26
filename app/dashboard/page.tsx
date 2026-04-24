@@ -160,7 +160,24 @@ export default async function DashboardPage() {
         <span className="text-sm text-gray-500">{user.email}</span>
       </div>
 
-      <h1 className="text-4xl font-bold">Tableau de bord</h1>
+      const simulatedDate = new Date(simulatedNow);
+
+const day = simulatedDate.getDate().toString().padStart(2, "0");
+
+const monthRaw = simulatedDate.toLocaleDateString("fr-FR", {
+  month: "long",
+});
+
+const month = monthRaw.charAt(0).toLowerCase() + monthRaw.slice(1);
+
+const hours = simulatedDate.getHours().toString().padStart(2, "0");
+const minutes = simulatedDate.getMinutes().toString().padStart(2, "0");
+
+const formattedDate = `${day} ${month} - ${hours}h${minutes}`;
+
+<h1 className="text-4xl font-bold">
+  Tableau de bord au {formattedDate}
+</h1>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-6">
         <section>

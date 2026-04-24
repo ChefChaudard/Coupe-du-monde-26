@@ -1,90 +1,82 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+
+const REMEMBER_EMAIL_KEY = "pronos_cdm_remember_email";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  async function handleSignUp() {
-    setLoading(true);
+  useEffect(() => {
+    const savedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY);
+
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberEmail(true);
+    }
+  }, []);
+
+  async function signIn() {
     setMessage("");
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (error) {
-      setMessage(`Erreur inscription: ${error.message}`);
-      setLoading(false);
+    if (!email) {
+      setMessage("Merci de saisir ton email.");
       return;
     }
 
-    setMessage("Compte créé. Tu peux maintenant te connecter.");
-    setLoading(false);
+    if (rememberEmail) {
+      localStorage.setItem(REMEMBER_EMAIL_KEY, email);
+    } else {
+      localStorage.removeItem(REMEMBER_EMAIL_KEY);
+    }
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+      },
+    });
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setMessage("Lien de connexion envoyé par email.");
   }
-
-async function handleLogin() {
-  setLoading(true);
-  setMessage("");
-
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (error) {
-    setMessage(`Erreur connexion: ${error.message}`);
-    setLoading(false);
-    return;
-  }
-
-  window.location.href = "/dashboard";
-}
 
   return (
-    <main className="p-10 max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Connexion</h1>
+    <main className="mx-auto max-w-md p-8">
+      <h1 className="mb-6 text-3xl font-bold">Connexion</h1>
 
       <input
         type="email"
-        placeholder="ton email"
+        placeholder="ton@email.com"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="border p-2 w-full mb-4"
+        className="mb-4 w-full rounded border p-3"
       />
 
-      <input
-        type="password"
-        placeholder="ton mot de passe"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        className="border p-2 w-full mb-4"
-      />
+      <label className="mb-6 flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={rememberEmail}
+          onChange={(e) => setRememberEmail(e.target.checked)}
+        />
+        Se souvenir de mon email sur cet ordinateur
+      </label>
 
-      <div className="flex gap-3">
-        <button
-          onClick={handleLogin}
-          disabled={loading}
-          className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
-        >
-          Se connecter
-        </button>
+      <button
+        onClick={signIn}
+        className="w-full rounded bg-blue-600 px-4 py-3 text-white"
+      >
+        Recevoir un lien magique
+      </button>
 
-        <button
-          onClick={handleSignUp}
-          disabled={loading}
-          className="bg-gray-200 text-black px-4 py-2 rounded disabled:opacity-50"
-        >
-          Créer un compte
-        </button>
-      </div>
-
-      {message && <p className="mt-4 text-sm">{message}</p>}
+      {message && <p className="mt-4 text-sm text-gray-700">{message}</p>}
     </main>
   );
 }

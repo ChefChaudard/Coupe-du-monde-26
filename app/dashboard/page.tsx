@@ -18,7 +18,6 @@ function getPointsForPrediction(
   isFinished: boolean | null
 ) {
   if (!isFinished) return 0;
-
   if (predictedA === actualA && predictedB === actualB) return 3;
 
   const predictedOutcome =
@@ -158,7 +157,7 @@ export default async function DashboardPage() {
   );
 
   return (
-    <main className="p-10 max-w-7xl mx-auto space-y-6">
+    <main className="p-6 max-w-[1800px] mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <Link href="/" className="text-blue-600 hover:underline font-medium">
           ← Retour à l’accueil
@@ -169,7 +168,7 @@ export default async function DashboardPage() {
 
       <h1 className="text-4xl font-bold">Tableau de bord</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-[260px_minmax(0,1fr)_260px] gap-6">
         {isAdmin && (
           <section>
             <h2 className="text-2xl font-bold mb-4">Résultats à saisir</h2>
@@ -193,14 +192,14 @@ export default async function DashboardPage() {
                     </h3>
                   </div>
 
-                  <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span>{match.team_a}</span>
                     <input
                       name="score_a"
                       type="number"
                       min={0}
                       defaultValue={match.score_a ?? ""}
-                      className="w-16 border rounded p-2"
+                      className="w-14 border rounded p-2"
                     />
                     <span>-</span>
                     <input
@@ -208,13 +207,13 @@ export default async function DashboardPage() {
                       type="number"
                       min={0}
                       defaultValue={match.score_b ?? ""}
-                      className="w-16 border rounded p-2"
+                      className="w-14 border rounded p-2"
                     />
                     <span>{match.team_b}</span>
                   </div>
 
                   <button className="bg-black text-white px-4 py-2 rounded">
-                    Valider résultat
+                    Valider
                   </button>
                 </form>
               ))}

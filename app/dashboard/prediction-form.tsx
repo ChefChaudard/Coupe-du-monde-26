@@ -28,6 +28,28 @@ type MatchStats = {
 
 type FormValues = Record<number, { a: string; b: string }>;
 
+function getCityFromVenue(venue?: string | null) {
+  if (!venue) return "-";
+  return venue.split("-")[0].trim();
+}
+
+function formatParisDate(date: Date) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatParisTime(date: Date) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export default function PredictionForm({
   matches,
   existingPredictions,
@@ -147,7 +169,7 @@ export default function PredictionForm({
           <h3 className="mb-2 text-lg font-bold capitalize">{phase}</h3>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[980px] text-sm">
               <thead>
                 <tr className="border-b text-left text-gray-500">
                   <th className="py-2 pr-2">Équipe A</th>
@@ -155,7 +177,8 @@ export default function PredictionForm({
                   <th className="py-2 px-1 text-center">B</th>
                   <th className="py-2 px-2">Équipe B</th>
                   <th className="py-2 px-2">Date</th>
-                  <th className="py-2 px-2">Lieu</th>
+                  <th className="py-2 px-2">Heure Paris</th>
+                  <th className="py-2 px-2">Ville</th>
                   <th className="py-2 px-2">Statut</th>
                   <th className="py-2 pl-2"></th>
                 </tr>
@@ -212,11 +235,15 @@ export default function PredictionForm({
                       </td>
 
                       <td className="py-2 px-2 whitespace-nowrap text-gray-600">
-                        {kickoffDate.toLocaleDateString("fr-FR")}
+                        {formatParisDate(kickoffDate)}
                       </td>
 
-                      <td className="py-2 px-2 text-gray-600">
-                        {match.venue ?? "-"}
+                      <td className="py-2 px-2 whitespace-nowrap text-gray-600">
+                        {formatParisTime(kickoffDate)}
+                      </td>
+
+                      <td className="py-2 px-2 whitespace-nowrap text-gray-600">
+                        {getCityFromVenue(match.venue)}
                       </td>
 
                       <td className="py-2 px-2 whitespace-nowrap">

@@ -38,7 +38,6 @@ function formatParisDate(date: Date) {
     timeZone: "Europe/Paris",
     day: "2-digit",
     month: "2-digit",
-    year: "numeric",
   }).format(date);
 }
 
@@ -168,114 +167,112 @@ export default function PredictionForm({
         <div key={phase} className="rounded-xl border p-3">
           <h3 className="mb-2 text-lg font-bold capitalize">{phase}</h3>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-sm">
-              <thead>
-                <tr className="border-b text-left text-gray-500">
-                  <th className="py-2 pr-2">Équipe A</th>
-                  <th className="py-2 px-1 text-center">A</th>
-                  <th className="py-2 px-1 text-center">B</th>
-                  <th className="py-2 px-2">Équipe B</th>
-                  <th className="py-2 px-2">Date</th>
-                  <th className="py-2 px-2">Heure Paris</th>
-                  <th className="py-2 px-2">Ville</th>
-                  <th className="py-2 px-2">Statut</th>
-                  <th className="py-2 pl-2"></th>
-                </tr>
-              </thead>
+          <table className="w-full table-fixed text-xs">
+            <thead>
+              <tr className="border-b text-left text-gray-500">
+                <th className="py-2 pr-1 w-[16%]">Équipe A</th>
+                <th className="py-2 px-1 text-center w-[48px]">A</th>
+                <th className="py-2 px-1 text-center w-[48px]">B</th>
+                <th className="py-2 px-1 w-[16%]">Équipe B</th>
+                <th className="py-2 px-1 w-[70px]">Date</th>
+                <th className="py-2 px-1 w-[60px]">H. Paris</th>
+                <th className="py-2 px-1 w-[90px]">Ville</th>
+                <th className="py-2 px-1 w-[130px]">Statut</th>
+                <th className="py-2 pl-1 w-[45px]"></th>
+              </tr>
+            </thead>
 
-              <tbody>
-                {phaseMatches.map((match) => {
-                  const isSaving = savingMatchId === match.id;
-                  const kickoffDate = new Date(match.kickoff_at);
-                  const isLocked = kickoffDate.getTime() <= Date.now();
-                  const hasOfficialScore =
-                    match.is_finished &&
-                    match.score_a !== null &&
-                    match.score_b !== null;
+            <tbody>
+              {phaseMatches.map((match) => {
+                const isSaving = savingMatchId === match.id;
+                const kickoffDate = new Date(match.kickoff_at);
+                const isLocked = kickoffDate.getTime() <= Date.now();
+                const hasOfficialScore =
+                  match.is_finished &&
+                  match.score_a !== null &&
+                  match.score_b !== null;
 
-                  const stats = matchStats[match.id];
-                  const myPoints = stats?.myPoints ?? null;
-                  const averagePoints = stats?.averagePoints ?? null;
+                const stats = matchStats[match.id];
+                const myPoints = stats?.myPoints ?? null;
+                const averagePoints = stats?.averagePoints ?? null;
 
-                  return (
-                    <tr key={match.id} className="border-b last:border-b-0">
-                      <td className="py-2 pr-2 font-medium whitespace-nowrap">
-                        {match.team_a}
-                      </td>
+                return (
+                  <tr key={match.id} className="border-b last:border-b-0">
+                    <td className="py-2 pr-1 font-medium truncate">
+                      {match.team_a}
+                    </td>
 
-                      <td className="py-2 px-1">
-                        <input
-                          type="number"
-                          min={0}
-                          value={values[match.id]?.a ?? ""}
-                          onChange={(e) =>
-                            updateValue(match.id, "a", e.target.value)
-                          }
-                          disabled={isLocked}
-                          className="w-12 rounded border px-2 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
-                        />
-                      </td>
+                    <td className="py-2 px-1">
+                      <input
+                        type="number"
+                        min={0}
+                        value={values[match.id]?.a ?? ""}
+                        onChange={(e) =>
+                          updateValue(match.id, "a", e.target.value)
+                        }
+                        disabled={isLocked}
+                        className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
+                      />
+                    </td>
 
-                      <td className="py-2 px-1">
-                        <input
-                          type="number"
-                          min={0}
-                          value={values[match.id]?.b ?? ""}
-                          onChange={(e) =>
-                            updateValue(match.id, "b", e.target.value)
-                          }
-                          disabled={isLocked}
-                          className="w-12 rounded border px-2 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
-                        />
-                      </td>
+                    <td className="py-2 px-1">
+                      <input
+                        type="number"
+                        min={0}
+                        value={values[match.id]?.b ?? ""}
+                        onChange={(e) =>
+                          updateValue(match.id, "b", e.target.value)
+                        }
+                        disabled={isLocked}
+                        className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
+                      />
+                    </td>
 
-                      <td className="py-2 px-2 font-medium whitespace-nowrap">
-                        {match.team_b}
-                      </td>
+                    <td className="py-2 px-1 font-medium truncate">
+                      {match.team_b}
+                    </td>
 
-                      <td className="py-2 px-2 whitespace-nowrap text-gray-600">
-                        {formatParisDate(kickoffDate)}
-                      </td>
+                    <td className="py-2 px-1 text-gray-600 whitespace-nowrap">
+                      {formatParisDate(kickoffDate)}
+                    </td>
 
-                      <td className="py-2 px-2 whitespace-nowrap text-gray-600">
-                        {formatParisTime(kickoffDate)}
-                      </td>
+                    <td className="py-2 px-1 text-gray-600 whitespace-nowrap">
+                      {formatParisTime(kickoffDate)}
+                    </td>
 
-                      <td className="py-2 px-2 whitespace-nowrap text-gray-600">
-                        {getCityFromVenue(match.venue)}
-                      </td>
+                    <td className="py-2 px-1 text-gray-600 truncate">
+                      {getCityFromVenue(match.venue)}
+                    </td>
 
-                      <td className="py-2 px-2 whitespace-nowrap">
-                        {hasOfficialScore ? (
-                          <span className="text-blue-700">
-                            Terminé {match.score_a}-{match.score_b}
-                            {myPoints !== null && ` • ${myPoints} pts`}
-                            {averagePoints !== null &&
-                              ` • moy. ${averagePoints.toFixed(1)}`}
-                          </span>
-                        ) : isLocked ? (
-                          <span className="text-red-600">Verrouillé</span>
-                        ) : (
-                          <span className="text-green-600">Ouvert</span>
-                        )}
-                      </td>
+                    <td className="py-2 px-1 whitespace-nowrap">
+                      {hasOfficialScore ? (
+                        <span className="text-blue-700">
+                          {match.score_a}-{match.score_b}
+                          {myPoints !== null && ` • ${myPoints}p`}
+                          {averagePoints !== null &&
+                            ` • m.${averagePoints.toFixed(1)}`}
+                        </span>
+                      ) : isLocked ? (
+                        <span className="text-red-600">Verrouillé</span>
+                      ) : (
+                        <span className="text-green-600">Ouvert</span>
+                      )}
+                    </td>
 
-                      <td className="py-2 pl-2 text-right">
-                        <button
-                          onClick={() => savePrediction(match.id)}
-                          disabled={isSaving || isLocked}
-                          className="rounded bg-black px-3 py-1 text-xs text-white disabled:opacity-50"
-                        >
-                          {isLocked ? "Lock" : isSaving ? "..." : "OK"}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                    <td className="py-2 pl-1 text-right">
+                      <button
+                        onClick={() => savePrediction(match.id)}
+                        disabled={isSaving || isLocked}
+                        className="rounded bg-black px-2 py-1 text-xs text-white disabled:opacity-50"
+                      >
+                        {isLocked ? "L" : isSaving ? "..." : "OK"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       ))}
 

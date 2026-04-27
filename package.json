@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "backup:db": "node scripts/export-db.mjs",
+    "restore:db": "node scripts/restore-db.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

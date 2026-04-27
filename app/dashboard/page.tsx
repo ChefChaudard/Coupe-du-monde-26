@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import PredictionForm from "./prediction-form";
 import Leaderboard from "./leaderboard";
+import PhaseLeaderboard from "./phase-leaderboard";
 
 type MatchStats = {
   myPoints: number | null;
@@ -149,26 +150,30 @@ export default async function DashboardPage() {
     revalidatePath("/dashboard");
   }
 
-  return (
-    <main className="p-6 max-w-[1800px] mx-auto space-y-6">
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-6">
-        <section>
-          <PredictionForm
-            matches={matches ?? []}
-            existingPredictions={myPredictions}
-            userId={user.id}
-            userEmail={user.email ?? ""}
-            matchStats={matchStats}
-            isAdmin={isAdmin}
-            updateMatchResult={updateMatchResult}
-          />
-        </section>
+return (
+  <main className="p-6 max-w-[1800px] mx-auto space-y-6">
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-6">
+      <section>
+        <PredictionForm
+          matches={matches ?? []}
+          existingPredictions={myPredictions}
+          userId={user.id}
+          userEmail={user.email ?? ""}
+          matchStats={matchStats}
+          isAdmin={isAdmin}
+          updateMatchResult={updateMatchResult}
+        />
+      </section>
+      <div className="border-t my-6"></div>
+      <section>
+        <h2 className="text-2xl font-bold mb-4">Classement live</h2>
+        <Leaderboard />
 
-        <section>
-          <h2 className="text-2xl font-bold mb-4">Classement live</h2>
-          <Leaderboard />
-        </section>
-      </div>
-    </main>
-  );
+        <div className="mt-6">
+          <PhaseLeaderboard />
+        </div>
+      </section>
+    </div>
+  </main>
+);
 }

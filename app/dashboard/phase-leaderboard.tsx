@@ -30,10 +30,10 @@ export default function PhaseLeaderboard() {
     }
   }
 
-  useEffect(() => {
-    loadRows();
+useEffect(() => {
+  void Promise.resolve().then(() => loadRows());
 
-    const channel = supabase
+  const channel = supabase
       .channel("phase-leaderboard-live")
       .on(
         "postgres_changes",

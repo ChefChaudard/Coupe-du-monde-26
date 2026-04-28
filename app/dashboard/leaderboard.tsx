@@ -69,10 +69,10 @@ export default function Leaderboard() {
     setMessage("");
   }
 
-  useEffect(() => {
-    loadLeaderboard();
+useEffect(() => {
+  void Promise.resolve().then(() => loadLeaderboard());
 
-    const channel = supabase
+  const channel = supabase
       .channel("user_scores_changes")
       .on(
         "postgres_changes",

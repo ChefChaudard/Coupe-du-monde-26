@@ -100,7 +100,7 @@ useEffect(() => {
         rows.map((row, index) => (
           <div
             key={row.user_id}
-            className="flex items-center justify-between border rounded-xl px-4 py-3"
+            className="flex items-center justify-between border border-red-500 bg-red-50 rounded-xl px-4 py-3"
           >
             <span>
               #{index + 1} — {row.nickname}

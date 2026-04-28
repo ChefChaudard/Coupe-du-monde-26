@@ -273,7 +273,7 @@ export default async function DashboardPage() {
         </section>
 
         <section>
-          <h2 className="text-2xl font-bold mb-4">Classement live</h2>
+          <h2 className="text-2xl font-bold mb-4 text-red-600">Classement live</h2>
           <Leaderboard />
 
           <div className="mt-6">

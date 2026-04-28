@@ -143,12 +143,10 @@ export default function PredictionForm({
       }
     }
 
-    loadSimulatedDate();
+    void loadSimulatedDate();
   }, []);
 
-const appNowTime = simulatedNow
-  ? new Date(simulatedNow).getTime()
-  : 0;
+  const appNowTime = simulatedNow ? new Date(simulatedNow).getTime() : 0;
 
   async function updateSimulatedDate(value: string) {
     setSimulatedNow(value);
@@ -292,7 +290,10 @@ const appNowTime = simulatedNow
                       </thead>
                       <tbody>
                         {standings.map((row) => (
-                          <tr key={row.team} className="border-b last:border-b-0">
+                          <tr
+                            key={row.team}
+                            className="border-b last:border-b-0"
+                          >
                             <td className="py-1 font-medium">{row.team}</td>
                             <td>{row.played}</td>
                             <td>{row.won}</td>
@@ -335,9 +336,13 @@ const appNowTime = simulatedNow
 
                   {isAdmin && (
                     <>
-                      <th className="w-[55px] px-1 py-2 text-center">A réel</th>
-                      <th className="w-[55px] px-1 py-2 text-center">B réel</th>
-                      <th className="w-[65px] py-2 pl-1"></th>
+                      <th className="w-[55px] px-1 py-2 text-center">
+                        A réel
+                      </th>
+                      <th className="w-[55px] px-1 py-2 text-center">
+                        B réel
+                      </th>
+                      <th className="w-[130px] py-2 pl-1"></th>
                     </>
                   )}
                 </tr>
@@ -428,40 +433,50 @@ const appNowTime = simulatedNow
                       </td>
 
                       {isAdmin && (
-                        <form action={updateMatchResult} className="contents">
-                          <input type="hidden" name="match_id" value={match.id} />
-
-                          <td className="px-1 py-2">
-                            <input
-                              name="score_a"
-                              type="number"
-                              min={0}
-                              defaultValue={match.score_a ?? ""}
-                              disabled={!canEnterRealScore}
-                              className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
-                            />
+                        <>
+                          <td className="px-1 py-2 text-center font-semibold">
+                            {match.score_a ?? "-"}
                           </td>
 
-                          <td className="px-1 py-2">
-                            <input
-                              name="score_b"
-                              type="number"
-                              min={0}
-                              defaultValue={match.score_b ?? ""}
-                              disabled={!canEnterRealScore}
-                              className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
-                            />
+                          <td className="px-1 py-2 text-center font-semibold">
+                            {match.score_b ?? "-"}
                           </td>
 
                           <td className="py-2 pl-1 text-right">
-                            <button
-                              disabled={!canEnterRealScore}
-                              className="rounded bg-blue-700 px-2 py-1 text-xs text-white disabled:opacity-40"
-                            >
-                              Rés.
-                            </button>
+                            {canEnterRealScore && (
+                              <form
+                                action={updateMatchResult}
+                                className="flex justify-end gap-1"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="match_id"
+                                  value={match.id}
+                                />
+
+                                <input
+                                  name="score_a"
+                                  type="number"
+                                  min={0}
+                                  defaultValue={match.score_a ?? ""}
+                                  className="w-10 rounded border px-1 py-1 text-center"
+                                />
+
+                                <input
+                                  name="score_b"
+                                  type="number"
+                                  min={0}
+                                  defaultValue={match.score_b ?? ""}
+                                  className="w-10 rounded border px-1 py-1 text-center"
+                                />
+
+                                <button className="rounded bg-blue-700 px-2 py-1 text-xs text-white">
+                                  Rés.
+                                </button>
+                              </form>
+                            )}
                           </td>
-                        </form>
+                        </>
                       )}
                     </tr>
                   );

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase/client";
 
 export default function Home() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -18,11 +19,12 @@ export default function Home() {
       if (user) {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("is_admin")
+          .select("is_admin, nickname")
           .eq("id", user.id)
           .single();
 
         setIsAdmin(!!profile?.is_admin);
+        setUserName(profile?.nickname ?? user.email?.split("@")[0] ?? null);
       }
     }
 
@@ -36,14 +38,16 @@ export default function Home() {
         if (user) {
           supabase
             .from("profiles")
-            .select("is_admin")
+            .select("is_admin, nickname")
             .eq("id", user.id)
             .single()
             .then(({ data }) => {
               setIsAdmin(!!data?.is_admin);
+              setUserName(data?.nickname ?? user?.email?.split("@")[0] ?? null);
             });
         } else {
           setIsAdmin(false);
+          setUserName(null);
         }
       }
     );
@@ -52,11 +56,6 @@ export default function Home() {
       listener.subscription.unsubscribe();
     };
   }, []);
-
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    window.location.reload();
-  }
 
   return (
     <main className="min-h-screen bg-green-900 text-white flex items-center justify-center p-8">
@@ -72,43 +71,37 @@ export default function Home() {
             Accéder au dashboard
           </Link>
 
-          {!userEmail ? (
+          {!userEmail && (
             <Link
               href="/login"
               className="rounded bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700"
             >
               Se connecter
             </Link>
-          ) : (
-            <button
-              onClick={handleLogout}
-              className="rounded bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700"
-            >
-              Se déconnecter
-            </button>
           )}
 
-          <Link
-            href="/admin/users"
-            className="rounded bg-yellow-400 px-6 py-3 font-semibold text-green-950 hover:bg-yellow-300"
-          >
-            Créer un utilisateur
-          </Link>
+          {userEmail && (
+            <Link
+              href="/account/password"
+              className="rounded bg-white px-6 py-3 font-semibold text-green-900 hover:bg-gray-100"
+            >
+              Changer mon mot de passe
+            </Link>
+          )}
 
-          {/* 🔥 NOUVEAU BOUTON ADMIN */}
           {isAdmin && (
             <Link
-              href="/admin/security"
-              className="rounded bg-red-800 px-6 py-3 font-semibold text-white hover:bg-red-900"
+              href="/admin/users"
+              className="rounded bg-yellow-400 px-6 py-3 font-semibold text-green-950 hover:bg-yellow-300"
             >
-              Administration sécurité
+              Créer / gérer utilisateurs
             </Link>
           )}
         </div>
 
-        {userEmail && (
+        {userName && (
           <p className="text-sm text-gray-200">
-            Connecté en tant que : {userEmail}
+            Connecté en tant que : {userName}
           </p>
         )}
       </div>

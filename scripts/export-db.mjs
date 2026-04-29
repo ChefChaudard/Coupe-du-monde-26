@@ -48,7 +48,7 @@ try {
 
   console.log(`✅ Backup créé : ${outputFile}`);
   log(`SUCCESS - ${outputFile}`);
-} catch (error) {
+} catch {
   console.error("❌ Erreur pendant pg_dump");
   log("ERROR - backup failed");
   process.exit(1);

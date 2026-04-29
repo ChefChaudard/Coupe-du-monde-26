@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 
 type PhaseRow = {
@@ -14,7 +14,7 @@ export default function PhaseLeaderboard() {
   const [rows, setRows] = useState<PhaseRow[]>([]);
   const [selectedPhase, setSelectedPhase] = useState<string>("");
 
-  async function loadRows() {
+  const loadRows = useCallback(async function loadRows() {
     const { data } = await supabase
       .from("phase_leaderboard")
       .select("*")
@@ -28,12 +28,12 @@ export default function PhaseLeaderboard() {
     if (!selectedPhase && safeRows.length > 0) {
       setSelectedPhase(safeRows[0].phase);
     }
-  }
+  }, [selectedPhase]);
 
-useEffect(() => {
-  void Promise.resolve().then(() => loadRows());
+  useEffect(() => {
+    void Promise.resolve().then(() => loadRows());
 
-  const channel = supabase
+    const channel = supabase
       .channel("phase-leaderboard-live")
       .on(
         "postgres_changes",
@@ -49,7 +49,7 @@ useEffect(() => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [loadRows]);
 
   const phases = Array.from(new Set(rows.map((row) => row.phase)));
 

@@ -12,37 +12,22 @@ if (!supabaseUrl || !serviceRoleKey) {
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-const keepEmails = [
-  "fabrice.beral@gmail.com",
-  "salvatore.russo@datacypher.fr",
-];
+const keepEmails = (process.env.RESET_KEEP_EMAILS ?? "")
+  .split(",")
+  .map((email) => email.trim())
+  .filter(Boolean);
 
-const usersToCreate = [
-  {
-    email: "ludomilet@gmail.com",
-    password: "test1234",
-    nickname: "Ludo",
-    first_name: "Ludovic",
-    last_name: "Milet",
-    is_admin: false,
-  },
-  {
-    email: "asoubriard@gmail.com",
-    password: "test1234",
-    nickname: "LeSoub",
-    first_name: "Alexandre",
-    last_name: "Soubriard",
-    is_admin: false,
-  },
-  {
-    email: "doncesar99@hotmail.com",
-    password: "test1234",
-    nickname: "Oliv",
-    first_name: "Olivier",
-    last_name: "Pannetrat",
-    is_admin: false,
-  },
-];
+const usersToCreate = JSON.parse(process.env.RESET_USERS_JSON ?? "[]");
+
+if (!Array.isArray(usersToCreate)) {
+  throw new Error("RESET_USERS_JSON doit contenir un tableau JSON.");
+}
+
+if (keepEmails.length === 0 || usersToCreate.length === 0) {
+  throw new Error(
+    "RESET_KEEP_EMAILS et RESET_USERS_JSON doivent etre renseignes dans l'environnement."
+  );
+}
 
 async function main() {
   const { data, error } = await supabase.auth.admin.listUsers();

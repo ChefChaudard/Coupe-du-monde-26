@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 
@@ -27,31 +26,11 @@ type MatchStats = {
   averagePoints: number | null;
 };
 
-type GroupStandingRow = {
-  team: string;
-  played: number;
-  won: number;
-  drawn: number;
-  lost: number;
-  goalsFor: number;
-  goalsAgainst: number;
-  goalDifference: number;
-  points: number;
-};
-
 type FormValues = Record<number, { a: string; b: string }>;
 
 function getCityFromVenue(venue?: string | null) {
   if (!venue) return "-";
   return venue.split("-")[0].trim();
-}
-
-function toDatetimeLocalValue(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-    date.getDate()
-  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function formatDashboardDate(value: string) {
@@ -80,24 +59,125 @@ function formatParisTime(date: Date) {
   }).format(date);
 }
 
+type TabKey = "groupes" | "tours";
+
+function isGroupPhase(phase: string) {
+  return phase.toLowerCase().includes("group");
+}
+
+const knockoutPhaseOrder = [
+  "32e de finale",
+  "16e de finale",
+  "Quarts de finale",
+  "Demi-finales",
+  "Finale",
+];
+
+const round32Placeholders: [string, string][] = [
+  ["1er du groupe A", "3eme du groupe F"],
+  ["1er du groupe C", "3eme du groupe E"],
+  ["1er du groupe B", "3eme du groupe D"],
+  ["1er du groupe D", "3eme du groupe C"],
+  ["1er du groupe E", "3eme du groupe B"],
+  ["1er du groupe F", "3eme du groupe A"],
+  ["1er du groupe G", "2eme du groupe H"],
+  ["1er du groupe H", "2eme du groupe G"],
+  ["2eme du groupe A", "2eme du groupe F"],
+  ["2eme du groupe C", "2eme du groupe E"],
+  ["2eme du groupe B", "2eme du groupe D"],
+  ["2eme du groupe D", "2eme du groupe C"],
+  ["2eme du groupe E", "2eme du groupe B"],
+  ["2eme du groupe F", "2eme du groupe A"],
+  ["3eme du groupe G", "3eme du groupe H"],
+  ["3eme du groupe H", "3eme du groupe G"],
+];
+
+function getKnockoutTeamLabel(match: Match, side: "a" | "b", matchIndex: number) {
+  if (!knockoutPhaseOrder.includes(match.phase)) {
+    return side === "a" ? match.team_a : match.team_b;
+  }
+
+  const phaseIndex = knockoutPhaseOrder.indexOf(match.phase);
+
+  if (match.phase === "32e de finale") {
+    const placeholder = round32Placeholders[matchIndex] ?? [
+      `1er du groupe ${String.fromCharCode(65 + (matchIndex % 12))}`,
+      `3eme du groupe ${String.fromCharCode(65 + ((matchIndex + 5) % 12))}`,
+    ];
+    return side === "a" ? placeholder[0] : placeholder[1];
+  }
+
+  const previousPhase = knockoutPhaseOrder[phaseIndex - 1];
+  const position = side === "a" ? matchIndex * 2 + 1 : matchIndex * 2 + 2;
+  return `Vainqueur ${previousPhase} ${position}`;
+}
+
+function getDisplayTeam(match: Match, side: "a" | "b", matchIndex: number, selectedTab: TabKey) {
+  if (selectedTab !== "tours") {
+    return side === "a" ? match.team_a : match.team_b;
+  }
+
+  return getKnockoutTeamLabel(match, side, matchIndex);
+}
+
+function getPlaceholderLabel(phase: string, index: number) {
+  if (phase === "32e de finale") {
+    const placeholder = round32Placeholders[Math.floor((index - 1) / 2)] ?? [
+      `1er du groupe ${String.fromCharCode(65 + ((index - 1) % 12))}`,
+      `3eme du groupe ${String.fromCharCode(65 + ((index + 4) % 12))}`,
+    ];
+
+    return index % 2 === 1 ? placeholder[0] : placeholder[1];
+  }
+
+  const previousPhase = knockoutPhaseOrder[knockoutPhaseOrder.indexOf(phase) - 1];
+  return `Vainqueur ${previousPhase} ${index}`;
+}
+
+function buildPlaceholderKnockoutGroups() {
+  const groups: [string, Match[]][] = [];
+  const matchCounts = [16, 8, 4, 2, 1];
+
+  for (let phaseIndex = 0; phaseIndex < knockoutPhaseOrder.length; phaseIndex += 1) {
+    const phase = knockoutPhaseOrder[phaseIndex];
+    const count = matchCounts[phaseIndex];
+
+    const phaseMatches: Match[] = Array.from({ length: count }, (_, matchIndex) => ({
+      id: -(phaseIndex * 100 + matchIndex + 1),
+      phase,
+      team_a: getPlaceholderLabel(phase, matchIndex * 2 + 1),
+      team_b: getPlaceholderLabel(phase, matchIndex * 2 + 2),
+      kickoff_at: new Date(Date.now() + (phaseIndex + 1) * 86400000).toISOString(),
+      venue: null,
+      score_a: null,
+      score_b: null,
+      is_finished: false,
+    }));
+
+    groups.push([phase, phaseMatches]);
+  }
+
+  return groups;
+}
+
 export default function PredictionForm({
   matches,
   existingPredictions,
   userId,
-  userEmail,
   matchStats,
   isAdmin,
   updateMatchResult,
-  groupStandings,
+  createKnockoutMatches,
+  initialTab,
 }: {
   matches: Match[];
   existingPredictions: Prediction[];
   userId: string;
-  userEmail: string;
   matchStats: Record<number, MatchStats>;
   isAdmin: boolean;
   updateMatchResult: (formData: FormData) => Promise<void>;
-  groupStandings: Record<string, GroupStandingRow[]>;
+  createKnockoutMatches: (formData: FormData) => Promise<void>;
+  initialTab?: TabKey;
 }) {
   const initialValues = useMemo(() => {
     const values: FormValues = {};
@@ -123,6 +203,20 @@ export default function PredictionForm({
     return Object.entries(groups);
   }, [matches]);
 
+  const selectedTab = initialTab ?? "groupes";
+
+  const filteredMatches = useMemo(() => {
+    const matches = groupedMatches.filter(([phase]) =>
+      selectedTab === "groupes" ? isGroupPhase(phase) : !isGroupPhase(phase)
+    );
+
+    if (selectedTab === "tours" && matches.length === 0) {
+      return buildPlaceholderKnockoutGroups();
+    }
+
+    return matches;
+  }, [groupedMatches, selectedTab]);
+
   const [values, setValues] = useState<FormValues>(initialValues);
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -147,18 +241,6 @@ export default function PredictionForm({
   }, []);
 
   const appNowTime = simulatedNow ? new Date(simulatedNow).getTime() : 0;
-
-  async function updateSimulatedDate(value: string) {
-    setSimulatedNow(value);
-
-    await supabase
-      .from("app_settings")
-      .update({
-        value: new Date(value).toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("key", "simulated_date");
-  }
 
   function updateValue(matchId: number, side: "a" | "b", value: string) {
     setValues((prev) => ({
@@ -224,132 +306,77 @@ export default function PredictionForm({
 
   return (
     <section className="space-y-6">
-      <div className="flex justify-between items-center">
-        <Link href="/" className="text-blue-600 hover:underline font-medium">
-          ← Retour à l’accueil
-        </Link>
-
-        <span className="text-sm text-gray-500">{userEmail}</span>
-      </div>
-
       <h1 className="text-4xl font-bold">
-        Tableau de bord au {formatDashboardDate(simulatedNow)}
+        Pronostics Groupes au {formatDashboardDate(simulatedNow)}
       </h1>
-
-      {isAdmin && (
-        <div className="rounded-xl border bg-yellow-50 p-4">
-          <label className="mb-2 block text-sm font-semibold text-yellow-900">
-            Date simulée utilisée par l’application
-          </label>
-
-          <input
-            type="datetime-local"
-            value={toDatetimeLocalValue(new Date(simulatedNow))}
-            onChange={(e) => updateSimulatedDate(e.target.value)}
-            className="rounded border px-3 py-2"
-          />
-        </div>
-      )}
 
       <h2 className="text-2xl font-bold">Mes pronostics</h2>
 
-      {groupedMatches.map(([phase, phaseMatches]) => {
-        const standings = groupStandings[phase] ?? [];
+      {filteredMatches.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-500">
+          {selectedTab === "groupes" ? (
+            "Aucun match de groupe n'est disponible pour le moment."
+          ) : (
+            <>
+              <p>Aucun match des tours suivants n&apos;est disponible pour le moment.</p>
+              {isAdmin ? (
+                <form action={createKnockoutMatches} className="mt-4">
+                  <button
+                    type="submit"
+                    className="rounded bg-black px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    Créer les matchs des tours suivants
+                  </button>
+                </form>
+              ) : (
+                <p className="mt-3 text-sm text-gray-500">
+                  Contactez un administrateur pour générer ces matchs.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      ) : filteredMatches.map(([phase, phaseMatches]) => {
+          return (
+            <div key={phase} className="rounded-xl border p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-lg font-bold capitalize">{phase}</h3>
 
-        return (
-          <div key={phase} className="rounded-xl border p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <div className="relative inline-block group">
-                <h3 className="text-lg font-bold capitalize cursor-help underline decoration-dotted">
-                  {phase}
-                </h3>
-
-                <div className="hidden group-hover:block absolute left-0 top-7 z-50 w-[620px] rounded border bg-white p-3 text-xs shadow-xl">
-                  <p className="mb-2 font-bold capitalize">
-                    Classement {phase}
-                  </p>
-
-                  {standings.length === 0 ? (
-                    <p className="text-gray-500">
-                      Aucun match terminé dans ce groupe.
-                    </p>
-                  ) : (
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b text-left text-gray-500">
-                          <th className="py-1">Équipe</th>
-                          <th>J</th>
-                          <th>G</th>
-                          <th>N</th>
-                          <th>P</th>
-                          <th>BP</th>
-                          <th>BC</th>
-                          <th>Diff</th>
-                          <th>Pts</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {standings.map((row) => (
-                          <tr
-                            key={row.team}
-                            className="border-b last:border-b-0"
-                          >
-                            <td className="py-1 font-medium">{row.team}</td>
-                            <td>{row.played}</td>
-                            <td>{row.won}</td>
-                            <td>{row.drawn}</td>
-                            <td>{row.lost}</td>
-                            <td>{row.goalsFor}</td>
-                            <td>{row.goalsAgainst}</td>
-                            <td>{row.goalDifference}</td>
-                            <td className="font-bold">{row.points}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
+                <button
+                  onClick={() => saveGroup(phaseMatches, phase)}
+                  disabled={savingGroup === phase}
+                  className="rounded bg-black px-3 py-1 text-sm text-white disabled:opacity-50"
+                >
+                  {savingGroup === phase ? "Saving..." : "SAVE"}
+                </button>
               </div>
 
-              <button
-                onClick={() => saveGroup(phaseMatches, phase)}
-                disabled={savingGroup === phase}
-                className="rounded bg-black px-3 py-1 text-sm text-white disabled:opacity-50"
-              >
-                {savingGroup === phase ? "Saving..." : "SAVE"}
-              </button>
-            </div>
+              <table className="w-full table-fixed text-xs">
+                <thead>
+                  <tr className="border-b text-left text-gray-500">
+                    <th className="w-[13%] py-2 pr-1">Équipe A</th>
+                    <th className="w-[44px] px-1 py-2 text-center">A</th>
+                    <th className="w-[44px] px-1 py-2 text-center">B</th>
+                    <th className="w-[13%] px-1 py-2">Équipe B</th>
+                    <th className="w-[62px] px-1 py-2">Date</th>
+                    <th className="w-[60px] px-1 py-2">H. Paris</th>
+                    <th className="w-[80px] px-1 py-2">Ville</th>
+                    <th className="w-[75px] px-1 py-2">Statut</th>
+                    <th className="w-[55px] px-1 py-2 text-center">Mes pts</th>
+                    <th className="w-[65px] px-1 py-2 text-center">Moy. pts</th>
 
-            <table className="w-full table-fixed text-xs">
-              <thead>
-                <tr className="border-b text-left text-gray-500">
-                  <th className="w-[13%] py-2 pr-1">Équipe A</th>
-                  <th className="w-[44px] px-1 py-2 text-center">A</th>
-                  <th className="w-[44px] px-1 py-2 text-center">B</th>
-                  <th className="w-[13%] px-1 py-2">Équipe B</th>
-                  <th className="w-[62px] px-1 py-2">Date</th>
-                  <th className="w-[60px] px-1 py-2">H. Paris</th>
-                  <th className="w-[80px] px-1 py-2">Ville</th>
-                  <th className="w-[75px] px-1 py-2">Statut</th>
-                  <th className="w-[55px] px-1 py-2 text-center">Mes pts</th>
-                  <th className="w-[65px] px-1 py-2 text-center">Moy. pts</th>
-
-                  {isAdmin && (
-                    <>
-                      <th className="w-[55px] px-1 py-2 text-center">
-                        A réel
-                      </th>
-                      <th className="w-[55px] px-1 py-2 text-center">
-                        B réel
-                      </th>
-                      <th className="w-[130px] py-2 pl-1"></th>
-                    </>
-                  )}
-                </tr>
-              </thead>
+                    {isAdmin && (
+                      <>
+                        <th className="w-[55px] px-1 py-2 text-center">A réel</th>
+                        <th className="w-[55px] px-1 py-2 text-center">B réel</th>
+                        <th className="w-[130px] py-2 pl-1"></th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
 
               <tbody>
-                {phaseMatches.map((match) => {
+                {phaseMatches.map((match, matchIndex) => {
                   const kickoffDate = new Date(match.kickoff_at);
                   const hasStarted = kickoffDate.getTime() <= appNowTime;
                   const canPredict = !hasStarted;
@@ -367,7 +394,7 @@ export default function PredictionForm({
                   return (
                     <tr key={match.id} className="border-b last:border-b-0">
                       <td className="py-2 pr-1 font-medium truncate">
-                        {match.team_a}
+                        {getDisplayTeam(match, "a", matchIndex, selectedTab)}
                       </td>
 
                       <td className="px-1 py-2">
@@ -397,7 +424,7 @@ export default function PredictionForm({
                       </td>
 
                       <td className="px-1 py-2 font-medium truncate">
-                        {match.team_b}
+                        {getDisplayTeam(match, "b", matchIndex, selectedTab)}
                       </td>
 
                       <td className="px-1 py-2 whitespace-nowrap text-gray-600">

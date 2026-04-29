@@ -3,7 +3,6 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import PredictionForm from "./prediction-form";
 import Leaderboard from "./leaderboard";
-import PhaseLeaderboard from "./phase-leaderboard";
 
 type MatchStats = {
   myPoints: number | null;
@@ -133,7 +132,93 @@ function buildGroupStandings(matches: Match[]) {
   return standings;
 }
 
-export default async function DashboardPage() {
+function isGroupPhase(phase: string) {
+  return phase.toLowerCase().includes("group");
+}
+
+type NewMatchPayload = Omit<Match, "id">;
+
+function getFutureKickoffDate(daysAfter: number) {
+  const date = new Date();
+  date.setHours(20, 0, 0, 0);
+  date.setDate(date.getDate() + daysAfter);
+  return date.toISOString();
+}
+
+function buildKnockoutMatches(
+  groupStandings: Record<string, GroupStandingRow[]>
+): NewMatchPayload[] {
+  const groupNames = Object.keys(groupStandings).sort();
+  const qualifiedTeams = groupNames.flatMap((groupName) =>
+    groupStandings[groupName].slice(0, 2).map((row) => row.team)
+  );
+
+  if (qualifiedTeams.length < 2) {
+    return [];
+  }
+
+  const winners = qualifiedTeams.filter((_, index) => index % 2 === 0);
+  const runners = qualifiedTeams.filter((_, index) => index % 2 === 1);
+
+  const round32Matches = winners.slice(0, runners.length).map((winner, index) => ({
+    phase: "32e de finale",
+    team_a: winner,
+    team_b: runners[index],
+    kickoff_at: getFutureKickoffDate(index + 1),
+    venue: null,
+    score_a: null,
+    score_b: null,
+    is_finished: false,
+  }));
+
+  const allMatches: NewMatchPayload[] = [...round32Matches];
+  let previousRoundMatches: NewMatchPayload[] = round32Matches;
+  let dateOffset = round32Matches.length + 1;
+
+  const nextPhases = [
+    { phase: "16e de finale", label: "32e de finale" },
+    { phase: "Quarts de finale", label: "16e de finale" },
+    { phase: "Demi-finales", label: "Quarts de finale" },
+    { phase: "Finale", label: "Demi-finales" },
+  ];
+
+  for (const { phase, label } of nextPhases) {
+    const roundMatches: NewMatchPayload[] = [];
+
+    for (let i = 0; i < previousRoundMatches.length; i += 2) {
+      roundMatches.push({
+        phase,
+        team_a: `Vainqueur ${label} ${i + 1}`,
+        team_b: `Vainqueur ${label} ${i + 2}`,
+        kickoff_at: getFutureKickoffDate(dateOffset),
+        venue: null,
+        score_a: null,
+        score_b: null,
+        is_finished: false,
+      });
+      dateOffset += 1;
+    }
+
+    allMatches.push(...roundMatches);
+    previousRoundMatches = roundMatches;
+  }
+
+  return allMatches;
+}
+
+type DashboardSearchParams = {
+  tab?: string | string[];
+};
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<DashboardSearchParams>;
+}) {
+  const resolvedSearchParams = await searchParams;
+  const tab = Array.isArray(resolvedSearchParams.tab)
+    ? resolvedSearchParams.tab[0]
+    : resolvedSearchParams.tab;
   const supabase = await createClient();
 
   const {
@@ -256,29 +341,71 @@ export default async function DashboardPage() {
     revalidatePath("/dashboard");
   }
 
+  async function createKnockoutMatches() {
+    "use server";
+
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) redirect("/login");
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.is_admin) {
+      throw new Error("Accès admin refusé");
+    }
+
+    const existingKnockoutMatches = (matches ?? []).filter(
+      (match) => !isGroupPhase(match.phase)
+    );
+
+    if (existingKnockoutMatches.length > 0) {
+      revalidatePath("/dashboard");
+      return;
+    }
+
+    const knockoutMatches = buildKnockoutMatches(groupStandings);
+
+    if (knockoutMatches.length === 0) {
+      revalidatePath("/dashboard");
+      return;
+    }
+
+    const { error } = await supabase.from("matches").insert(knockoutMatches);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    revalidatePath("/dashboard");
+  }
+
   return (
     <main className="p-6 max-w-[1800px] mx-auto space-y-6">
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-6">
-        <section>
+        <section className="space-y-4">
           <PredictionForm
             matches={matches ?? []}
             existingPredictions={myPredictions}
             userId={user.id}
-            userEmail={user.email ?? ""}
             matchStats={matchStats}
             isAdmin={isAdmin}
             updateMatchResult={updateMatchResult}
-            groupStandings={groupStandings}
+            createKnockoutMatches={createKnockoutMatches}
+            initialTab={tab === "tours" ? "tours" : "groupes"}
           />
         </section>
 
         <section>
           <h2 className="text-2xl font-bold mb-4 text-red-600">Classement live</h2>
           <Leaderboard />
-
-          <div className="mt-6">
-            <PhaseLeaderboard />
-          </div>
         </section>
       </div>
     </main>

@@ -1,7 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase/client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type MatchRow = {
@@ -28,7 +28,7 @@ export default function MatchesList() {
   const [loading, setLoading] = useState(true);
   const [debugError, setDebugError] = useState<string | null>(null);
 
-  async function loadMatches() {
+  const loadMatches = useCallback(async function loadMatches() {
     try {
       const { data, error, status } = await supabase
         .from("matches")
@@ -62,22 +62,22 @@ export default function MatchesList() {
       setDebugError(message);
       setLoading(false);
     }
-  }
+  }, []);
 
-useEffect(() => {
-  async function init() {
-    const { data } = await supabase.auth.getUser();
+  useEffect(() => {
+    async function init() {
+      const { data } = await supabase.auth.getUser();
 
-    if (!data.user) {
-      router.push("/login");
-      return;
+      if (!data.user) {
+        router.push("/login");
+        return;
+      }
+
+      loadMatches();
     }
 
-    loadMatches();
-  }
-
-  init();
-}, []);
+    init();
+  }, [router, loadMatches]);
 
   return (
     <section className="rounded-2xl border p-6">

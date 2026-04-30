@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import Leaderboard from "@/app/dashboard/leaderboard";
 import KnockoutBracketPrediction from "./KnockoutBracketPrediction";
 
 type Round32Teams = [string, string][];
@@ -194,11 +195,19 @@ export default async function KnockoutPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-7xl">
-        <KnockoutBracketPrediction
-          userName={userName}
-          round32Teams={round32Teams}
-        />
+      <div className="mx-auto grid max-w-[1800px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <section>
+          <KnockoutBracketPrediction
+            userName={userName}
+            round32Teams={round32Teams}
+          />
+        </section>
+
+        <section>
+          <div className="xl:sticky xl:top-24">
+            <Leaderboard />
+          </div>
+        </section>
       </div>
     </main>
   );

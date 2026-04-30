@@ -228,18 +228,20 @@ export default async function DashboardPage({
 
   if (userError || !user) redirect("/login");
 
-  const nickname = user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`;
-
-  await supabase.from("profiles").upsert({
-    id: user.id,
-    nickname,
-  });
-
   const { data: profile } = await supabase
     .from("profiles")
     .select("is_admin")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
+
+  if (!profile) {
+    const nickname = user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`;
+
+    await supabase.from("profiles").insert({
+      id: user.id,
+      nickname,
+    });
+  }
 
   const isAdmin = profile?.is_admin === true;
 
@@ -403,9 +405,10 @@ export default async function DashboardPage({
           />
         </section>
 
-        <section>
-          <h2 className="text-2xl font-bold mb-4 text-red-600">Classement live</h2>
-          <Leaderboard />
+        <section className="xl:pt-[7.5rem]">
+          <div className="xl:sticky xl:top-24">
+            <Leaderboard />
+          </div>
         </section>
       </div>
     </main>

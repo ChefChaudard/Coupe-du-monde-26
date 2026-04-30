@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import GroupStandingsTooltip from "./group-standings-tooltip";
 
 type Match = {
   id: number;
@@ -13,6 +14,18 @@ type Match = {
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
+};
+
+type GroupStandingRow = {
+  team: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  points: number;
 };
 
 type Prediction = {
@@ -63,6 +76,90 @@ type TabKey = "groupes" | "tours";
 
 function isGroupPhase(phase: string) {
   return phase.toLowerCase().includes("group");
+}
+
+function buildLiveGroupStandings(matches: Match[], appNowTime: number) {
+  const standings: Record<string, GroupStandingRow[]> = {};
+
+  const getOrCreateTeam = (groupName: string, team: string) => {
+    if (!standings[groupName]) standings[groupName] = [];
+
+    let row = standings[groupName].find((item) => item.team === team);
+
+    if (!row) {
+      row = {
+        team,
+        played: 0,
+        won: 0,
+        drawn: 0,
+        lost: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        goalDifference: 0,
+        points: 0,
+      };
+
+      standings[groupName].push(row);
+    }
+
+    return row;
+  };
+
+  for (const match of matches) {
+    const groupName = match.phase;
+    if (!isGroupPhase(groupName)) continue;
+
+    const teamA = getOrCreateTeam(groupName, match.team_a);
+    const teamB = getOrCreateTeam(groupName, match.team_b);
+    const kickoffTime = new Date(match.kickoff_at).getTime();
+
+    if (
+      kickoffTime > appNowTime ||
+      !match.is_finished ||
+      match.score_a === null ||
+      match.score_b === null
+    ) {
+      continue;
+    }
+
+    teamA.played += 1;
+    teamB.played += 1;
+    teamA.goalsFor += match.score_a;
+    teamA.goalsAgainst += match.score_b;
+    teamB.goalsFor += match.score_b;
+    teamB.goalsAgainst += match.score_a;
+
+    if (match.score_a > match.score_b) {
+      teamA.won += 1;
+      teamB.lost += 1;
+      teamA.points += 3;
+    } else if (match.score_a < match.score_b) {
+      teamB.won += 1;
+      teamA.lost += 1;
+      teamB.points += 3;
+    } else {
+      teamA.drawn += 1;
+      teamB.drawn += 1;
+      teamA.points += 1;
+      teamB.points += 1;
+    }
+
+    teamA.goalDifference = teamA.goalsFor - teamA.goalsAgainst;
+    teamB.goalDifference = teamB.goalsFor - teamB.goalsAgainst;
+  }
+
+  for (const groupName of Object.keys(standings)) {
+    standings[groupName].sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.goalDifference !== a.goalDifference) {
+        return b.goalDifference - a.goalDifference;
+      }
+      if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
+      return a.team.localeCompare(b.team);
+    });
+  }
+
+  return standings;
 }
 
 const knockoutPhaseOrder = [
@@ -241,6 +338,10 @@ export default function PredictionForm({
   }, []);
 
   const appNowTime = simulatedNow ? new Date(simulatedNow).getTime() : 0;
+  const liveGroupStandings = useMemo(() => {
+    if (!appNowTime) return {};
+    return buildLiveGroupStandings(matches, appNowTime);
+  }, [matches, appNowTime]);
 
   function updateValue(matchId: number, side: "a" | "b", value: string) {
     setValues((prev) => ({
@@ -340,7 +441,16 @@ export default function PredictionForm({
           return (
             <div key={phase} className="rounded-xl border p-3">
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-lg font-bold capitalize">{phase}</h3>
+                <div className="text-lg font-bold">
+                  {selectedTab === "groupes" ? (
+                    <GroupStandingsTooltip
+                      groupName={phase}
+                      standings={liveGroupStandings[phase] ?? []}
+                    />
+                  ) : (
+                    <span className="capitalize">{phase}</span>
+                  )}
+                </div>
 
                 <button
                   onClick={() => saveGroup(phaseMatches, phase)}

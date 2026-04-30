@@ -97,7 +97,7 @@ useEffect(() => {
       {message ? (
         <p>{message}</p>
       ) : (
-        <div className="w-full rounded-3xl border border-red-500 bg-red-50">
+        <div className="w-full overflow-hidden rounded-3xl border border-red-500 bg-red-50">
           <div className="border-b border-red-500 bg-red-100 px-4 py-3 text-sm font-semibold text-slate-800">
             Classement live
           </div>

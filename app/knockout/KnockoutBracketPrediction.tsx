@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { round32Placeholders, type Round32Teams } from "./bracket-data";
 
 type BracketMatch = {
   id: number;
@@ -13,27 +14,6 @@ type BracketMatch = {
 
 type SelectedWinners = Record<number, string>;
 
-type Round32Teams = [string, string][];
-
-export const round32Placeholders: Round32Teams = [
-  ["1er du groupe A", "3eme du groupe F"],
-  ["1er du groupe C", "3eme du groupe E"],
-  ["1er du groupe B", "3eme du groupe D"],
-  ["1er du groupe D", "3eme du groupe C"],
-  ["1er du groupe E", "3eme du groupe B"],
-  ["1er du groupe F", "3eme du groupe A"],
-  ["1er du groupe G", "2eme du groupe H"],
-  ["1er du groupe H", "2eme du groupe G"],
-  ["2eme du groupe A", "2eme du groupe F"],
-  ["2eme du groupe C", "2eme du groupe E"],
-  ["2eme du groupe B", "2eme du groupe D"],
-  ["2eme du groupe D", "2eme du groupe C"],
-  ["2eme du groupe E", "2eme du groupe B"],
-  ["2eme du groupe F", "2eme du groupe A"],
-  ["3eme du groupe G", "3eme du groupe H"],
-  ["3eme du groupe H", "3eme du groupe G"],
-];
-
 function buildBracket(round32Teams?: Round32Teams): BracketMatch[] {
   const matches: BracketMatch[] = [];
 
@@ -45,15 +25,15 @@ function buildBracket(round32Teams?: Round32Teams): BracketMatch[] {
 
     matches.push({
       id: i + 1,
-      phase: "32e de finale",
+      phase: "16e de finale",
       teamA,
       teamB,
     });
   }
 
   const rounds = [
-    { phase: "16e de finale", count: 8, label: "32e de finale" },
-    { phase: "Quarts de finale", count: 4, label: "16e de finale" },
+    { phase: "8e de finale", count: 8, label: "16e de finale" },
+    { phase: "Quarts de finale", count: 4, label: "8e de finale" },
     { phase: "Demi-finales", count: 2, label: "Quarts de finale" },
     { phase: "Finale", count: 1, label: "Demi-finales" },
   ];
@@ -88,11 +68,14 @@ function dedupe(values: string[]) {
   return Array.from(new Set(values));
 }
 
-function getPossibleTeams(
+function getSelectedOrPossibleTeams(
   match: BracketMatch,
   matchesById: Record<number, BracketMatch>,
   selectedWinners: SelectedWinners
 ): string[] {
+  const selected = selectedWinners[match.id];
+  if (selected) return [selected];
+
   if (!match.leftMatchId || !match.rightMatchId) {
     return [match.teamA, match.teamB];
   }
@@ -110,16 +93,11 @@ function getPossibleTeams(
   return dedupe([...leftTeams, ...rightTeams]);
 }
 
-function getSelectedOrPossibleTeams(
+function getPossibleTeams(
   match: BracketMatch,
   matchesById: Record<number, BracketMatch>,
   selectedWinners: SelectedWinners
 ): string[] {
-  const selected = selectedWinners[match.id];
-  if (selected) {
-    return [selected];
-  }
-
   if (!match.leftMatchId || !match.rightMatchId) {
     return [match.teamA, match.teamB];
   }
@@ -143,10 +121,12 @@ function getChildMatchIds(matches: BracketMatch[]) {
       acc[match.leftMatchId] = acc[match.leftMatchId] || [];
       acc[match.leftMatchId].push(match.id);
     }
+
     if (match.rightMatchId) {
       acc[match.rightMatchId] = acc[match.rightMatchId] || [];
       acc[match.rightMatchId].push(match.id);
     }
+
     return acc;
   }, {});
 }
@@ -161,6 +141,7 @@ function collectDescendants(
   while (stack.length > 0) {
     const current = stack.pop();
     if (!current || visited.has(current)) continue;
+
     visited.add(current);
     stack.push(...(childMap[current] ?? []));
   }
@@ -171,9 +152,15 @@ function collectDescendants(
 export default function KnockoutBracketPrediction({
   userName,
   round32Teams,
+  storageKey = "knockoutBracketPredictions",
+  title = "Pronostics Tours Eliminatoires",
+  description = "Les equipes du tableau des 32 sont deduites des resultats de groupes. Pour les tours suivants, selectionnez le vainqueur de chaque match en respectant la logique des tours precedents.",
 }: {
   userName: string;
   round32Teams?: Round32Teams;
+  storageKey?: string;
+  title?: string;
+  description?: string;
 }) {
   const bracket = useMemo(() => buildBracket(round32Teams), [round32Teams]);
   const matchesById = useMemo(
@@ -185,7 +172,7 @@ export default function KnockoutBracketPrediction({
   const [selectedWinners, setSelectedWinners] = useState<SelectedWinners>(() => {
     if (typeof window === "undefined") return {};
 
-    const saved = window.localStorage.getItem("knockoutBracketPredictions");
+    const saved = window.localStorage.getItem(storageKey);
     if (!saved) return {};
 
     try {
@@ -198,18 +185,20 @@ export default function KnockoutBracketPrediction({
 
   useEffect(() => {
     window.localStorage.setItem(
-      "knockoutBracketPredictions",
+      storageKey,
       JSON.stringify(selectedWinners)
     );
-  }, [selectedWinners]);
+  }, [selectedWinners, storageKey]);
 
   function handleWinnerChange(matchId: number, value: string) {
     setSelectedWinners((prev) => {
       const next = { ...prev, [matchId]: value };
       const descendants = collectDescendants(matchId, childMap);
+
       for (const descendantId of descendants) {
         delete next[descendantId];
       }
+
       return next;
     });
     setMessage(null);
@@ -217,7 +206,7 @@ export default function KnockoutBracketPrediction({
 
   function resetBracket() {
     setSelectedWinners({});
-    setMessage("Tableau réinitialisé.");
+    setMessage("Tableau reinitialise.");
   }
 
   const phaseGroups = useMemo(() => {
@@ -229,12 +218,82 @@ export default function KnockoutBracketPrediction({
   }, [bracket]);
 
   const champion = selectedWinners[31] ?? null;
+  const firstRoundPhase = "16e de finale";
+  const nextPhaseOrder = [
+    "8e de finale",
+    "Quarts de finale",
+    "Demi-finales",
+    "Finale",
+  ];
+
+  function renderPhaseCard(phase: string, matches: BracketMatch[]) {
+    return (
+      <div
+        key={phase}
+        className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+      >
+        <h2 className="mb-4 text-2xl font-bold">{phase}</h2>
+        <div className="space-y-4">
+          {matches.map((match) => {
+            const possibleTeams = getPossibleTeams(
+              match,
+              matchesById,
+              selectedWinners
+            );
+            const selected = selectedWinners[match.id] ?? "";
+
+            const leftLabel = match.leftMatchId
+              ? getSelectedOrPossibleTeams(
+                  matchesById[match.leftMatchId],
+                  matchesById,
+                  selectedWinners
+                ).join(" / ")
+              : match.teamA;
+            const rightLabel = match.rightMatchId
+              ? getSelectedOrPossibleTeams(
+                  matchesById[match.rightMatchId],
+                  matchesById,
+                  selectedWinners
+                ).join(" / ")
+              : match.teamB;
+
+            return (
+              <div
+                key={match.id}
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+              >
+                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-slate-500">Match #{match.id}</p>
+                  <p className="min-w-0 font-semibold text-slate-900 sm:text-right">
+                    {leftLabel} vs {rightLabel}
+                  </p>
+                </div>
+
+                <select
+                  value={selected}
+                  onChange={(e) => handleWinnerChange(match.id, e.target.value)}
+                  className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                >
+                  <option value="">Selectionner</option>
+                  {possibleTeams.map((team) => (
+                    <option key={team} value={team}>
+                      {team}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm text-gray-500">Utilisateur connecté :</p>
+          <p className="text-sm text-gray-500">Utilisateur connecte :</p>
           <p className="text-lg font-semibold text-slate-900">{userName}</p>
         </div>
 
@@ -243,71 +302,36 @@ export default function KnockoutBracketPrediction({
           onClick={resetBracket}
           className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
         >
-          Réinitialiser le tableau
+          Reinitialiser le tableau
         </button>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-6">
-        <h1 className="text-3xl font-bold mb-3">Pronostics Tours Eliminatoires</h1>
+        <h1 className="mb-3 text-3xl font-bold">{title}</h1>
         <p className="text-sm leading-6 text-slate-600">
-          Les équipes du tableau des 32 sont déduites des résultats de groupes.
-          Pour les tours suivants, sélectionnez le vainqueur de chaque match en
-          respectant la logique des tours précédents.
+          {description}
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {Object.entries(phaseGroups).map(([phase, matches]) => (
-          <div key={phase} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-2xl font-bold">{phase}</h2>
-            <div className="space-y-4">
-              {matches.map((match) => {
-                const possibleTeams = getPossibleTeams(match, matchesById, selectedWinners);
-                const selected = selectedWinners[match.id] ?? "";
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        {phaseGroups[firstRoundPhase]
+          ? renderPhaseCard(firstRoundPhase, phaseGroups[firstRoundPhase])
+          : null}
 
-                const leftLabel = match.leftMatchId
-                  ? getSelectedOrPossibleTeams(matchesById[match.leftMatchId], matchesById, selectedWinners).join(" / ")
-                  : match.teamA;
-                const rightLabel = match.rightMatchId
-                  ? getSelectedOrPossibleTeams(matchesById[match.rightMatchId], matchesById, selectedWinners).join(" / ")
-                  : match.teamB;
-
-                return (
-                  <div key={match.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm text-slate-500">Match #{match.id}</p>
-                        <p className="font-semibold">{leftLabel} vs {rightLabel}</p>
-                      </div>
-                    </div>
-
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Choisir le vainqueur
-                    </label>
-                    <select
-                      value={selected}
-                      onChange={(e) => handleWinnerChange(match.id, e.target.value)}
-                      className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-slate-900"
-                    >
-                      <option value="">Sélectionner</option>
-                      {possibleTeams.map((team) => (
-                        <option key={team} value={team}>
-                          {team}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+        <div className="space-y-6">
+          {nextPhaseOrder.map((phase) =>
+            phaseGroups[phase] ? renderPhaseCard(phase, phaseGroups[phase]) : null
+          )}
+        </div>
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-slate-100 p-6">
-        <h2 className="text-2xl font-bold">Résumé</h2>
+        <h2 className="text-2xl font-bold">Resume</h2>
         <p className="mt-2 text-slate-600">
-          Champion pronostiqué : <span className="font-semibold text-slate-900">{champion ?? "Aucun choix"}</span>
+          Champion pronostique :{" "}
+          <span className="font-semibold text-slate-900">
+            {champion ?? "Aucun choix"}
+          </span>
         </p>
         {message && <p className="mt-3 text-sm text-green-700">{message}</p>}
       </div>

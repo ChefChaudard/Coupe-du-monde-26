@@ -14,10 +14,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const appTitle = process.env.VERCEL_ENV ? "Pronos WC26" : "Pronos WC26 (Local)";
+
 export const metadata: Metadata = {
   title: {
-    default: "Pronos WC26",
-    template: "%s | Pronos WC26",
+    default: appTitle,
+    template: `%s | ${appTitle}`,
   },
   description: "Site de pronostics Coupe du Monde 2026",
 };

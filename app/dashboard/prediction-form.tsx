@@ -2,6 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import {
+  formatDashboardDate,
+  formatMatchDate,
+  formatMatchTime,
+} from "@/app/lib/time-zone";
+import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
 import GroupStandingsTooltip from "./group-standings-tooltip";
 
 type Match = {
@@ -44,32 +50,6 @@ type FormValues = Record<number, { a: string; b: string }>;
 function getCityFromVenue(venue?: string | null) {
   if (!venue) return "-";
   return venue.split("-")[0].trim();
-}
-
-function formatDashboardDate(value: string) {
-  const date = new Date(value);
-  const day = date.getDate().toString().padStart(2, "0");
-  const month = date.toLocaleDateString("fr-FR", { month: "long" });
-  const hours = date.getHours().toString().padStart(2, "0");
-  const minutes = date.getMinutes().toString().padStart(2, "0");
-
-  return `${day} ${month} - ${hours}h${minutes}`;
-}
-
-function formatParisDate(date: Date) {
-  return new Intl.DateTimeFormat("fr-FR", {
-    timeZone: "Europe/Paris",
-    day: "2-digit",
-    month: "2-digit",
-  }).format(date);
-}
-
-function formatParisTime(date: Date) {
-  return new Intl.DateTimeFormat("fr-FR", {
-    timeZone: "Europe/Paris",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
 }
 
 type TabKey = "groupes" | "tours";
@@ -318,8 +298,14 @@ export default function PredictionForm({
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
+  const timeZone = useUserTimeZone();
 
   useEffect(() => {
+    function handleSimulatedDateUpdated(event: Event) {
+      const nextValue = (event as CustomEvent<string>).detail;
+      if (nextValue) setSimulatedNow(nextValue);
+    }
+
     async function loadSimulatedDate() {
       const { data } = await supabase
         .from("app_settings")
@@ -334,7 +320,18 @@ export default function PredictionForm({
       }
     }
 
+    window.addEventListener(
+      "simulated-date-updated",
+      handleSimulatedDateUpdated
+    );
     void loadSimulatedDate();
+
+    return () => {
+      window.removeEventListener(
+        "simulated-date-updated",
+        handleSimulatedDateUpdated
+      );
+    };
   }, []);
 
   const appNowTime = simulatedNow ? new Date(simulatedNow).getTime() : 0;
@@ -408,7 +405,7 @@ export default function PredictionForm({
   return (
     <section className="space-y-6">
       <h1 className="text-4xl font-bold">
-        Pronostics Groupes au {formatDashboardDate(simulatedNow)}
+        Pronostics Groupes au {formatDashboardDate(simulatedNow, timeZone)}
       </h1>
 
       <h2 className="text-2xl font-bold">Mes pronostics</h2>
@@ -469,7 +466,7 @@ export default function PredictionForm({
                     <th className="w-[44px] px-1 py-2 text-center">B</th>
                     <th className="w-[13%] px-1 py-2">Équipe B</th>
                     <th className="w-[62px] px-1 py-2">Date</th>
-                    <th className="w-[60px] px-1 py-2">H. Paris</th>
+                    <th className="w-[60px] px-1 py-2">Heure</th>
                     <th className="w-[80px] px-1 py-2">Ville</th>
                     <th className="w-[75px] px-1 py-2">Statut</th>
                     <th className="w-[55px] px-1 py-2 text-center">Mes pts</th>
@@ -538,11 +535,11 @@ export default function PredictionForm({
                       </td>
 
                       <td className="px-1 py-2 whitespace-nowrap text-gray-600">
-                        {formatParisDate(kickoffDate)}
+                        {formatMatchDate(kickoffDate, timeZone)}
                       </td>
 
                       <td className="px-1 py-2 whitespace-nowrap text-gray-600">
-                        {formatParisTime(kickoffDate)}
+                        {formatMatchTime(kickoffDate, timeZone)}
                       </td>
 
                       <td className="px-1 py-2 truncate text-gray-600">

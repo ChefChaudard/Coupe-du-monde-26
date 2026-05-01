@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase/client";
+import {
+  formatMatchDate,
+  formatMatchTime,
+} from "@/app/lib/time-zone";
+import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
 import { round32Placeholders, type Round32Teams } from "./bracket-data";
 
 type BracketMatch = {
@@ -13,6 +19,18 @@ type BracketMatch = {
 };
 
 type SelectedWinners = Record<number, string>;
+
+export type BracketMatchInfo = {
+  teamA: string;
+  teamB: string;
+  kickoffAt: string;
+  venue?: string | null;
+  scoreA: number | null;
+  scoreB: number | null;
+  isFinished: boolean | null;
+};
+
+type MatchStatus = "Ouvert" | "Bloque" | "Termine";
 
 function buildBracket(round32Teams?: Round32Teams): BracketMatch[] {
   const matches: BracketMatch[] = [];
@@ -149,15 +167,74 @@ function collectDescendants(
   return Array.from(visited);
 }
 
+function getCityFromVenue(venue?: string | null) {
+  if (!venue) return "-";
+  return venue.split("-")[0].trim();
+}
+
+function getActualWinner(matchInfo?: BracketMatchInfo) {
+  if (
+    !matchInfo?.isFinished ||
+    matchInfo.scoreA === null ||
+    matchInfo.scoreB === null
+  ) {
+    return null;
+  }
+
+  if (matchInfo.scoreA > matchInfo.scoreB) return "A";
+  if (matchInfo.scoreB > matchInfo.scoreA) return "B";
+  return null;
+}
+
+function getPointsForWinnerPrediction(
+  selectedWinner: string,
+  matchInfo?: BracketMatchInfo
+) {
+  const actualWinnerSide = getActualWinner(matchInfo);
+  if (!actualWinnerSide || !selectedWinner || !matchInfo) return null;
+
+  const actualWinner =
+    actualWinnerSide === "A" ? matchInfo.teamA : matchInfo.teamB;
+
+  return selectedWinner === actualWinner ? 1 : 0;
+}
+
+function getMatchStatus(
+  matchInfo: BracketMatchInfo | undefined,
+  appNowTime: number
+): MatchStatus {
+  if (
+    matchInfo?.isFinished &&
+    matchInfo.scoreA !== null &&
+    matchInfo.scoreB !== null
+  ) {
+    return "Termine";
+  }
+
+  if (matchInfo && new Date(matchInfo.kickoffAt).getTime() <= appNowTime) {
+    return "Bloque";
+  }
+
+  return "Ouvert";
+}
+
+function getStatusClass(status: MatchStatus) {
+  if (status === "Termine") return "text-blue-700";
+  if (status === "Ouvert") return "text-green-700";
+  return "text-red-700";
+}
+
 export default function KnockoutBracketPrediction({
   userName,
   round32Teams,
+  matchInfoById = {},
   storageKey = "knockoutBracketPredictions",
   title = "Pronostics Tours Eliminatoires",
   description = "Les equipes du tableau des 32 sont deduites des resultats de groupes. Pour les tours suivants, selectionnez le vainqueur de chaque match en respectant la logique des tours precedents.",
 }: {
   userName: string;
   round32Teams?: Round32Teams;
+  matchInfoById?: Record<number, BracketMatchInfo>;
   storageKey?: string;
   title?: string;
   description?: string;
@@ -182,6 +259,38 @@ export default function KnockoutBracketPrediction({
     }
   });
   const [message, setMessage] = useState<string | null>(null);
+  const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
+  const timeZone = useUserTimeZone();
+
+  useEffect(() => {
+    function handleSimulatedDateUpdated(event: Event) {
+      const nextValue = (event as CustomEvent<string>).detail;
+      if (nextValue) setSimulatedNow(nextValue);
+    }
+
+    async function loadSimulatedDate() {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "simulated_date")
+        .single();
+
+      setSimulatedNow(data?.value ?? new Date().toISOString());
+    }
+
+    window.addEventListener(
+      "simulated-date-updated",
+      handleSimulatedDateUpdated
+    );
+    void loadSimulatedDate();
+
+    return () => {
+      window.removeEventListener(
+        "simulated-date-updated",
+        handleSimulatedDateUpdated
+      );
+    };
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -241,6 +350,19 @@ export default function KnockoutBracketPrediction({
               selectedWinners
             );
             const selected = selectedWinners[match.id] ?? "";
+            const matchInfo = matchInfoById[match.id];
+            const appNowTime = simulatedNow
+              ? new Date(simulatedNow).getTime()
+              : Date.now();
+            const status = getMatchStatus(matchInfo, appNowTime);
+            const points = getPointsForWinnerPrediction(
+              selected,
+              matchInfo
+            );
+            const kickoffDate = matchInfo
+              ? new Date(matchInfo.kickoffAt)
+              : null;
+            const canPredict = status === "Ouvert";
 
             const leftLabel = match.leftMatchId
               ? getSelectedOrPossibleTeams(
@@ -263,7 +385,26 @@ export default function KnockoutBracketPrediction({
                 className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
               >
                 <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-slate-500">Match #{match.id}</p>
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
+                    <span>Match #{match.id}</span>
+                    <span>Ville: {getCityFromVenue(matchInfo?.venue)}</span>
+                    <span>
+                      Date:{" "}
+                      {kickoffDate
+                        ? formatMatchDate(kickoffDate, timeZone)
+                        : "-"}
+                    </span>
+                    <span>
+                      Heure:{" "}
+                      {kickoffDate
+                        ? formatMatchTime(kickoffDate, timeZone)
+                        : "-"}
+                    </span>
+                    <span>Pts: {points ?? "-"}</span>
+                    <span className={getStatusClass(status)}>
+                      {status === "Termine" ? "Termine" : status}
+                    </span>
+                  </p>
                   <p className="min-w-0 font-semibold text-slate-900 sm:text-right">
                     {leftLabel} vs {rightLabel}
                   </p>
@@ -272,6 +413,7 @@ export default function KnockoutBracketPrediction({
                 <select
                   value={selected}
                   onChange={(e) => handleWinnerChange(match.id, e.target.value)}
+                  disabled={!canPredict}
                   className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-slate-900"
                 >
                   <option value="">Selectionner</option>

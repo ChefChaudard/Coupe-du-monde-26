@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import {
+  DEFAULT_TIME_ZONE,
+  formatTimeZoneLabel,
+  getSafeTimeZone,
+  getTimeZoneOptions,
+  USER_TIME_ZONE_UPDATED_EVENT,
+} from "@/app/lib/time-zone";
 
 const navItems = [
   { key: "home", label: "Page d'accueil", href: "/" },
@@ -16,36 +23,56 @@ const navItems = [
 type CurrentUserResponse = {
   user: {
     nickname?: string | null;
+    timeZone?: string | null;
   } | null;
 };
 
-async function fetchCurrentNickname() {
+async function fetchCurrentUser() {
   const response = await fetch("/api/me", { cache: "no-store" });
 
   if (!response.ok) return null;
 
   const payload = (await response.json()) as CurrentUserResponse;
-  return payload.user?.nickname ?? null;
+  return payload.user;
+}
+
+function formatDateTimeLocalValue(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 16);
 }
 
 export default function Topbar() {
   const [userName, setUserName] = useState<string | null>(null);
+  const [timeZone, setTimeZone] = useState(DEFAULT_TIME_ZONE);
+  const [timeZoneError, setTimeZoneError] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
+  const [simulatedDateError, setSimulatedDateError] = useState("");
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const timeZoneOptions = useMemo(() => getTimeZoneOptions(), []);
 
   useEffect(() => {
-    void fetchCurrentNickname().then(setUserName);
+    async function loadCurrentUser() {
+      const user = await fetchCurrentUser();
+      setUserName(user?.nickname ?? null);
+      setTimeZone(getSafeTimeZone(user?.timeZone));
+    }
+
+    void loadCurrentUser();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         if (!session?.user) {
           setUserName(null);
+          setTimeZone(DEFAULT_TIME_ZONE);
           return;
         }
 
-        void fetchCurrentNickname().then(setUserName);
+        void loadCurrentUser();
       }
     );
 
@@ -79,14 +106,61 @@ export default function Topbar() {
   }
 
   async function updateSimulatedDate(value: string) {
-    setSimulatedNow(value);
+    const nextDate = new Date(value);
+    if (Number.isNaN(nextDate.getTime())) return;
 
-    await supabase
+    const nextValue = nextDate.toISOString();
+    const previousValue = simulatedNow;
+    setSimulatedDateError("");
+    setSimulatedNow(nextValue);
+
+    const { data, error } = await supabase
       .from("app_settings")
-      .upsert(
-        { key: "simulated_date", value: new Date(value).toISOString() },
-        { onConflict: "key" }
+      .update({ value: nextValue, updated_at: new Date().toISOString() })
+      .eq("key", "simulated_date")
+      .select("key")
+      .maybeSingle();
+
+    if (error || !data) {
+      setSimulatedNow(previousValue);
+      setSimulatedDateError(
+        error?.message ?? "Date simulee introuvable dans les reglages."
       );
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("simulated-date-updated", { detail: nextValue })
+    );
+    router.refresh();
+  }
+
+  async function updateTimeZone(nextTimeZone: string) {
+    const previousTimeZone = timeZone;
+    setTimeZoneError("");
+    setTimeZone(nextTimeZone);
+
+    const response = await fetch("/api/me", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ timeZone: nextTimeZone }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      setTimeZone(previousTimeZone);
+      setTimeZoneError(payload.error ?? "Impossible de sauvegarder la timezone.");
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent(USER_TIME_ZONE_UPDATED_EVENT, { detail: nextTimeZone })
+    );
+    router.refresh();
   }
 
   const currentKey = useMemo(() => {
@@ -131,15 +205,44 @@ export default function Topbar() {
 
         <div className="flex flex-wrap items-center gap-3">
           {simulatedNow && (
-            <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700">
-              <span>Date simulée</span>
-              <input
-                type="datetime-local"
-                value={new Date(simulatedNow).toISOString().slice(0, 16)}
-                onChange={(event) => updateSimulatedDate(event.target.value)}
-                className="rounded border border-slate-300 bg-white px-2 py-1 text-sm"
-              />
-            </label>
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700">
+                <span>Date simulée</span>
+                <input
+                  type="datetime-local"
+                  value={formatDateTimeLocalValue(simulatedNow)}
+                  onChange={(event) => updateSimulatedDate(event.target.value)}
+                  className="rounded border border-slate-300 bg-white px-2 py-1 text-sm"
+                />
+              </label>
+              {simulatedDateError && (
+                <p className="px-3 text-xs text-red-600">
+                  {simulatedDateError}
+                </p>
+              )}
+            </div>
+          )}
+
+          {userName && (
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700">
+                <span>Fuseau</span>
+                <select
+                  value={timeZone}
+                  onChange={(event) => updateTimeZone(event.target.value)}
+                  className="max-w-[190px] rounded border border-slate-300 bg-white px-2 py-1 text-sm"
+                >
+                  {timeZoneOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {formatTimeZoneLabel(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {timeZoneError && (
+                <p className="px-3 text-xs text-red-600">{timeZoneError}</p>
+              )}
+            </div>
           )}
 
           {userName && (

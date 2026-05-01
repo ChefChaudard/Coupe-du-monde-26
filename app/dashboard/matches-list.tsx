@@ -3,6 +3,8 @@
 import { supabase } from "@/lib/supabase/client";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatMatchDateTime } from "@/app/lib/time-zone";
+import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
 
 type MatchRow = {
   id: number;
@@ -15,18 +17,12 @@ type MatchRow = {
   is_finished: boolean | null;
 };
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleString("fr-FR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
-}
-
 export default function MatchesList() {
   const router = useRouter();
   const [matches, setMatches] = useState<MatchRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [debugError, setDebugError] = useState<string | null>(null);
+  const timeZone = useUserTimeZone();
 
   const loadMatches = useCallback(async function loadMatches() {
     try {
@@ -100,7 +96,7 @@ export default function MatchesList() {
                   {match.phase}
                 </span>
                 <span className="text-sm text-gray-500">
-                  {formatDate(match.kickoff_at)}
+                  {formatMatchDateTime(match.kickoff_at, timeZone)}
                 </span>
               </div>
 

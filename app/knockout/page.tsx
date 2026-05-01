@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Leaderboard from "@/app/dashboard/leaderboard";
-import KnockoutBracketPrediction from "./KnockoutBracketPrediction";
+import KnockoutBracketPrediction, {
+  type BracketMatchInfo,
+} from "./KnockoutBracketPrediction";
 
 type Round32Teams = [string, string][];
 
@@ -10,6 +12,11 @@ type MatchRow = {
   phase: string;
   team_a: string;
   team_b: string;
+  kickoff_at?: string;
+  venue?: string | null;
+  score_a?: number | null;
+  score_b?: number | null;
+  is_finished?: boolean | null;
 };
 
 type PredictionRow = {
@@ -27,6 +34,21 @@ type GroupStatsRow = {
   ga: number;
   predictedMatches: number;
 };
+
+const realPhasePrefix = "Reel - ";
+const bracketPhaseStartIds: Record<string, number> = {
+  "16e de finale": 1,
+  "8e de finale": 17,
+  "Quarts de finale": 25,
+  "Demi-finales": 29,
+  Finale: 31,
+};
+
+function fromRealPhase(phase: string) {
+  return phase.startsWith(realPhasePrefix)
+    ? phase.slice(realPhasePrefix.length)
+    : phase;
+}
 
 function normalizeGroupName(phase: string) {
   const match = phase.match(/groupe\s*([A-H])/i) || phase.match(/group\s*([A-H])/i);
@@ -134,6 +156,52 @@ function resolveTeamPlaceholder(
   return groupTeams[parsed.position - 1];
 }
 
+function buildBracketMatchInfo(matches: MatchRow[]) {
+  const groupedRealMatches = matches.reduce<Record<string, MatchRow[]>>(
+    (acc, match) => {
+      if (!match.phase.startsWith(realPhasePrefix)) return acc;
+
+      const phase = fromRealPhase(match.phase);
+      if (!acc[phase]) acc[phase] = [];
+      acc[phase].push(match);
+      return acc;
+    },
+    {}
+  );
+
+  const matchInfoById: Record<number, BracketMatchInfo> = {};
+
+  for (const [phase, phaseMatches] of Object.entries(groupedRealMatches)) {
+    const startId = bracketPhaseStartIds[phase];
+    if (!startId) continue;
+
+    phaseMatches
+      .slice()
+      .sort((a, b) => {
+        const dateDiff =
+          new Date(a.kickoff_at ?? "").getTime() -
+          new Date(b.kickoff_at ?? "").getTime();
+        if (dateDiff !== 0) return dateDiff;
+        return a.id - b.id;
+      })
+      .forEach((match, index) => {
+        if (!match.kickoff_at) return;
+
+        matchInfoById[startId + index] = {
+          teamA: match.team_a,
+          teamB: match.team_b,
+          kickoffAt: match.kickoff_at,
+          venue: match.venue,
+          scoreA: match.score_a ?? null,
+          scoreB: match.score_b ?? null,
+          isFinished: match.is_finished ?? false,
+        };
+      });
+  }
+
+  return matchInfoById;
+}
+
 export default async function KnockoutPage() {
   const supabase = await createClient();
   const {
@@ -155,7 +223,7 @@ export default async function KnockoutPage() {
 
   const { data: matches } = await supabase
     .from("matches")
-    .select("id, phase, team_a, team_b");
+    .select("id, phase, team_a, team_b, kickoff_at, venue, score_a, score_b, is_finished");
 
   const { data: predictions } = await supabase
     .from("predictions")
@@ -192,6 +260,7 @@ export default async function KnockoutPage() {
       resolveTeamPlaceholder(placeholderB, groupRankings),
     ]
   );
+  const matchInfoById = buildBracketMatchInfo(matches ?? []);
 
   return (
     <main className="min-h-screen bg-slate-50 p-6">
@@ -200,6 +269,7 @@ export default async function KnockoutPage() {
           <KnockoutBracketPrediction
             userName={userName}
             round32Teams={round32Teams}
+            matchInfoById={matchInfoById}
           />
         </section>
 

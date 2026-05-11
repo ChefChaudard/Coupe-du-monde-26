@@ -189,14 +189,14 @@ export default function RealKnockoutScoreForm({
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5 text-slate-900">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-3">
-          <h1 className="text-4xl font-bold">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-950">
             Pronostics Réel 2nd Tour au{" "}
             {formatDashboardDate(simulatedNow, timeZone)}
           </h1>
-          <h2 className="text-2xl font-bold">Mes pronostics</h2>
+          <h2 className="text-lg font-semibold text-emerald-950">Mes pronostics</h2>
         </div>
 
         {isAdmin && (
@@ -204,7 +204,7 @@ export default function RealKnockoutScoreForm({
             <button
               type="submit"
               disabled={!firstRoundComplete}
-              className="rounded bg-black px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+              className="rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               Synchroniser les matchs réels
             </button>
@@ -213,7 +213,7 @@ export default function RealKnockoutScoreForm({
       </div>
 
       {!firstRoundComplete && (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-500">
+        <div className="rounded-lg border border-dashed border-emerald-200 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
           <p>Les pronostics du 2nd tour ouvriront quand le 1er tour sera terminé.</p>
           {firstRoundMissingScores > 0 && (
             <p className="mt-2 text-sm">
@@ -226,27 +226,28 @@ export default function RealKnockoutScoreForm({
       )}
 
       {firstRoundComplete && groupedMatches.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-500">
+        <div className="rounded-lg border border-dashed border-emerald-200 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
           Aucun match réel du 2nd tour n&apos;est disponible pour le moment.
         </div>
       ) : (
         groupedMatches.map(([phase, phaseMatches]) => (
-          <div key={phase} className="rounded-xl border p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <div className="text-lg font-bold capitalize">{phase}</div>
+          <div key={phase} className="overflow-visible rounded-lg border border-emerald-100 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.07)]">
+            <div className="flex items-center justify-between gap-4 rounded-t-lg border-b border-emerald-100 bg-emerald-50/80 px-4 py-3">
+              <div className="text-base font-bold capitalize text-emerald-950">{phase}</div>
 
               <button
                 onClick={() => saveGroup(phaseMatches, phase)}
                 disabled={savingGroup === phase || !firstRoundComplete}
-                className="rounded bg-black px-3 py-1 text-sm text-white disabled:opacity-50"
+                className="rounded bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {savingGroup === phase ? "Saving..." : "SAVE"}
+                {savingGroup === phase ? "Sauvegarde..." : "Sauvegarder"}
               </button>
             </div>
 
+            <div className="overflow-x-auto">
             <table className="w-full table-fixed text-xs">
               <thead>
-                <tr className="border-b text-left text-gray-500">
+                <tr className="border-b border-slate-100 bg-slate-50 text-left font-semibold text-slate-500">
                   <th className="w-[13%] py-2 pr-1">Équipe A</th>
                   <th className="w-[44px] px-1 py-2 text-center">A</th>
                   <th className="w-[44px] px-1 py-2 text-center">B</th>
@@ -285,8 +286,8 @@ export default function RealKnockoutScoreForm({
                   const averagePoints = stats?.averagePoints ?? null;
 
                   return (
-                    <tr key={match.id} className="border-b last:border-b-0">
-                      <td className="py-2 pr-1 font-medium truncate">
+                    <tr key={match.id} className="border-b border-slate-100 transition last:border-b-0 hover:bg-emerald-50/45">
+                      <td className="py-2 pr-1 font-medium truncate text-slate-900">
                         {match.team_a}
                       </td>
 
@@ -299,7 +300,7 @@ export default function RealKnockoutScoreForm({
                             updateValue(match.id, "a", event.target.value)
                           }
                           disabled={!canPredict}
-                          className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
+                          className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
 
@@ -312,41 +313,41 @@ export default function RealKnockoutScoreForm({
                             updateValue(match.id, "b", event.target.value)
                           }
                           disabled={!canPredict}
-                          className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
+                          className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
 
-                      <td className="px-1 py-2 font-medium truncate">
+                      <td className="px-1 py-2 font-medium truncate text-slate-900">
                         {match.team_b}
                       </td>
 
-                      <td className="px-1 py-2 whitespace-nowrap text-gray-600">
+                      <td className="px-1 py-2 whitespace-nowrap text-slate-600">
                         {formatMatchDate(kickoffDate, timeZone)}
                       </td>
 
-                      <td className="px-1 py-2 whitespace-nowrap text-gray-600">
+                      <td className="px-1 py-2 whitespace-nowrap text-slate-600">
                         {formatMatchTime(kickoffDate, timeZone)}
                       </td>
 
-                      <td className="px-1 py-2 truncate text-gray-600">
+                      <td className="px-1 py-2 truncate text-slate-600">
                         {getCityFromVenue(match.venue)}
                       </td>
 
                       <td className="px-1 py-2 whitespace-nowrap">
                         {hasOfficialScore ? (
-                          <span className="text-blue-700">Terminé</span>
+                          <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-800">Terminé</span>
                         ) : canPredict ? (
-                          <span className="text-green-600">Ouvert</span>
+                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">Ouvert</span>
                         ) : (
-                          <span className="text-red-600">Bloqué</span>
+                          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">Bloqué</span>
                         )}
                       </td>
 
-                      <td className="px-1 py-2 text-center font-semibold">
+                      <td className="px-1 py-2 text-center font-semibold text-slate-900">
                         {myPoints !== null ? myPoints : "-"}
                       </td>
 
-                      <td className="px-1 py-2 text-center">
+                      <td className="px-1 py-2 text-center text-slate-600">
                         {averagePoints !== null
                           ? averagePoints.toFixed(1)
                           : "-"}
@@ -354,11 +355,11 @@ export default function RealKnockoutScoreForm({
 
                       {isAdmin && (
                         <>
-                          <td className="px-1 py-2 text-center font-semibold">
+                          <td className="px-1 py-2 text-center font-semibold text-slate-900">
                             {match.score_a ?? "-"}
                           </td>
 
-                          <td className="px-1 py-2 text-center font-semibold">
+                          <td className="px-1 py-2 text-center font-semibold text-slate-900">
                             {match.score_b ?? "-"}
                           </td>
 
@@ -379,7 +380,7 @@ export default function RealKnockoutScoreForm({
                                   type="number"
                                   min={0}
                                   defaultValue={match.score_a ?? ""}
-                                  className="w-10 rounded border px-1 py-1 text-center"
+                                  className="w-10 rounded border border-slate-200 px-1 py-1 text-center shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                                 />
 
                                 <input
@@ -387,10 +388,10 @@ export default function RealKnockoutScoreForm({
                                   type="number"
                                   min={0}
                                   defaultValue={match.score_b ?? ""}
-                                  className="w-10 rounded border px-1 py-1 text-center"
+                                  className="w-10 rounded border border-slate-200 px-1 py-1 text-center shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                                 />
 
-                                <button className="rounded bg-blue-700 px-2 py-1 text-xs text-white">
+                                <button className="rounded bg-sky-700 px-2 py-1 text-xs font-semibold text-white transition hover:bg-sky-800">
                                   Rés.
                                 </button>
                               </form>
@@ -403,6 +404,7 @@ export default function RealKnockoutScoreForm({
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         ))
       )}

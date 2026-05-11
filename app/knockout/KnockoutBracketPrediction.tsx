@@ -219,9 +219,15 @@ function getMatchStatus(
 }
 
 function getStatusClass(status: MatchStatus) {
-  if (status === "Termine") return "text-blue-700";
-  if (status === "Ouvert") return "text-green-700";
-  return "text-red-700";
+  if (status === "Termine") {
+    return "rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-800";
+  }
+
+  if (status === "Ouvert") {
+    return "rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800";
+  }
+
+  return "rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600";
 }
 
 export default function KnockoutBracketPrediction({
@@ -339,9 +345,9 @@ export default function KnockoutBracketPrediction({
     return (
       <div
         key={phase}
-        className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+        className="rounded-lg border border-emerald-100 bg-white p-5 shadow-[0_12px_30px_rgba(15,118,110,0.07)]"
       >
-        <h2 className="mb-4 text-2xl font-bold">{phase}</h2>
+        <h2 className="mb-4 text-xl font-bold text-emerald-950">{phase}</h2>
         <div className="space-y-4">
           {matches.map((match) => {
             const possibleTeams = getPossibleTeams(
@@ -382,7 +388,7 @@ export default function KnockoutBracketPrediction({
             return (
               <div
                 key={match.id}
-                className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                className="rounded-lg border border-slate-200 bg-slate-50/80 p-4 transition hover:border-emerald-200 hover:bg-emerald-50/55"
               >
                 <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
@@ -414,7 +420,7 @@ export default function KnockoutBracketPrediction({
                   value={selected}
                   onChange={(e) => handleWinnerChange(match.id, e.target.value)}
                   disabled={!canPredict}
-                  className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                  className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500"
                 >
                   <option value="">Selectionner</option>
                   {possibleTeams.map((team) => (
@@ -432,24 +438,24 @@ export default function KnockoutBracketPrediction({
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-6 text-slate-900">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm text-gray-500">Utilisateur connecte :</p>
+          <p className="text-sm text-slate-500">Utilisateur connecte :</p>
           <p className="text-lg font-semibold text-slate-900">{userName}</p>
         </div>
 
         <button
           type="button"
           onClick={resetBracket}
-          className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+          className="rounded bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700"
         >
           Reinitialiser le tableau
         </button>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-6">
-        <h1 className="mb-3 text-3xl font-bold">{title}</h1>
+      <div className="rounded-lg border border-emerald-100 bg-white p-6 shadow-sm">
+        <h1 className="mb-3 text-3xl font-bold tracking-tight text-slate-950">{title}</h1>
         <p className="text-sm leading-6 text-slate-600">
           {description}
         </p>
@@ -467,8 +473,8 @@ export default function KnockoutBracketPrediction({
         </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-slate-100 p-6">
-        <h2 className="text-2xl font-bold">Resume</h2>
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-6">
+        <h2 className="text-2xl font-bold text-amber-950">Resume</h2>
         <p className="mt-2 text-slate-600">
           Champion pronostique :{" "}
           <span className="font-semibold text-slate-900">

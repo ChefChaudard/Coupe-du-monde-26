@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import {
   formatDashboardDate,
@@ -181,15 +182,22 @@ function getKnockoutTeamLabel(match: Match, side: "a" | "b", matchIndex: number)
       `1er du groupe ${String.fromCharCode(65 + (matchIndex % 12))}`,
       `3eme du groupe ${String.fromCharCode(65 + ((matchIndex + 5) % 12))}`,
     ];
+
     return side === "a" ? placeholder[0] : placeholder[1];
   }
 
   const previousPhase = knockoutPhaseOrder[phaseIndex - 1];
   const position = side === "a" ? matchIndex * 2 + 1 : matchIndex * 2 + 2;
+
   return `Vainqueur ${previousPhase} ${position}`;
 }
 
-function getDisplayTeam(match: Match, side: "a" | "b", matchIndex: number, selectedTab: TabKey) {
+function getDisplayTeam(
+  match: Match,
+  side: "a" | "b",
+  matchIndex: number,
+  selectedTab: TabKey
+) {
   if (selectedTab !== "tours") {
     return side === "a" ? match.team_a : match.team_b;
   }
@@ -243,7 +251,6 @@ export default function PredictionForm({
   userId,
   matchStats,
   isAdmin,
-  updateMatchResult,
   createKnockoutMatches,
   initialTab,
 }: {
@@ -256,6 +263,8 @@ export default function PredictionForm({
   createKnockoutMatches: (formData: FormData) => Promise<void>;
   initialTab?: TabKey;
 }) {
+  const router = useRouter();
+
   const initialValues = useMemo(() => {
     const values: FormValues = {};
 
@@ -268,6 +277,19 @@ export default function PredictionForm({
 
     return values;
   }, [existingPredictions]);
+
+  const initialRealScores = useMemo(() => {
+    const values: FormValues = {};
+
+    for (const match of matches) {
+      values[match.id] = {
+        a: match.score_a !== null ? String(match.score_a) : "",
+        b: match.score_b !== null ? String(match.score_b) : "",
+      };
+    }
+
+    return values;
+  }, [matches]);
 
   const groupedMatches = useMemo(() => {
     const groups: Record<string, Match[]> = {};
@@ -295,10 +317,19 @@ export default function PredictionForm({
   }, [groupedMatches, selectedTab]);
 
   const [values, setValues] = useState<FormValues>(initialValues);
+  const [realScores, setRealScores] = useState<FormValues>(initialRealScores);
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
   const timeZone = useUserTimeZone();
+
+  useEffect(() => {
+    setValues(initialValues);
+  }, [initialValues]);
+
+  useEffect(() => {
+    setRealScores(initialRealScores);
+  }, [initialRealScores]);
 
   useEffect(() => {
     function handleSimulatedDateUpdated(event: Event) {
@@ -324,6 +355,7 @@ export default function PredictionForm({
       "simulated-date-updated",
       handleSimulatedDateUpdated
     );
+
     void loadSimulatedDate();
 
     return () => {
@@ -335,6 +367,7 @@ export default function PredictionForm({
   }, []);
 
   const appNowTime = simulatedNow ? new Date(simulatedNow).getTime() : 0;
+
   const liveGroupStandings = useMemo(() => {
     if (!appNowTime) return {};
     return buildLiveGroupStandings(matches, appNowTime);
@@ -350,52 +383,92 @@ export default function PredictionForm({
     }));
   }
 
+  function updateRealScore(matchId: number, side: "a" | "b", value: string) {
+    setRealScores((prev) => ({
+      ...prev,
+      [matchId]: {
+        a: side === "a" ? value : prev[matchId]?.a ?? "",
+        b: side === "b" ? value : prev[matchId]?.b ?? "",
+      },
+    }));
+  }
+
   async function saveGroup(matchesInGroup: Match[], phase: string) {
     setMessage("");
     setSavingGroup(phase);
 
-    const rowsToSave = [];
+    try {
+      const rowsToSave = [];
 
-    for (const match of matchesInGroup) {
-      const entry = values[match.id];
-      if (!entry || entry.a === "" || entry.b === "") continue;
+      for (const match of matchesInGroup) {
+        const entry = values[match.id];
+        if (!entry || entry.a === "" || entry.b === "") continue;
 
-      const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
-      if (hasStarted) continue;
+        const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
+        if (hasStarted) continue;
 
-      const predictedA = Number(entry.a);
-      const predictedB = Number(entry.b);
+        const predictedA = Number(entry.a);
+        const predictedB = Number(entry.b);
 
-      if (Number.isNaN(predictedA) || Number.isNaN(predictedB)) continue;
-      if (predictedA < 0 || predictedB < 0) continue;
+        if (Number.isNaN(predictedA) || Number.isNaN(predictedB)) continue;
+        if (predictedA < 0 || predictedB < 0) continue;
 
-      rowsToSave.push({
-        user_id: userId,
-        match_id: match.id,
-        predicted_a: predictedA,
-        predicted_b: predictedB,
-        updated_at: new Date().toISOString(),
-      });
-    }
+        rowsToSave.push({
+          user_id: userId,
+          match_id: match.id,
+          predicted_a: predictedA,
+          predicted_b: predictedB,
+          updated_at: new Date().toISOString(),
+        });
+      }
 
-    if (rowsToSave.length === 0) {
+      if (rowsToSave.length > 0) {
+        const { error } = await supabase.from("predictions").upsert(rowsToSave, {
+          onConflict: "user_id,match_id",
+        });
+
+        if (error) {
+          setMessage(`Erreur sauvegarde pronostics : ${error.message}`);
+          return;
+        }
+      }
+
+      if (isAdmin) {
+        for (const match of matchesInGroup) {
+          const real = realScores[match.id];
+          if (!real || real.a === "" || real.b === "") continue;
+
+          const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
+          if (!hasStarted) continue;
+
+          const scoreA = Number(real.a);
+          const scoreB = Number(real.b);
+
+          if (Number.isNaN(scoreA) || Number.isNaN(scoreB)) continue;
+          if (scoreA < 0 || scoreB < 0) continue;
+
+          const { error } = await supabase
+            .from("matches")
+            .update({
+              score_a: scoreA,
+              score_b: scoreB,
+              is_finished: true,
+            })
+            .eq("id", match.id);
+
+          if (error) {
+            setMessage(`Erreur sauvegarde score réel : ${error.message}`);
+            return;
+          }
+        }
+      }
+
+setMessage(`Sauvegarde effectuée pour ${phase}.`);
+
+window.location.href = "/dashboard?tab=groupes";
+    } finally {
       setSavingGroup(null);
-      setMessage(`Aucun pronostic à sauvegarder pour ${phase}.`);
-      return;
     }
-
-    const { error } = await supabase.from("predictions").upsert(rowsToSave, {
-      onConflict: "user_id,match_id",
-    });
-
-    setSavingGroup(null);
-
-    if (error) {
-      setMessage(`Erreur sauvegarde : ${error.message}`);
-      return;
-    }
-
-    setMessage(`Pronostics sauvegardés pour ${phase}.`);
   }
 
   if (!simulatedNow) {
@@ -403,15 +476,15 @@ export default function PredictionForm({
   }
 
   return (
-    <section className="space-y-6">
-      <h1 className="text-4xl font-bold">
+    <section className="space-y-5 text-slate-900">
+      <h1 className="text-3xl font-bold tracking-tight text-slate-950">
         Pronostics Groupes au {formatDashboardDate(simulatedNow, timeZone)}
       </h1>
 
-      <h2 className="text-2xl font-bold">Mes pronostics</h2>
+      <h2 className="text-lg font-semibold text-emerald-950">Mes pronostics</h2>
 
       {filteredMatches.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-500">
+        <div className="rounded-lg border border-dashed border-emerald-200 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
           {selectedTab === "groupes" ? (
             "Aucun match de groupe n'est disponible pour le moment."
           ) : (
@@ -421,7 +494,7 @@ export default function PredictionForm({
                 <form action={createKnockoutMatches} className="mt-4">
                   <button
                     type="submit"
-                    className="rounded bg-black px-4 py-2 text-sm font-semibold text-white"
+                    className="rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800"
                   >
                     Créer les matchs des tours suivants
                   </button>
@@ -434,33 +507,37 @@ export default function PredictionForm({
             </>
           )}
         </div>
-      ) : filteredMatches.map(([phase, phaseMatches]) => {
-          return (
-            <div key={phase} className="rounded-xl border p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="text-lg font-bold">
-                  {selectedTab === "groupes" ? (
-                    <GroupStandingsTooltip
-                      groupName={phase}
-                      standings={liveGroupStandings[phase] ?? []}
-                    />
-                  ) : (
-                    <span className="capitalize">{phase}</span>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => saveGroup(phaseMatches, phase)}
-                  disabled={savingGroup === phase}
-                  className="rounded bg-black px-3 py-1 text-sm text-white disabled:opacity-50"
-                >
-                  {savingGroup === phase ? "Saving..." : "SAVE"}
-                </button>
+      ) : (
+        filteredMatches.map(([phase, phaseMatches]) => (
+          <div
+            key={phase}
+            className="overflow-visible rounded-lg border border-emerald-100 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.07)]"
+          >
+            <div className="flex items-center justify-between gap-4 rounded-t-lg border-b border-emerald-100 bg-emerald-50/80 px-4 py-3">
+              <div className="text-base font-bold">
+                {selectedTab === "groupes" ? (
+                  <GroupStandingsTooltip
+                    groupName={phase}
+                    standings={liveGroupStandings[phase] ?? []}
+                  />
+                ) : (
+                  <span className="capitalize">{phase}</span>
+                )}
               </div>
 
+              <button
+                onClick={() => saveGroup(phaseMatches, phase)}
+                disabled={savingGroup === phase}
+                className="rounded bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingGroup === phase ? "Sauvegarde..." : "Sauvegarder"}
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
               <table className="w-full table-fixed text-xs">
                 <thead>
-                  <tr className="border-b text-left text-gray-500">
+                  <tr className="border-b border-slate-100 bg-slate-50 text-left font-semibold text-slate-500">
                     <th className="w-[13%] py-2 pr-1">Équipe A</th>
                     <th className="w-[44px] px-1 py-2 text-center">A</th>
                     <th className="w-[44px] px-1 py-2 text-center">B</th>
@@ -476,152 +553,158 @@ export default function PredictionForm({
                       <>
                         <th className="w-[55px] px-1 py-2 text-center">A réel</th>
                         <th className="w-[55px] px-1 py-2 text-center">B réel</th>
-                        <th className="w-[130px] py-2 pl-1"></th>
                       </>
                     )}
                   </tr>
                 </thead>
 
-              <tbody>
-                {phaseMatches.map((match, matchIndex) => {
-                  const kickoffDate = new Date(match.kickoff_at);
-                  const hasStarted = kickoffDate.getTime() <= appNowTime;
-                  const canPredict = !hasStarted;
-                  const canEnterRealScore = isAdmin && hasStarted;
+                <tbody>
+                  {phaseMatches.map((match, matchIndex) => {
+                    const kickoffDate = new Date(match.kickoff_at);
+                    const hasStarted = kickoffDate.getTime() <= appNowTime;
+                    const canPredict = !hasStarted;
+                    const canEnterRealScore = isAdmin && hasStarted;
 
-                  const hasOfficialScore =
-                    match.is_finished &&
-                    match.score_a !== null &&
-                    match.score_b !== null;
+                    const hasOfficialScore =
+                      match.is_finished &&
+                      match.score_a !== null &&
+                      match.score_b !== null;
 
-                  const stats = matchStats[match.id];
-                  const myPoints = stats?.myPoints ?? null;
-                  const averagePoints = stats?.averagePoints ?? null;
+                    const stats = matchStats[match.id];
+                    const myPoints = stats?.myPoints ?? null;
+                    const averagePoints = stats?.averagePoints ?? null;
 
-                  return (
-                    <tr key={match.id} className="border-b last:border-b-0">
-                      <td className="py-2 pr-1 font-medium truncate">
-                        {getDisplayTeam(match, "a", matchIndex, selectedTab)}
-                      </td>
+                    return (
+                      <tr
+                        key={match.id}
+                        className="border-b border-slate-100 transition last:border-b-0 hover:bg-emerald-50/45"
+                      >
+                        <td className="py-2 pr-1 font-medium truncate text-slate-900">
+                          {getDisplayTeam(match, "a", matchIndex, selectedTab)}
+                        </td>
 
-                      <td className="px-1 py-2">
-                        <input
-                          type="number"
-                          min={0}
-                          value={values[match.id]?.a ?? ""}
-                          onChange={(e) =>
-                            updateValue(match.id, "a", e.target.value)
-                          }
-                          disabled={!canPredict}
-                          className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
-                        />
-                      </td>
+                        <td className="px-1 py-2">
+                          <input
+                            type="number"
+                            min={0}
+                            value={values[match.id]?.a ?? ""}
+                            onChange={(e) =>
+                              updateValue(match.id, "a", e.target.value)
+                            }
+                            disabled={!canPredict}
+                            className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500"
+                          />
+                        </td>
 
-                      <td className="px-1 py-2">
-                        <input
-                          type="number"
-                          min={0}
-                          value={values[match.id]?.b ?? ""}
-                          onChange={(e) =>
-                            updateValue(match.id, "b", e.target.value)
-                          }
-                          disabled={!canPredict}
-                          className="w-10 rounded border px-1 py-1 text-center disabled:bg-gray-100 disabled:text-gray-500"
-                        />
-                      </td>
+                        <td className="px-1 py-2">
+                          <input
+                            type="number"
+                            min={0}
+                            value={values[match.id]?.b ?? ""}
+                            onChange={(e) =>
+                              updateValue(match.id, "b", e.target.value)
+                            }
+                            disabled={!canPredict}
+                            className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500"
+                          />
+                        </td>
 
-                      <td className="px-1 py-2 font-medium truncate">
-                        {getDisplayTeam(match, "b", matchIndex, selectedTab)}
-                      </td>
+                        <td className="px-1 py-2 font-medium truncate text-slate-900">
+                          {getDisplayTeam(match, "b", matchIndex, selectedTab)}
+                        </td>
 
-                      <td className="px-1 py-2 whitespace-nowrap text-gray-600">
-                        {formatMatchDate(kickoffDate, timeZone)}
-                      </td>
+                        <td className="px-1 py-2 whitespace-nowrap text-slate-600">
+                          {formatMatchDate(kickoffDate, timeZone)}
+                        </td>
 
-                      <td className="px-1 py-2 whitespace-nowrap text-gray-600">
-                        {formatMatchTime(kickoffDate, timeZone)}
-                      </td>
+                        <td className="px-1 py-2 whitespace-nowrap text-slate-600">
+                          {formatMatchTime(kickoffDate, timeZone)}
+                        </td>
 
-                      <td className="px-1 py-2 truncate text-gray-600">
-                        {getCityFromVenue(match.venue)}
-                      </td>
+                        <td className="px-1 py-2 truncate text-slate-600">
+                          {getCityFromVenue(match.venue)}
+                        </td>
 
-                      <td className="px-1 py-2 whitespace-nowrap">
-                        {hasOfficialScore ? (
-                          <span className="text-blue-700">Terminé</span>
-                        ) : canPredict ? (
-                          <span className="text-green-600">Ouvert</span>
-                        ) : (
-                          <span className="text-red-600">Bloqué</span>
+                        <td className="px-1 py-2 whitespace-nowrap">
+                          {hasOfficialScore ? (
+                            <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-800">
+                              Terminé
+                            </span>
+                          ) : canPredict ? (
+                            <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                              Ouvert
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                              Bloqué
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-1 py-2 text-center font-semibold text-slate-900">
+                          {myPoints !== null ? myPoints : "-"}
+                        </td>
+
+                        <td className="px-1 py-2 text-center text-slate-600">
+                          {averagePoints !== null
+                            ? averagePoints.toFixed(1)
+                            : "-"}
+                        </td>
+
+                        {isAdmin && (
+                          <>
+                            <td className="px-1 py-2 text-center">
+                              {canEnterRealScore ? (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={realScores[match.id]?.a ?? ""}
+                                  onChange={(e) =>
+                                    updateRealScore(match.id, "a", e.target.value)
+                                  }
+                                  className="w-10 rounded border border-slate-200 px-1 py-1 text-center shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                                />
+                              ) : (
+                                <span className="font-semibold text-slate-900">
+                                  {match.score_a ?? "-"}
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="px-1 py-2 text-center">
+                              {canEnterRealScore ? (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={realScores[match.id]?.b ?? ""}
+                                  onChange={(e) =>
+                                    updateRealScore(match.id, "b", e.target.value)
+                                  }
+                                  className="w-10 rounded border border-slate-200 px-1 py-1 text-center shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                                />
+                              ) : (
+                                <span className="font-semibold text-slate-900">
+                                  {match.score_b ?? "-"}
+                                </span>
+                              )}
+                            </td>
+                          </>
                         )}
-                      </td>
-
-                      <td className="px-1 py-2 text-center font-semibold">
-                        {myPoints !== null ? myPoints : "-"}
-                      </td>
-
-                      <td className="px-1 py-2 text-center">
-                        {averagePoints !== null
-                          ? averagePoints.toFixed(1)
-                          : "-"}
-                      </td>
-
-                      {isAdmin && (
-                        <>
-                          <td className="px-1 py-2 text-center font-semibold">
-                            {match.score_a ?? "-"}
-                          </td>
-
-                          <td className="px-1 py-2 text-center font-semibold">
-                            {match.score_b ?? "-"}
-                          </td>
-
-                          <td className="py-2 pl-1 text-right">
-                            {canEnterRealScore && (
-                              <form
-                                action={updateMatchResult}
-                                className="flex justify-end gap-1"
-                              >
-                                <input
-                                  type="hidden"
-                                  name="match_id"
-                                  value={match.id}
-                                />
-
-                                <input
-                                  name="score_a"
-                                  type="number"
-                                  min={0}
-                                  defaultValue={match.score_a ?? ""}
-                                  className="w-10 rounded border px-1 py-1 text-center"
-                                />
-
-                                <input
-                                  name="score_b"
-                                  type="number"
-                                  min={0}
-                                  defaultValue={match.score_b ?? ""}
-                                  className="w-10 rounded border px-1 py-1 text-center"
-                                />
-
-                                <button className="rounded bg-blue-700 px-2 py-1 text-xs text-white">
-                                  Rés.
-                                </button>
-                              </form>
-                            )}
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        );
-      })}
+        ))
+      )}
 
-      {message && <p className="text-sm">{message}</p>}
+      {message && (
+        <p className="rounded-lg border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+          {message}
+        </p>
+      )}
     </section>
   );
 }

@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -235,7 +238,10 @@ export default async function DashboardPage({
     .maybeSingle();
 
   if (!profile) {
-    const nickname = user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`;
+   const nickname =
+  profile?.nickname ||
+  user.email?.split("@")[0] ||
+  `user_${user.id.slice(0, 8)}`;
 
     await supabase.from("profiles").insert({
       id: user.id,
@@ -390,7 +396,7 @@ export default async function DashboardPage({
   }
 
   return (
-    <main className="p-6 max-w-[1800px] mx-auto space-y-6">
+    <main className="mx-auto max-w-[1800px] space-y-6 px-6 py-6 text-slate-900">
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-6">
         <section className="space-y-4">
           <PredictionForm

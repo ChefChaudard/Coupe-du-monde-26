@@ -10,45 +10,40 @@ export default function Home() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    async function loadUser() {
-      const { data } = await supabase.auth.getUser();
-      const user = data.user;
-
-      setUserEmail(user?.email ?? null);
-
-      if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("is_admin, nickname")
-          .eq("id", user.id)
-          .single();
-
-        setIsAdmin(!!profile?.is_admin);
-        setUserName(profile?.nickname ?? user.email?.split("@")[0] ?? null);
+    const fetchProfile = async (user: any) => {
+      if (!user) {
+        setUserEmail(null);
+        setUserName(null);
+        setIsAdmin(false);
+        return;
       }
+
+      setUserEmail(user.email ?? null);
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_admin, nickname")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      setIsAdmin(!!profile?.is_admin);
+      setUserName(
+        profile?.nickname ||
+          user.email?.split("@")[0] ||
+          `user_${user.id.slice(0, 8)}`
+      );
+    };
+
+    async function loadInitialUser() {
+      const { data } = await supabase.auth.getUser();
+      await fetchProfile(data.user);
     }
 
-    loadUser();
+    loadInitialUser();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        const user = session?.user;
-        setUserEmail(user?.email ?? null);
-
-        if (user) {
-          supabase
-            .from("profiles")
-            .select("is_admin, nickname")
-            .eq("id", user.id)
-            .single()
-            .then(({ data }) => {
-              setIsAdmin(!!data?.is_admin);
-              setUserName(data?.nickname ?? user?.email?.split("@")[0] ?? null);
-            });
-        } else {
-          setIsAdmin(false);
-          setUserName(null);
-        }
+      async (_event, session) => {
+        await fetchProfile(session?.user ?? null);
       }
     );
 
@@ -58,15 +53,23 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-green-900 text-white flex items-center justify-center p-8">
-      <div className="text-center space-y-6">
-        <h1 className="text-4xl font-bold">Coupe du Monde 2026</h1>
-        <p className="text-xl">Site de pronostics entre amis</p>
+    <main className="flex min-h-[calc(100vh-72px)] items-center justify-center bg-[#12362f] p-8 text-white">
+      <div className="w-full max-w-3xl text-center">
+        <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-amber-200">
+          Pronos WC26
+        </p>
 
-        <div className="flex flex-wrap justify-center gap-4">
+        <h1 className="text-5xl font-bold tracking-tight">Coupe du Monde 2026</h1>
+
+        <p className="mx-auto mt-4 max-w-xl text-lg leading-7 text-emerald-50">
+          Site de pronostics entre amis, avec scores, classements et tours
+          éliminatoires au fil de la compétition.
+        </p>
+
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link
             href="/dashboard"
-            className="rounded bg-white px-6 py-3 font-semibold text-green-900 hover:bg-gray-100"
+            className="rounded bg-white px-6 py-3 font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-50"
           >
             Accéder au dashboard
           </Link>
@@ -74,7 +77,7 @@ export default function Home() {
           {!userEmail && (
             <Link
               href="/login"
-              className="rounded bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700"
+              className="rounded bg-sky-600 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-sky-700"
             >
               Se connecter
             </Link>
@@ -83,7 +86,7 @@ export default function Home() {
           {userEmail && (
             <Link
               href="/account/password"
-              className="rounded bg-white px-6 py-3 font-semibold text-green-900 hover:bg-gray-100"
+              className="rounded bg-white px-6 py-3 font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-50"
             >
               Changer mon mot de passe
             </Link>
@@ -92,7 +95,7 @@ export default function Home() {
           {isAdmin && (
             <Link
               href="/admin/users"
-              className="rounded bg-yellow-400 px-6 py-3 font-semibold text-green-950 hover:bg-yellow-300"
+              className="rounded bg-amber-300 px-6 py-3 font-semibold text-emerald-950 shadow-sm transition hover:bg-amber-200"
             >
               Créer / gérer utilisateurs
             </Link>
@@ -100,9 +103,7 @@ export default function Home() {
         </div>
 
         {userName && (
-          <p className="text-sm text-gray-200">
-            Connecté en tant que : {userName}
-          </p>
+          <p className="mt-6 text-sm font-semibold text-amber-100">{userName}</p>
         )}
       </div>
     </main>

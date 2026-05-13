@@ -465,11 +465,14 @@ export default function PredictionForm({
       }
 
 setMessage(`Sauvegarde effectuée pour ${phase}.`);
+setSavingGroup(null);
 
-router.refresh();
-    } finally {
-      setSavingGroup(null);
-    }
+setTimeout(() => {
+  router.refresh();
+}, 100);
+} finally {
+  setSavingGroup(null);
+}
   }
 
   if (!simulatedNow) {

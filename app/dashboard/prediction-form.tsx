@@ -251,6 +251,7 @@ export default function PredictionForm({
   userId,
   matchStats,
   isAdmin,
+  updateMatchResult,
   createKnockoutMatches,
   initialTab,
 }: {
@@ -465,7 +466,7 @@ export default function PredictionForm({
 
 setMessage(`Sauvegarde effectuée pour ${phase}.`);
 
-window.location.href = "/dashboard?tab=groupes";
+router.refresh();
     } finally {
       setSavingGroup(null);
     }

@@ -237,17 +237,16 @@ export default async function DashboardPage({
     .eq("id", user.id)
     .maybeSingle();
 
-  if (!profile) {
-   const nickname =
-  profile?.nickname ||
-  user.email?.split("@")[0] ||
-  `user_${user.id.slice(0, 8)}`;
+ if (!profile) {
+  const nickname =
+    user.email?.split("@")[0] ||
+    `user_${user.id.slice(0, 8)}`;
 
-    await supabase.from("profiles").insert({
-      id: user.id,
-      nickname,
-    });
-  }
+  await supabase.from("profiles").insert({
+    id: user.id,
+    nickname,
+  });
+}
 
   const isAdmin = profile?.is_admin === true;
 

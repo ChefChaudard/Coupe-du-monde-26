@@ -124,7 +124,10 @@ export default function RealKnockoutScoreForm({
     };
   }, []);
 
-  const appNowTime = simulatedNow ? new Date(simulatedNow).getTime() : 0;
+  const effectiveNow =
+  simulatedNow ?? matches[0]?.kickoff_at ?? new Date(0).toISOString();
+
+const appNowTime = new Date(effectiveNow).getTime();
 
   function updateValue(matchId: number, side: "a" | "b", value: string) {
     setValues((prev) => ({
@@ -184,9 +187,6 @@ export default function RealKnockoutScoreForm({
     setMessage(`Pronostics sauvegardés pour ${phase}.`);
   }
 
-  if (!simulatedNow) {
-    return <p>Chargement...</p>;
-  }
 
   return (
     <section className="space-y-5 text-slate-900">
@@ -194,7 +194,7 @@ export default function RealKnockoutScoreForm({
         <div className="space-y-3">
           <h1 className="text-3xl font-bold tracking-tight text-slate-950">
             Pronostics Réel 2nd Tour au{" "}
-            {formatDashboardDate(simulatedNow, timeZone)}
+{formatDashboardDate(effectiveNow, timeZone)}
           </h1>
           <h2 className="text-lg font-semibold text-emerald-950">Mes pronostics</h2>
         </div>

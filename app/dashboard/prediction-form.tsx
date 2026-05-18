@@ -367,7 +367,10 @@ export default function PredictionForm({
     };
   }, []);
 
-  const appNowTime = simulatedNow ? new Date(simulatedNow).getTime() : 0;
+ const effectiveNow =
+  simulatedNow ?? matches[0]?.kickoff_at ?? new Date(0).toISOString();
+
+const appNowTime = new Date(effectiveNow).getTime();
 
   const liveGroupStandings = useMemo(() => {
     if (!appNowTime) return {};
@@ -465,24 +468,18 @@ export default function PredictionForm({
       }
 
 setMessage(`Sauvegarde effectuée pour ${phase}.`);
-setSavingGroup(null);
-
-setTimeout(() => {
-  router.refresh();
-}, 100);
+} catch (error) {
+  console.error("Erreur saveGroup:", error);
+  setMessage("Erreur lors de la sauvegarde.");
 } finally {
   setSavingGroup(null);
 }
   }
 
-  if (!simulatedNow) {
-    return <p>Chargement...</p>;
-  }
-
   return (
     <section className="space-y-5 text-slate-900">
       <h1 className="text-3xl font-bold tracking-tight text-slate-950">
-        Pronostics Groupes au {formatDashboardDate(simulatedNow, timeZone)}
+Pronostics Groupes au {formatDashboardDate(effectiveNow, timeZone)}
       </h1>
 
       <h2 className="text-lg font-semibold text-emerald-950">Mes pronostics</h2>

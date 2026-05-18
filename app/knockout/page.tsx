@@ -213,13 +213,6 @@ export default async function KnockoutPage() {
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("nickname")
-    .eq("id", user.id)
-    .single();
-
-  const userName = profile?.nickname ?? user.email?.split("@")[0] ?? `user_${user.id.slice(0, 8)}`;
 
   const { data: matches } = await supabase
     .from("matches")
@@ -266,11 +259,11 @@ export default async function KnockoutPage() {
     <main className="min-h-screen bg-slate-50 p-6">
       <div className="mx-auto grid max-w-[1800px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
         <section>
-          <KnockoutBracketPrediction
-            userName={userName}
-            round32Teams={round32Teams}
-            matchInfoById={matchInfoById}
-          />
+<KnockoutBracketPrediction
+  userId={user.id}
+  round32Teams={round32Teams}
+  matchInfoById={matchInfoById}
+/>
         </section>
 
         <section>

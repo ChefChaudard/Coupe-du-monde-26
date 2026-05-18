@@ -20,6 +20,11 @@ type BracketMatch = {
 
 type SelectedWinners = Record<number, string>;
 
+type KnockoutPredictionRow = {
+  match_key: string;
+  winner: string | null;
+};
+
 export type BracketMatchInfo = {
   teamA: string;
   teamB: string;
@@ -231,14 +236,14 @@ function getStatusClass(status: MatchStatus) {
 }
 
 export default function KnockoutBracketPrediction({
-  userName,
+  userId,
   round32Teams,
   matchInfoById = {},
   storageKey = "knockoutBracketPredictions",
   title = "Pronostics Tours Eliminatoires",
   description = "Les equipes du tableau des 32 sont deduites des resultats de groupes. Pour les tours suivants, selectionnez le vainqueur de chaque match en respectant la logique des tours precedents.",
 }: {
-  userName: string;
+  userId: string;
   round32Teams?: Round32Teams;
   matchInfoById?: Record<number, BracketMatchInfo>;
   storageKey?: string;
@@ -252,21 +257,44 @@ export default function KnockoutBracketPrediction({
   );
   const childMap = useMemo(() => getChildMatchIds(bracket), [bracket]);
 
-  const [selectedWinners, setSelectedWinners] = useState<SelectedWinners>(() => {
-    if (typeof window === "undefined") return {};
+const [selectedWinners, setSelectedWinners] = useState<SelectedWinners>({});
+const [hasLoadedStorage, setHasLoadedStorage] = useState(false);
+const [message, setMessage] = useState<string | null>(null);
+const [saving, setSaving] = useState(false);
+const [saveMessage, setSaveMessage] = useState<string | null>(null);
+const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
+const timeZone = useUserTimeZone();
 
-    const saved = window.localStorage.getItem(storageKey);
-    if (!saved) return {};
+useEffect(() => {
+  async function loadKnockoutPredictions() {
+    const { data, error } = await supabase
+      .from("knockout_predictions")
+      .select("match_key, winner")
+      .eq("user_id", userId);
 
-    try {
-      return JSON.parse(saved) as SelectedWinners;
-    } catch {
-      return {};
+    if (error) {
+      console.error(
+        "Erreur chargement knockout:",
+        JSON.stringify(error, null, 2)
+      );
+      setHasLoadedStorage(true);
+      return;
     }
-  });
-  const [message, setMessage] = useState<string | null>(null);
-  const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
-  const timeZone = useUserTimeZone();
+
+    const next: SelectedWinners = {};
+
+    for (const row of (data ?? []) as KnockoutPredictionRow[]) {
+      if (row.winner) {
+        next[Number(row.match_key)] = row.winner;
+      }
+    }
+
+    setSelectedWinners(next);
+    setHasLoadedStorage(true);
+  }
+
+  void loadKnockoutPredictions();
+}, [userId]);
 
   useEffect(() => {
     function handleSimulatedDateUpdated(event: Event) {
@@ -298,26 +326,59 @@ export default function KnockoutBracketPrediction({
     };
   }, []);
 
-  useEffect(() => {
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify(selectedWinners)
-    );
-  }, [selectedWinners, storageKey]);
+useEffect(() => {
+  if (!hasLoadedStorage) return;
+}, [selectedWinners, hasLoadedStorage]);
 
-  function handleWinnerChange(matchId: number, value: string) {
-    setSelectedWinners((prev) => {
-      const next = { ...prev, [matchId]: value };
-      const descendants = collectDescendants(matchId, childMap);
+ function handleWinnerChange(matchId: number, value: string) {
+  setSelectedWinners((prev) => {
+    const next = { ...prev, [matchId]: value };
+    const descendants = collectDescendants(matchId, childMap);
 
-      for (const descendantId of descendants) {
-        delete next[descendantId];
-      }
+    for (const descendantId of descendants) {
+      delete next[descendantId];
+    }
 
-      return next;
+    return next;
+  });
+
+  setMessage(null);
+  setSaveMessage(null);
+}
+async function handleSaveKnockout() {
+  setSaving(true);
+  setSaveMessage(null);
+
+  const rows = bracket.map((match) => ({
+    user_id: userId,
+    match_key: String(match.id),
+    round: match.phase,
+    team_a: match.teamA,
+    team_b: match.teamB,
+    winner: selectedWinners[match.id] ?? null,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase
+    .from("knockout_predictions")
+    .upsert(rows, {
+      onConflict: "user_id,match_key",
     });
-    setMessage(null);
-  }
+
+  setSaving(false);
+
+if (error) {
+  console.error(
+    "Erreur Supabase knockout:",
+    JSON.stringify(error, null, 2)
+  );
+
+  setSaveMessage("Erreur lors de la sauvegarde.");
+  return;
+}
+
+  setSaveMessage("Pronostics sauvegardés.");
+}
 
   function resetBracket() {
     setSelectedWinners({});
@@ -439,15 +500,19 @@ export default function KnockoutBracketPrediction({
 
   return (
     <section className="space-y-6 text-slate-900">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm text-slate-500">Utilisateur connecte :</p>
-          <p className="text-lg font-semibold text-slate-900">{userName}</p>
-        </div>
+<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  <button
+    type="button"
+    onClick={handleSaveKnockout}
+    disabled={saving}
+    className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
+  >
+    {saving ? "Sauvegarde..." : "Sauvegarder"}
+  </button>
 
-        <button
-          type="button"
-          onClick={resetBracket}
+  <button
+    type="button"
+    onClick={resetBracket}
           className="rounded bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700"
         >
           Reinitialiser le tableau
@@ -481,7 +546,11 @@ export default function KnockoutBracketPrediction({
             {champion ?? "Aucun choix"}
           </span>
         </p>
-        {message && <p className="mt-3 text-sm text-green-700">{message}</p>}
+{message && <p className="mt-3 text-sm text-green-700">{message}</p>}
+
+{saveMessage && (
+  <p className="mt-3 text-sm text-green-700">{saveMessage}</p>
+)}
       </div>
     </section>
   );

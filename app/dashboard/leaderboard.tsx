@@ -34,8 +34,9 @@ function getPoints(p: Prediction) {
     return 0;
   }
 
-  const exact = p.predicted_a === m.score_a && p.predicted_b === m.score_b;
-  if (exact) return 3;
+  if (p.predicted_a === m.score_a && p.predicted_b === m.score_b) {
+    return 3;
+  }
 
   const realDiff = m.score_a - m.score_b;
   const predDiff = p.predicted_a - p.predicted_b;
@@ -56,6 +57,15 @@ function getRankBadgeClass(index: number) {
   return "border-emerald-100 bg-emerald-50 text-emerald-900";
 }
 
+function withTimeout<T>(promise: PromiseLike<T>, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`Timeout Supabase : ${label}`)), 8000);
+    }),
+  ]);
+}
+
 export default function Leaderboard() {
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
   const [message, setMessage] = useState("Chargement...");
@@ -67,18 +77,21 @@ export default function Leaderboard() {
       try {
         setMessage("Chargement...");
 
-        const { data: predictions, error: predictionsError } = await supabase
-          .from("predictions")
-          .select(`
-            user_id,
-            predicted_a,
-            predicted_b,
-            matches (
-              score_a,
-              score_b,
-              is_finished
-            )
-          `);
+        const { data: predictions, error: predictionsError } = await withTimeout(
+          supabase
+            .from("predictions")
+            .select(`
+              user_id,
+              predicted_a,
+              predicted_b,
+              matches (
+                score_a,
+                score_b,
+                is_finished
+              )
+            `),
+          "predictions"
+        );
 
         if (cancelled) return;
 
@@ -88,9 +101,10 @@ export default function Leaderboard() {
           return;
         }
 
-        const { data: profiles, error: profilesError } = await supabase
-          .from("profiles")
-          .select("id, nickname");
+        const { data: profiles, error: profilesError } = await withTimeout(
+          supabase.from("profiles").select("id, nickname"),
+          "profiles"
+        );
 
         if (cancelled) return;
 
@@ -109,10 +123,15 @@ export default function Leaderboard() {
 
         const scoreMap = new Map<string, number>();
 
-((predictions ?? []) as unknown as Prediction[]).forEach((prediction) => {
-          const current = scoreMap.get(prediction.user_id) ?? 0;
-          scoreMap.set(prediction.user_id, current + getPoints(prediction));
-        });
+        ((predictions ?? []) as unknown as Prediction[]).forEach(
+          (prediction) => {
+            const current = scoreMap.get(prediction.user_id) ?? 0;
+            scoreMap.set(
+              prediction.user_id,
+              current + getPoints(prediction)
+            );
+          }
+        );
 
         const leaderboard = Array.from(scoreMap.entries())
           .map(([user_id, points]) => ({
@@ -126,7 +145,11 @@ export default function Leaderboard() {
         setMessage(leaderboard.length ? "" : "Aucun score pour le moment.");
       } catch (error) {
         console.error("Erreur leaderboard:", error);
-        setMessage("Erreur chargement classement.");
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Erreur chargement classement."
+        );
       }
     }
 

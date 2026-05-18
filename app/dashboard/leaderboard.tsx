@@ -3,15 +3,17 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 
+type MatchRow = {
+  score_a: number | null;
+  score_b: number | null;
+  is_finished: boolean;
+};
+
 type Prediction = {
   user_id: string;
   predicted_a: number;
   predicted_b: number;
-  matches: {
-    score_a: number | null;
-    score_b: number | null;
-    is_finished: boolean;
-  } | null;
+  matches: MatchRow | MatchRow[] | null;
 };
 
 type Profile = {
@@ -26,7 +28,7 @@ type LeaderboardRow = {
 };
 
 function getPoints(p: Prediction) {
-  const m = p.matches;
+  const m = Array.isArray(p.matches) ? p.matches[0] : p.matches;
 
   if (!m || !m.is_finished || m.score_a === null || m.score_b === null) {
     return 0;
@@ -107,7 +109,7 @@ export default function Leaderboard() {
 
         const scoreMap = new Map<string, number>();
 
-        ((predictions ?? []) as Prediction[]).forEach((prediction) => {
+((predictions ?? []) as unknown as Prediction[]).forEach((prediction) => {
           const current = scoreMap.get(prediction.user_id) ?? 0;
           scoreMap.set(prediction.user_id, current + getPoints(prediction));
         });

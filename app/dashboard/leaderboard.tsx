@@ -3,21 +3,48 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 
-type ScoreRow = {
+type Prediction = {
   user_id: string;
-  points: number;
+  predicted_a: number;
+  predicted_b: number;
+  matches: {
+    score_a: number | null;
+    score_b: number | null;
+    is_finished: boolean;
+  } | null;
 };
 
-type ProfileRow = {
+type Profile = {
   id: string;
   nickname: string;
 };
 
 type LeaderboardRow = {
   user_id: string;
-  points: number;
   nickname: string;
+  points: number;
 };
+
+function getPoints(p: Prediction) {
+  const m = p.matches;
+
+  if (!m || !m.is_finished || m.score_a === null || m.score_b === null) {
+    return 0;
+  }
+
+  const exact = p.predicted_a === m.score_a && p.predicted_b === m.score_b;
+  if (exact) return 3;
+
+  const realDiff = m.score_a - m.score_b;
+  const predDiff = p.predicted_a - p.predicted_b;
+
+  const goodResult =
+    (realDiff > 0 && predDiff > 0) ||
+    (realDiff < 0 && predDiff < 0) ||
+    (realDiff === 0 && predDiff === 0);
+
+  return goodResult ? 1 : 0;
+}
 
 function getRankBadgeClass(index: number) {
   if (index === 0) return "border-amber-300 bg-amber-100 text-amber-950";
@@ -38,53 +65,63 @@ export default function Leaderboard() {
       try {
         setMessage("Chargement...");
 
-        const { data: scores, error: scoresError } = await supabase
-          .from("user_scores")
-          .select("user_id, points")
-          .order("points", { ascending: false });
+        const { data: predictions, error: predictionsError } = await supabase
+          .from("predictions")
+          .select(`
+            user_id,
+            predicted_a,
+            predicted_b,
+            matches (
+              score_a,
+              score_b,
+              is_finished
+            )
+          `);
 
         if (cancelled) return;
 
-        if (scoresError) {
-          setMessage(`Erreur scores : ${scoresError.message}`);
+        if (predictionsError) {
+          console.error(predictionsError);
+          setMessage(`Erreur pronostics : ${predictionsError.message}`);
           return;
         }
-
-        if (!scores || scores.length === 0) {
-          setRows([]);
-          setMessage("Aucun score pour le moment.");
-          return;
-        }
-
-        const userIds = scores.map((row) => row.user_id);
 
         const { data: profiles, error: profilesError } = await supabase
           .from("profiles")
-          .select("id, nickname")
-          .in("id", userIds);
+          .select("id, nickname");
 
         if (cancelled) return;
 
         if (profilesError) {
+          console.error(profilesError);
           setMessage(`Erreur profils : ${profilesError.message}`);
           return;
         }
 
         const profileMap = new Map(
-          (profiles ?? []).map((profile: ProfileRow) => [
+          (profiles ?? []).map((profile: Profile) => [
             profile.id,
             profile.nickname,
           ])
         );
 
-        const merged = (scores as ScoreRow[]).map((score) => ({
-          user_id: score.user_id,
-          points: score.points,
-          nickname: profileMap.get(score.user_id) ?? "Inconnu",
-        }));
+        const scoreMap = new Map<string, number>();
 
-        setRows(merged);
-        setMessage("");
+        ((predictions ?? []) as Prediction[]).forEach((prediction) => {
+          const current = scoreMap.get(prediction.user_id) ?? 0;
+          scoreMap.set(prediction.user_id, current + getPoints(prediction));
+        });
+
+        const leaderboard = Array.from(scoreMap.entries())
+          .map(([user_id, points]) => ({
+            user_id,
+            points,
+            nickname: profileMap.get(user_id) ?? "Inconnu",
+          }))
+          .sort((a, b) => b.points - a.points);
+
+        setRows(leaderboard);
+        setMessage(leaderboard.length ? "" : "Aucun score pour le moment.");
       } catch (error) {
         console.error("Erreur leaderboard:", error);
         setMessage("Erreur chargement classement.");

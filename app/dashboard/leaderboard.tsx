@@ -103,10 +103,7 @@ function LeaderboardRowItem({
         ? Math.max(margin, anchorRect.top - tooltipHeight - margin)
         : Math.min(viewportHeight - tooltipHeight - margin, anchorRect.bottom + margin);
 
-      const left = Math.min(
-        Math.max(margin, anchorRect.left),
-        Math.max(margin, viewportWidth - tooltipWidth - margin)
-      );
+      const left = Math.max(margin, anchorRect.left - tooltipWidth - margin);
 
       setTooltipStyle({
         position: "fixed",

@@ -295,7 +295,7 @@ export default function PredictionForm({
     return values;
   }, [matches]);
 
-  const groupedMatches = useMemo(() => {
+  const groupedMatches = useMemo<[string, Match[]][]>(() => {
     const groups: Record<string, Match[]> = {};
 
     for (const match of matches) {
@@ -303,12 +303,21 @@ export default function PredictionForm({
       groups[match.phase].push(match);
     }
 
-    return Object.entries(groups);
+    return Object.entries(groups).map(
+      ([phase, phaseMatches]): [string, Match[]] => [
+        phase,
+        phaseMatches.slice().sort(
+          (a, b) =>
+            new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime() ||
+            a.id - b.id
+        ),
+      ]
+    );
   }, [matches]);
 
   const selectedTab = initialTab ?? "groupes";
 
-  const filteredMatches = useMemo(() => {
+  const filteredMatches = useMemo<[string, Match[]][]>(() => {
     const matches = groupedMatches.filter(([phase]) =>
       selectedTab === "groupes" ? isGroupPhase(phase) : !isGroupPhase(phase)
     );

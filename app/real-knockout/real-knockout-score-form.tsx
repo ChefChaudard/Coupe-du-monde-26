@@ -71,7 +71,7 @@ export default function RealKnockoutScoreForm({
     return values;
   }, [existingPredictions]);
 
-  const groupedMatches = useMemo(() => {
+  const groupedMatches = useMemo<[string, Match[]][]>(() => {
     const groups: Record<string, Match[]> = {};
 
     for (const match of matches) {
@@ -79,7 +79,16 @@ export default function RealKnockoutScoreForm({
       groups[match.phase].push(match);
     }
 
-    return Object.entries(groups);
+    return Object.entries(groups).map(
+      ([phase, phaseMatches]): [string, Match[]] => [
+        phase,
+        phaseMatches.slice().sort(
+          (a, b) =>
+            new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime() ||
+            a.id - b.id
+        ),
+      ]
+    );
   }, [matches]);
 
   const [values, setValues] = useState<FormValues>(initialValues);

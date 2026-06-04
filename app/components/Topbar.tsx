@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import GroupSelector from "@/app/components/GroupSelector";
+import { ROLE_SUPER_ADMIN } from "@/lib/roles";
 import {
   DEFAULT_TIME_ZONE,
   formatTimeZoneLabel,
@@ -28,6 +29,7 @@ type CurrentUserResponse = {
     email?: string | null;
     nickname?: string | null;
     timeZone?: string | null;
+    roles?: string[] | null;
   } | null;
 };
 
@@ -55,6 +57,7 @@ function formatDateTimeLocalValue(value: string) {
 export default function Topbar() {
   const [userName, setUserName] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [timeZone, setTimeZone] = useState(DEFAULT_TIME_ZONE);
   const [timeZoneError, setTimeZoneError] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
@@ -72,12 +75,16 @@ export default function Topbar() {
 
       if (!apiUser) {
         setIsAuthenticated(false);
+        setIsSuperAdmin(false);
         setUserName(null);
         setTimeZone(getStoredTimeZone() ?? DEFAULT_TIME_ZONE);
         return;
       }
 
       setIsAuthenticated(true);
+      setIsSuperAdmin(
+        apiUser.roles?.includes(ROLE_SUPER_ADMIN) ?? false
+      );
 
       setUserName(
         apiUser.nickname || apiUser.email?.split("@")[0] || null
@@ -92,6 +99,7 @@ export default function Topbar() {
       async (_event, session) => {
         if (!session?.user) {
           setIsAuthenticated(false);
+          setIsSuperAdmin(false);
           setUserName(null);
           setTimeZone(getStoredTimeZone() ?? DEFAULT_TIME_ZONE);
           return;
@@ -108,6 +116,12 @@ export default function Topbar() {
   }, []);
 
   useEffect(() => {
+    if (!isSuperAdmin) {
+      setSimulatedNow(null);
+      setSimulatedDateError("");
+      return;
+    }
+
     async function loadSimulatedDate() {
       const { data } = await supabase
         .from("app_settings")
@@ -123,12 +137,23 @@ export default function Topbar() {
     }
 
     void loadSimulatedDate();
-  }, []);
+  }, [isSuperAdmin]);
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    await Promise.allSettled([
+      supabase.auth.signOut(),
+      fetch("/api/auth/signout", {
+        method: "POST",
+        cache: "no-store",
+      }),
+    ]);
+    setIsAuthenticated(false);
+    setIsSuperAdmin(false);
+    setUserName(null);
+    setSimulatedNow(null);
+    setSimulatedDateError("");
     localStorage.removeItem("rememberMe");
-    router.push("/");
+    window.location.assign("/login");
   }
 
   async function updateSimulatedDate(value: string) {
@@ -295,20 +320,32 @@ export default function Topbar() {
         <div className="ml-auto flex shrink-0 items-center justify-end gap-2.5">
           <GroupSelector />
 
-          {simulatedNow && (
+          {isSuperAdmin && simulatedNow && (
             <div className="relative shrink-0">
-              <label className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-sm sm:text-sm">
-                <span className="font-medium text-slate-500">Simulation</span>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-sm sm:text-sm">
+                  <span className="font-medium text-slate-500">Simulation</span>
 
-                <input
-                  type="datetime-local"
-                  value={formatDateTimeLocalValue(simulatedNow)}
-                  onChange={(event) =>
-                    updateSimulatedDate(event.target.value)
+                  <input
+                    type="datetime-local"
+                    value={formatDateTimeLocalValue(simulatedNow)}
+                    onChange={(event) =>
+                      updateSimulatedDate(event.target.value)
+                    }
+                    className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 sm:text-sm"
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    void updateSimulatedDate(new Date().toISOString())
                   }
-                  className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 sm:text-sm"
-                />
-              </label>
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 sm:px-4 sm:py-2 sm:text-sm"
+                >
+                  Maintenant
+                </button>
+              </div>
 
               {simulatedDateError && (
                 <p className="absolute left-3 top-full mt-1 whitespace-nowrap text-xs text-red-600">

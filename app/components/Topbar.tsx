@@ -140,9 +140,13 @@ export default function Topbar() {
   }, [isSuperAdmin]);
 
   async function handleLogout() {
+    const origin = window.location.origin;
+    const signOutUrl = new URL("/api/auth/signout", origin).toString();
+    const loginUrl = new URL("/login", origin).toString();
+
     await Promise.allSettled([
       supabase.auth.signOut(),
-      fetch("/api/auth/signout", {
+      fetch(signOutUrl, {
         method: "POST",
         cache: "no-store",
       }),
@@ -153,7 +157,7 @@ export default function Topbar() {
     setSimulatedNow(null);
     setSimulatedDateError("");
     localStorage.removeItem("rememberMe");
-    window.location.assign("/login");
+    window.location.replace(loginUrl);
   }
 
   async function updateSimulatedDate(value: string) {

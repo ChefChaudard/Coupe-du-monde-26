@@ -1,3 +1,5 @@
+import { getMatchCity } from "@/app/lib/fifa-cities";
+
 export type Match = {
   id: number;
   match_number?: number | null;
@@ -6,6 +8,7 @@ export type Match = {
   team_b: string;
   kickoff_at: string;
   venue?: string | null;
+  city?: string | null;
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
@@ -426,6 +429,7 @@ function buildAvailableRealMatches(matches: Match[]) {
       team_b: teamB,
       kickoff_at: fixture.kickoff_at,
       venue: fixture.venue,
+        city: getMatchCity(fixture.venue),
       score_a: null,
       score_b: null,
       is_finished: false,
@@ -454,6 +458,7 @@ function buildAvailableRealMatches(matches: Match[]) {
         team_b: teamB,
         kickoff_at: getNextKickoffDate(previousMatches, index / 2 + 1),
         venue: null,
+        city: null,
         score_a: null,
         score_b: null,
         is_finished: false,

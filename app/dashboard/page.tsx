@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -9,6 +10,11 @@ import { ensureRoles } from "@/lib/roles";
 import PredictionForm from "./prediction-form";
 import Leaderboard from "./leaderboard";
 import { syncAvailableRealMatches } from "@/app/real-knockout/real-knockout-sync";
+import { computeMatchOdds, getPredictionPoints, type MatchOdds } from "./scoring";
+
+export const metadata: Metadata = {
+  title: "Groupes",
+};
 
 type MatchStats = {
   myPoints: number | null;
@@ -21,30 +27,6 @@ type Prediction = {
   predicted_a: number;
   predicted_b: number;
 };
-
-type MatchOdds = {
-  one: number;
-  draw: number;
-  two: number;
-};
-
-function getPhasePointBase(phase: string) {
-  const normalizedPhase = phase.toLowerCase();
-
-  if (normalizedPhase.includes("group")) return 1;
-  if (
-    normalizedPhase.includes("16e") ||
-    normalizedPhase.includes("8e") ||
-    normalizedPhase.includes("quart")
-  ) {
-    return 2;
-  }
-  if (normalizedPhase.includes("demi") || normalizedPhase.includes("finale")) {
-    return 3;
-  }
-
-  return 1;
-}
 
 type GroupStandingRow = {
   team: string;
@@ -65,66 +47,11 @@ type Match = {
   team_b: string;
   kickoff_at: string;
   venue?: string | null;
+  city?: string | null;
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
 };
-
-function getPointsForPrediction(
-  predictedA: number,
-  predictedB: number,
-  actualA: number,
-  actualB: number,
-  isFinished: boolean | null,
-  phase: string
-) {
-  if (!isFinished) return 0;
-  const base = getPhasePointBase(phase);
-
-  if (predictedA === actualA && predictedB === actualB) return 3 * base;
-
-  const predictedOutcome =
-    predictedA > predictedB ? "A" : predictedA < predictedB ? "B" : "D";
-  const actualOutcome =
-    actualA > actualB ? "A" : actualA < actualB ? "B" : "D";
-
-  return predictedOutcome === actualOutcome ? base : 0;
-}
-
-function computeMatchOdds(matchPredictions: Prediction[]): MatchOdds {
-  const counts = {
-    one: 0,
-    draw: 0,
-    two: 0,
-  };
-
-  for (const prediction of matchPredictions) {
-    if (prediction.predicted_a > prediction.predicted_b) {
-      counts.one += 1;
-    } else if (prediction.predicted_a < prediction.predicted_b) {
-      counts.two += 1;
-    } else {
-      counts.draw += 1;
-    }
-  }
-
-  const total = counts.one + counts.draw + counts.two;
-
-  if (total === 0) {
-    return { one: 1, draw: 1, two: 1 };
-  }
-
-  const toOdds = (count: number) => {
-    const raw = total / Math.max(count, 1);
-    return Math.max(1, Math.round(raw * 100) / 100);
-  };
-
-  return {
-    one: toOdds(counts.one),
-    draw: toOdds(counts.draw),
-    two: toOdds(counts.two),
-  };
-}
 
 function buildGroupStandings(matches: Match[]) {
   const standings: Record<string, GroupStandingRow[]> = {};
@@ -241,6 +168,7 @@ function buildKnockoutMatches(
     team_b: runners[index],
     kickoff_at: getFutureKickoffDate(index + 1),
     venue: null,
+    city: null,
     score_a: null,
     score_b: null,
     is_finished: false,
@@ -267,6 +195,7 @@ function buildKnockoutMatches(
         team_b: `Vainqueur ${label} ${i + 2}`,
         kickoff_at: getFutureKickoffDate(dateOffset),
         venue: null,
+        city: null,
         score_a: null,
         score_b: null,
         is_finished: false,
@@ -353,14 +282,18 @@ export default async function DashboardPage({
       (p) => p.match_id === match.id
     );
 
+    const matchOddsForMatch = computeMatchOdds(matchPredictions);
+    matchOdds[match.id] = matchOddsForMatch;
+
     const allPoints = matchPredictions.map((prediction) =>
-      getPointsForPrediction(
+      getPredictionPoints(
         prediction.predicted_a,
         prediction.predicted_b,
         match.score_a,
         match.score_b,
         match.is_finished,
-        match.phase
+        match.phase,
+        matchOddsForMatch
       )
     );
 
@@ -371,13 +304,14 @@ export default async function DashboardPage({
     const myPrediction = matchPredictions.find((p) => p.user_id === user.id);
 
     const myPoints = myPrediction
-      ? getPointsForPrediction(
+      ? getPredictionPoints(
           myPrediction.predicted_a,
           myPrediction.predicted_b,
           match.score_a,
           match.score_b,
           match.is_finished,
-          match.phase
+          match.phase,
+          matchOddsForMatch
         )
       : null;
 
@@ -385,8 +319,6 @@ export default async function DashboardPage({
       myPoints,
       averagePoints,
     };
-
-    matchOdds[match.id] = computeMatchOdds(matchPredictions);
   }
 
   async function createKnockoutMatches() {

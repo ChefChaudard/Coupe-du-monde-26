@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { formatOneDecimal } from "@/app/dashboard/format";
 import {
   formatDashboardDate,
   formatMatchDate,
   formatMatchTime,
 } from "@/app/lib/time-zone";
+import { getMatchCity } from "@/app/lib/fifa-cities";
 import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
 
 type Match = {
@@ -16,6 +18,7 @@ type Match = {
   team_b: string;
   kickoff_at: string;
   venue?: string | null;
+  city?: string | null;
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
@@ -33,11 +36,6 @@ type MatchStats = {
 };
 
 type FormValues = Record<number, { a: string; b: string }>;
-
-function getCityFromVenue(venue?: string | null) {
-  if (!venue) return "-";
-  return venue.split("-")[0].trim();
-}
 
 export default function RealKnockoutScoreForm({
   matches,
@@ -198,8 +196,8 @@ const appNowTime = new Date(effectiveNow).getTime();
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-3">
           <h1 className="text-3xl font-bold tracking-tight text-slate-950">
-            Pronostics Réel 2nd Tour au{" "}
-{formatDashboardDate(effectiveNow, timeZone)}
+            2e tours Réels au{" "}
+            {formatDashboardDate(effectiveNow, timeZone)}
           </h1>
           <h2 className="text-lg font-semibold text-emerald-950">Mes pronostics</h2>
         </div>
@@ -337,7 +335,12 @@ const appNowTime = new Date(effectiveNow).getTime();
                       </td>
 
                       <td className="px-1 py-2 truncate text-slate-600">
-                        {getCityFromVenue(match.venue)}
+                        {getMatchCity(
+                          match.venue,
+                          match.city,
+                          match.team_a,
+                          match.team_b
+                        )}
                       </td>
 
                       <td className="px-1 py-2 whitespace-nowrap">
@@ -351,12 +354,12 @@ const appNowTime = new Date(effectiveNow).getTime();
                       </td>
 
                       <td className="px-1 py-2 text-center font-semibold text-slate-900">
-                        {myPoints !== null ? myPoints : "-"}
+                        {myPoints !== null ? formatOneDecimal(myPoints) : "-"}
                       </td>
 
                       <td className="px-1 py-2 text-center text-slate-600">
                         {averagePoints !== null
-                          ? averagePoints.toFixed(1)
+                          ? formatOneDecimal(averagePoints)
                           : "-"}
                       </td>
 

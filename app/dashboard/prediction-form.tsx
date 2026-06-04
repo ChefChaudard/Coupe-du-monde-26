@@ -9,6 +9,8 @@ import {
 } from "@/app/lib/time-zone";
 import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
 import GroupStandingsTooltip from "./group-standings-tooltip";
+import { formatOneDecimal } from "./format";
+import { getMatchCity } from "@/app/lib/fifa-cities";
 
 type Match = {
   id: number;
@@ -17,6 +19,7 @@ type Match = {
   team_b: string;
   kickoff_at: string;
   venue?: string | null;
+  city?: string | null;
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
@@ -52,11 +55,6 @@ type MatchOdds = {
 };
 
 type FormValues = Record<number, { a: string; b: string }>;
-
-function getCityFromVenue(venue?: string | null) {
-  if (!venue) return "-";
-  return venue.split("-")[0].trim();
-}
 
 type TabKey = "groupes" | "tours";
 
@@ -372,8 +370,7 @@ export default function PredictionForm({
     };
   }, []);
 
- const effectiveNow =
-  simulatedNow ?? matches[0]?.kickoff_at ?? new Date(0).toISOString();
+ const effectiveNow = simulatedNow ?? new Date().toISOString();
 
 const appNowTime = new Date(effectiveNow).getTime();
 
@@ -580,6 +577,11 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                       match.is_finished &&
                       match.score_a !== null &&
                       match.score_b !== null;
+                    const statusLabel = !hasStarted
+                      ? "Ouvert"
+                      : hasOfficialScore
+                        ? "Terminé"
+                        : "Bloqué";
 
                     const stats = matchStats[match.id];
                     const myPoints = stats?.myPoints ?? null;
@@ -638,15 +640,20 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                         </td>
 
                         <td className="px-1 py-2 truncate text-slate-600">
-                          {getCityFromVenue(match.venue)}
+                          {getMatchCity(
+                            match.venue,
+                            match.city,
+                            match.team_a,
+                            match.team_b
+                          )}
                         </td>
 
                         <td className="px-1 py-2 whitespace-nowrap">
-                          {hasOfficialScore ? (
+                          {statusLabel === "Terminé" ? (
                             <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-800">
                               Terminé
                             </span>
-                          ) : canPredict ? (
+                          ) : statusLabel === "Ouvert" ? (
                             <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
                               Ouvert
                             </span>
@@ -658,16 +665,16 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                         </td>
 
                         <td className="px-1 py-2 text-center font-mono text-[11px] text-slate-700">
-                          {odds.one.toFixed(2)} / {odds.draw.toFixed(2)} / {odds.two.toFixed(2)}
+                          {formatOneDecimal(odds.one)} / {formatOneDecimal(odds.draw)} / {formatOneDecimal(odds.two)}
                         </td>
 
                         <td className="px-1 py-2 text-center font-semibold text-slate-900">
-                          {myPoints !== null ? myPoints : "-"}
+                          {myPoints !== null ? formatOneDecimal(myPoints) : "-"}
                         </td>
 
                         <td className="px-1 py-2 text-center text-slate-600">
                           {averagePoints !== null
-                            ? averagePoints.toFixed(1)
+                            ? formatOneDecimal(averagePoints)
                             : "-"}
                         </td>
 

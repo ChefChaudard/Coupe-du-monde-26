@@ -4,7 +4,11 @@ import Leaderboard from "@/app/dashboard/leaderboard";
 import KnockoutBracketPrediction, {
   type BracketMatchInfo,
 } from "./KnockoutBracketPrediction";
+import type { Metadata } from "next";
 
+export const metadata: Metadata = {
+  title: "2e tours",
+};
 type Round32Teams = [string, string][];
 
 type MatchRow = {
@@ -14,6 +18,7 @@ type MatchRow = {
   team_b: string;
   kickoff_at?: string;
   venue?: string | null;
+  city?: string | null;
   score_a?: number | null;
   score_b?: number | null;
   is_finished?: boolean | null;
@@ -192,6 +197,7 @@ function buildBracketMatchInfo(matches: MatchRow[]) {
           teamB: match.team_b,
           kickoffAt: match.kickoff_at,
           venue: match.venue,
+            city: match.city,
           scoreA: match.score_a ?? null,
           scoreB: match.score_b ?? null,
           isFinished: match.is_finished ?? false,
@@ -216,7 +222,7 @@ export default async function KnockoutPage() {
 
   const { data: matches } = await supabase
     .from("matches")
-    .select("id, phase, team_a, team_b, kickoff_at, venue, score_a, score_b, is_finished");
+    .select("id, phase, team_a, team_b, kickoff_at, venue, city, score_a, score_b, is_finished");
 
   const { data: predictions } = await supabase
     .from("predictions")
@@ -259,11 +265,12 @@ export default async function KnockoutPage() {
     <main className="min-h-screen bg-slate-50 p-6">
       <div className="mx-auto grid max-w-[1800px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
         <section>
-<KnockoutBracketPrediction
-  userId={user.id}
-  round32Teams={round32Teams}
-  matchInfoById={matchInfoById}
-/>
+          <KnockoutBracketPrediction
+            userId={user.id}
+            round32Teams={round32Teams}
+            matchInfoById={matchInfoById}
+            title="2e tours"
+          />
         </section>
 
         <section>

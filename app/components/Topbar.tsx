@@ -16,10 +16,10 @@ import {
 } from "@/app/lib/time-zone";
 
 const navItems = [
-  { key: "home", label: "Page d'accueil", href: "/" },
-  { key: "groupes", label: "Pronostics Groupes", href: "/dashboard?tab=groupes" },
-  { key: "knockout", label: "Pronostics Tours Eliminatoires", href: "/knockout" },
-  { key: "realKnockout", label: "Pronostics Réels 2nd Tour", href: "/real-knockout" },
+  { key: "home", label: "Accueil", href: "/" },
+  { key: "groupes", label: "Groupes", href: "/dashboard?tab=groupes" },
+  { key: "knockout", label: "2e tours", href: "/knockout" },
+  { key: "realKnockout", label: "2e tours Réels", href: "/real-knockout" },
   { key: "tours", label: "Tours suivants", href: "/dashboard?tab=tours" },
 ];
 
@@ -259,29 +259,29 @@ export default function Topbar() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
-      <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
-        <Link href="/" className="flex shrink-0 items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-slate-900 text-sm font-semibold text-white shadow-sm">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-nowrap items-center gap-2 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
+        <Link href="/" className="flex shrink-0 items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-200 bg-slate-900 text-xs font-semibold text-white shadow-sm">
             WC
           </span>
           <span className="leading-tight">
-            <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Pronos
             </span>
-            <span className="block text-sm font-semibold text-slate-900">
+            <span className="block text-[13px] font-semibold text-slate-900">
               Coupe du Monde 2026
             </span>
           </span>
         </Link>
 
-        <nav className="flex shrink-0 flex-wrap items-center gap-2 lg:ml-4">
+        <nav className="flex shrink-0 items-center gap-1.5 lg:ml-3">
           {navItems
             .filter((item) => visibleNavKeys.includes(item.key))
             .map((item) => (
               <Link
                 key={item.key}
                 href={item.href}
-                className={`rounded-full border px-3 py-2 text-sm font-medium transition sm:px-4 ${
+                className={`whitespace-nowrap rounded-full border px-2.5 py-1.5 text-xs font-medium transition sm:px-3 sm:text-sm ${
                   currentKey === item.key
                     ? "border-slate-900 bg-slate-900 text-white shadow-sm"
                     : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
@@ -292,12 +292,12 @@ export default function Topbar() {
             ))}
         </nav>
 
-        <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-3 lg:w-auto">
+        <div className="ml-auto flex shrink-0 items-center justify-end gap-2.5">
           <GroupSelector />
 
           {simulatedNow && (
             <div className="relative shrink-0">
-              <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm">
+              <label className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-sm sm:text-sm">
                 <span className="font-medium text-slate-500">Simulation</span>
 
                 <input
@@ -306,7 +306,7 @@ export default function Topbar() {
                   onChange={(event) =>
                     updateSimulatedDate(event.target.value)
                   }
-                  className="rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 sm:text-sm"
                 />
               </label>
 
@@ -319,13 +319,13 @@ export default function Topbar() {
           )}
 
           <div className="relative shrink-0">
-            <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm">
+            <label className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-sm sm:text-sm">
               <span className="font-medium text-slate-500">Fuseau</span>
 
               <select
                 value={timeZone}
                 onChange={(event) => updateTimeZone(event.target.value)}
-                className="max-w-[190px] rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                className="max-w-[170px] rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 sm:text-sm"
               >
                 {timeZoneOptions.map((option) => (
                   <option key={option} value={option}>
@@ -343,16 +343,16 @@ export default function Topbar() {
           </div>
 
           {userName ? (
-            <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
+            <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 sm:px-4 sm:py-2 sm:text-sm"
               >
                 Déconnexion
               </button>
 
-              <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-900">
+              <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-900 sm:py-2 sm:text-sm">
                 {userName}
               </span>
             </div>
@@ -360,7 +360,7 @@ export default function Topbar() {
             <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
               <Link
                 href="/login"
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 sm:px-4 sm:py-2 sm:text-sm"
               >
                 Se connecter
               </Link>

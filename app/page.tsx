@@ -18,6 +18,10 @@ export default function Home() {
   const [profile, setProfile] = useState<ApiUser | null>(null);
 
   useEffect(() => {
+    document.title = "Accueil | Pronos WC26";
+  }, []);
+
+  useEffect(() => {
     async function loadInitialUser() {
       try {
         const res = await fetch("/api/me", { cache: "no-store" });

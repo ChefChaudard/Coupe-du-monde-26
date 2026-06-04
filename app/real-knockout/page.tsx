@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import Leaderboard from "@/app/dashboard/leaderboard";
+import { getMatchCity } from "@/app/lib/fifa-cities";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import RealKnockoutScoreForm from "./real-knockout-score-form";
 
 export const metadata: Metadata = {
-  title: "Pronostics Réel 2nd Tour",
+  title: "2e tours Réels",
 };
 
 type MatchStats = {
@@ -23,6 +24,7 @@ type Match = {
   team_b: string;
   kickoff_at: string;
   venue?: string | null;
+  city?: string | null;
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
@@ -467,6 +469,7 @@ function buildAvailableRealMatches(matches: Match[]) {
       team_b: teamB,
       kickoff_at: fixture.kickoff_at,
       venue: fixture.venue,
+      city: getMatchCity(fixture.venue),
       score_a: null,
       score_b: null,
       is_finished: false,
@@ -495,6 +498,7 @@ function buildAvailableRealMatches(matches: Match[]) {
         team_b: teamB,
         kickoff_at: getNextKickoffDate(previousMatches, index / 2 + 1),
         venue: null,
+        city: null,
         score_a: null,
         score_b: null,
         is_finished: false,

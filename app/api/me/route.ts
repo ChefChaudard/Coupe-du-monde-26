@@ -9,8 +9,16 @@ type GroupRow = {
 };
 
 type GroupRelationRow = {
-  groups?: GroupRow[];
+  groups?: GroupRow | GroupRow[];
 };
+
+function firstGroup(value: GroupRelationRow["groups"]) {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
 
 export async function GET() {
   const supabase = await createClient();
@@ -54,7 +62,7 @@ export async function GET() {
   const groups = Array.from(
     new Map(
       [...(memberships ?? []), ...(adminMemberships ?? [])]
-        .map((row: GroupRelationRow) => row.groups?.[0])
+        .map((row: GroupRelationRow) => firstGroup(row.groups))
         .filter((group): group is GroupRow => Boolean(group))
         .map((group) => [group.id, group])
     ).values()

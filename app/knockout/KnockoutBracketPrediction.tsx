@@ -6,6 +6,7 @@ import {
   formatMatchDate,
   formatMatchTime,
 } from "@/app/lib/time-zone";
+import { getMatchCity } from "@/app/lib/fifa-cities";
 import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
 import { round32Placeholders, type Round32Teams } from "./bracket-data";
 
@@ -30,6 +31,7 @@ export type BracketMatchInfo = {
   teamB: string;
   kickoffAt: string;
   venue?: string | null;
+  city?: string | null;
   scoreA: number | null;
   scoreB: number | null;
   isFinished: boolean | null;
@@ -170,11 +172,6 @@ function collectDescendants(
   }
 
   return Array.from(visited);
-}
-
-function getCityFromVenue(venue?: string | null) {
-  if (!venue) return "-";
-  return venue.split("-")[0].trim();
 }
 
 function getActualWinner(matchInfo?: BracketMatchInfo) {
@@ -488,21 +485,6 @@ if (error) {
               : null;
             const canPredict = status === "Ouvert";
 
-            const leftLabel = match.leftMatchId
-              ? getSelectedOrPossibleTeams(
-                  matchesById[match.leftMatchId],
-                  matchesById,
-                  selectedWinners
-                ).join(" / ")
-              : match.teamA;
-            const rightLabel = match.rightMatchId
-              ? getSelectedOrPossibleTeams(
-                  matchesById[match.rightMatchId],
-                  matchesById,
-                  selectedWinners
-                ).join(" / ")
-              : match.teamB;
-
             return (
               <div
                 key={match.id}
@@ -511,7 +493,14 @@ if (error) {
                 <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
                     <span>Match #{match.id}</span>
-                    <span>Ville: {getCityFromVenue(matchInfo?.venue)}</span>
+                    <span>
+                      Ville: {getMatchCity(
+                        matchInfo?.venue,
+                        matchInfo?.city,
+                        matchInfo?.teamA,
+                        matchInfo?.teamB
+                      )}
+                    </span>
                     <span>
                       Date:{" "}
                       {kickoffDate
@@ -530,7 +519,7 @@ if (error) {
                     </span>
                   </p>
                   <p className="min-w-0 font-semibold text-slate-900 sm:text-right">
-                    {leftLabel} vs {rightLabel}
+                    {match.teamA} vs {match.teamB}
                   </p>
                 </div>
 

@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import {
+  computeMatchOdds,
+  getPredictionPoints,
+  type MatchOdds,
+} from "./scoring";
+import { formatOneDecimal } from "./format";
 
 type PhaseRow = {
   phase: string;
@@ -10,18 +16,136 @@ type PhaseRow = {
   points: number;
 };
 
+type MatchRow = {
+  phase: string;
+  score_a: number | null;
+  score_b: number | null;
+  is_finished: boolean | null;
+};
+
+type PredictionRow = {
+  user_id: string;
+  match_id: number;
+  predicted_a: number;
+  predicted_b: number;
+  matches: MatchRow | MatchRow[] | null;
+};
+
+type ProfileRow = {
+  id: string;
+  nickname: string | null;
+};
+
 export default function PhaseLeaderboard() {
   const [rows, setRows] = useState<PhaseRow[]>([]);
   const [selectedPhase, setSelectedPhase] = useState<string>("");
 
   const loadRows = useCallback(async function loadRows() {
-    const { data } = await supabase
-      .from("phase_leaderboard")
-      .select("*")
-      .order("phase", { ascending: true })
-      .order("points", { ascending: false });
+    const [{ data: predictions, error: predictionsError }, { data: profiles, error: profilesError }] = await Promise.all([
+      supabase
+        .from("predictions")
+        .select(`
+          user_id,
+          match_id,
+          predicted_a,
+          predicted_b,
+          matches (
+            phase,
+            score_a,
+            score_b,
+            is_finished
+          )
+        `),
+      supabase
+        .from("profiles")
+        .select("id, nickname"),
+    ]);
 
-    const safeRows = (data ?? []) as PhaseRow[];
+    if (predictionsError) {
+      console.error(predictionsError);
+      return;
+    }
+
+    if (profilesError) {
+      console.error(profilesError);
+      return;
+    }
+
+    const profileMap = new Map(
+      (profiles ?? []).map((profile: ProfileRow) => [
+        profile.id,
+        profile.nickname ?? "Inconnu",
+      ])
+    );
+
+    const safePredictions = (predictions ?? []) as PredictionRow[];
+    const matchOddsMap = new Map<number, { predicted_a: number; predicted_b: number }[]>();
+
+    for (const prediction of safePredictions) {
+      const match = Array.isArray(prediction.matches)
+        ? prediction.matches[0]
+        : prediction.matches;
+
+      if (!match) continue;
+
+      const current = matchOddsMap.get(prediction.match_id) ?? [];
+      current.push({
+        predicted_a: prediction.predicted_a,
+        predicted_b: prediction.predicted_b,
+      });
+      matchOddsMap.set(prediction.match_id, current);
+    }
+
+    const oddsByMatchId = new Map<number, MatchOdds>();
+    for (const [matchId, list] of matchOddsMap.entries()) {
+      oddsByMatchId.set(matchId, computeMatchOdds(list));
+    }
+
+    const rowsByPhase = new Map<string, PhaseRow[]>();
+
+    for (const prediction of safePredictions) {
+      const match = Array.isArray(prediction.matches)
+        ? prediction.matches[0]
+        : prediction.matches;
+
+      if (!match) continue;
+
+      const odds = oddsByMatchId.get(prediction.match_id) ?? { one: 1, draw: 1, two: 1 };
+      const points = getPredictionPoints(
+        prediction.predicted_a,
+        prediction.predicted_b,
+        match.score_a,
+        match.score_b,
+        match.is_finished,
+        match.phase,
+        odds
+      );
+
+      if (points <= 0) continue;
+
+      const phaseRows = rowsByPhase.get(match.phase) ?? [];
+      const existing = phaseRows.find((row) => row.user_id === prediction.user_id);
+
+      if (existing) {
+        existing.points += points;
+      } else {
+        phaseRows.push({
+          phase: match.phase,
+          user_id: prediction.user_id,
+          nickname: profileMap.get(prediction.user_id) ?? "Inconnu",
+          points,
+        });
+      }
+
+      rowsByPhase.set(match.phase, phaseRows);
+    }
+
+    const safeRows = Array.from(rowsByPhase.values()).flat();
+
+    safeRows.sort((a, b) => {
+      if (a.phase !== b.phase) return a.phase.localeCompare(b.phase);
+      return b.points - a.points;
+    });
 
     setRows(safeRows);
 
@@ -40,7 +164,16 @@ export default function PhaseLeaderboard() {
         {
           event: "*",
           schema: "public",
-          table: "user_scores",
+          table: "predictions",
+        },
+        () => loadRows()
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "matches",
         },
         () => loadRows()
       )
@@ -85,7 +218,7 @@ export default function PhaseLeaderboard() {
               #{index + 1} - {row.nickname}
             </span>
 
-            <strong>{row.points} pts</strong>
+            <strong>{formatOneDecimal(row.points)} pts</strong>
           </div>
         ))}
       </div>

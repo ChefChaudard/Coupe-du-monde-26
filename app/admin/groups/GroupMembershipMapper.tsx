@@ -53,6 +53,11 @@ export default function GroupMembershipMapper({
     [users, groupMemberIds]
   );
 
+  const userById = useMemo(
+    () => new Map(users.map((user) => [user.id, user])),
+    [users]
+  );
+
   useEffect(() => {
     if (availableUsers.length === 0) {
       setSelectedUserId("");
@@ -179,7 +184,7 @@ export default function GroupMembershipMapper({
             ) : (
               groupMembers.map((membership) => (
                 <option key={membership.user_id} value={membership.user_id}>
-                  {membership.profiles?.[0]?.nickname ?? membership.user_id}
+                  {membership.profiles?.[0]?.nickname ?? userById.get(membership.user_id)?.nickname ?? userById.get(membership.user_id)?.email ?? membership.user_id}
                 </option>
               ))
             )}

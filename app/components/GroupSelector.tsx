@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 
 const STORAGE_KEY = "activeGroupId";
@@ -12,7 +12,7 @@ type GroupRow = {
 };
 
 type GroupRelationRow = {
-  groups?: GroupRow[];
+  groups?: GroupRow | GroupRow[];
 };
 
 type ActiveGroup = {
@@ -66,144 +66,159 @@ async function fetchGroupsForUser(userId: string) {
   return Array.from(
     new Map(
       [...(membershipRows ?? []), ...(adminRows ?? [])]
-        .map((row: GroupRelationRow) => row.groups?.[0])
+        .map((row: GroupRelationRow) => {
+          if (Array.isArray(row.groups)) {
+            return row.groups[0] ?? null;
+          }
+
+          return row.groups ?? null;
+        })
         .filter((group): group is GroupRow => Boolean(group))
         .map((group) => [group.id, group])
     ).values()
   );
 }
 
+function readStoredGroup() {
+  if (typeof window === "undefined") return null;
+
+  const savedId = localStorage.getItem(STORAGE_KEY);
+  const savedName = localStorage.getItem(STORAGE_NAME_KEY);
+
+  return savedId && savedName ? { id: savedId, name: savedName } : null;
+}
+
 export default function GroupSelector() {
   const [groups, setGroups] = useState<GroupRow[]>([]);
-  const [activeGroup, setActiveGroup] = useState<ActiveGroup>(() => {
-    if (typeof window === "undefined") return null;
-    const savedId = localStorage.getItem(STORAGE_KEY);
-    const savedName = localStorage.getItem(STORAGE_NAME_KEY);
-
-    return savedId && savedName ? { id: savedId, name: savedName } : null;
-  });
+  const [activeGroup, setActiveGroup] = useState<ActiveGroup>(() => readStoredGroup());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadGroups = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-    async function loadGroups() {
-      setLoading(true);
-      setError(null);
+    try {
+      const apiUser = await fetchCurrentUser();
 
-      try {
-        const apiUser = await fetchCurrentUser();
+      if (apiUser?.groups && apiUser.groups.length > 0) {
+        const loadedGroups = apiUser.groups;
+        setGroups(loadedGroups);
 
-        if (apiUser?.groups && apiUser.groups.length > 0) {
-          const loadedGroups = apiUser.groups;
+        const storedGroup = readStoredGroup();
+        const selectedGroup = storedGroup
+          ? loadedGroups.find((group) => group.id === storedGroup.id)
+          : null;
 
-          setGroups(loadedGroups);
-
-          const savedId = window.localStorage.getItem(STORAGE_KEY);
-          const savedGroup = savedId
-            ? loadedGroups.find((group) => group.id === savedId)
-            : null;
-
-          if (savedGroup) {
-            setActiveGroup(savedGroup);
-            return;
-          }
-
-          const firstGroup = loadedGroups[0];
-          window.localStorage.setItem(STORAGE_KEY, firstGroup.id);
-          window.localStorage.setItem(STORAGE_NAME_KEY, firstGroup.name);
-          setActiveGroup(firstGroup);
-          window.dispatchEvent(
-            new CustomEvent("active-group-updated", { detail: firstGroup })
-          );
+        if (selectedGroup) {
+          setActiveGroup(selectedGroup);
           return;
         }
 
-        const browserUser = await fetchBrowserUser();
+        const firstGroup = loadedGroups[0];
+        localStorage.setItem(STORAGE_KEY, firstGroup.id);
+        localStorage.setItem(STORAGE_NAME_KEY, firstGroup.name);
+        setActiveGroup(firstGroup);
+        window.dispatchEvent(new CustomEvent("active-group-updated", { detail: firstGroup }));
+        return;
+      }
 
-        if (!browserUser) {
-          if (!apiUser) {
-            setGroups([]);
-            setActiveGroup(null);
-            return;
-          }
+      const browserUser = await fetchBrowserUser();
 
-          const loadedGroups = apiUser.groups ?? [];
-
-          if (loadedGroups.length === 0) {
-            setGroups([]);
-            return;
-          }
-
-          setGroups(loadedGroups);
-
-          const savedId = window.localStorage.getItem(STORAGE_KEY);
-          const savedGroup = savedId
-            ? loadedGroups.find((group) => group.id === savedId)
-            : null;
-
-          if (savedGroup) {
-            setActiveGroup(savedGroup);
-            return;
-          }
-
-          const firstGroup = loadedGroups[0];
-          window.localStorage.setItem(STORAGE_KEY, firstGroup.id);
-          window.localStorage.setItem(STORAGE_NAME_KEY, firstGroup.name);
-          setActiveGroup(firstGroup);
-          window.dispatchEvent(
-            new CustomEvent("active-group-updated", { detail: firstGroup })
-          );
+      if (!browserUser) {
+        if (!apiUser) {
+          setGroups([]);
+          setActiveGroup(null);
           return;
         }
 
-        const loadedGroups = await fetchGroupsForUser(browserUser.id);
+        const loadedGroups = apiUser.groups ?? [];
 
         if (loadedGroups.length === 0) {
           setGroups([]);
+          setActiveGroup(null);
           return;
         }
 
         setGroups(loadedGroups);
 
-        const savedId = window.localStorage.getItem(STORAGE_KEY);
-        const savedGroup = savedId
-          ? loadedGroups.find((group) => group.id === savedId)
+        const storedGroup = readStoredGroup();
+        const selectedGroup = storedGroup
+          ? loadedGroups.find((group) => group.id === storedGroup.id)
           : null;
 
-        if (savedGroup) {
-          setActiveGroup(savedGroup);
+        if (selectedGroup) {
+          setActiveGroup(selectedGroup);
           return;
         }
 
         const firstGroup = loadedGroups[0];
-        window.localStorage.setItem(STORAGE_KEY, firstGroup.id);
-        window.localStorage.setItem(STORAGE_NAME_KEY, firstGroup.name);
+        localStorage.setItem(STORAGE_KEY, firstGroup.id);
+        localStorage.setItem(STORAGE_NAME_KEY, firstGroup.name);
         setActiveGroup(firstGroup);
-        window.dispatchEvent(
-          new CustomEvent("active-group-updated", { detail: firstGroup })
-        );
-      } catch (error) {
-        console.error("GroupSelector error", error);
-        setError("Impossible de charger les groupes.");
-      } finally {
-        setLoading(false);
+        window.dispatchEvent(new CustomEvent("active-group-updated", { detail: firstGroup }));
+        return;
       }
-    }
 
-    void loadGroups();
+      const loadedGroups = await fetchGroupsForUser(browserUser.id);
+
+      if (loadedGroups.length === 0) {
+        setGroups([]);
+        setActiveGroup(null);
+        return;
+      }
+
+      setGroups(loadedGroups);
+
+      const storedGroup = readStoredGroup();
+      const selectedGroup = storedGroup
+        ? loadedGroups.find((group) => group.id === storedGroup.id)
+        : null;
+
+      if (selectedGroup) {
+        setActiveGroup(selectedGroup);
+        return;
+      }
+
+      const firstGroup = loadedGroups[0];
+      localStorage.setItem(STORAGE_KEY, firstGroup.id);
+      localStorage.setItem(STORAGE_NAME_KEY, firstGroup.name);
+      setActiveGroup(firstGroup);
+      window.dispatchEvent(new CustomEvent("active-group-updated", { detail: firstGroup }));
+    } catch (error) {
+      console.error("GroupSelector error", error);
+      setError("Impossible de charger les groupes.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    const handler = () => {
-      const active = localStorage.getItem(STORAGE_KEY);
-      const name = localStorage.getItem(STORAGE_NAME_KEY);
+    void loadGroups();
+  }, [loadGroups]);
 
-      if (active && name) {
-        setActiveGroup({ id: active, name });
-      } else {
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!session?.user) {
+        setGroups([]);
         setActiveGroup(null);
+        setLoading(false);
+        return;
       }
+
+      await loadGroups();
+    });
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, [loadGroups]);
+
+  useEffect(() => {
+    const handler = () => {
+      const storedGroup = readStoredGroup();
+
+      setActiveGroup(storedGroup);
     };
 
     window.addEventListener("active-group-updated", handler);
@@ -212,6 +227,7 @@ export default function GroupSelector() {
 
   const handleChange = (groupId: string) => {
     const selectedGroup = groups.find((group) => group.id === groupId);
+
     if (!selectedGroup) {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(STORAGE_NAME_KEY);
@@ -223,11 +239,7 @@ export default function GroupSelector() {
     localStorage.setItem(STORAGE_KEY, selectedGroup.id);
     localStorage.setItem(STORAGE_NAME_KEY, selectedGroup.name);
     setActiveGroup(selectedGroup);
-    window.dispatchEvent(
-      new CustomEvent("active-group-updated", {
-        detail: selectedGroup,
-      })
-    );
+    window.dispatchEvent(new CustomEvent("active-group-updated", { detail: selectedGroup }));
   };
 
   if (loading) {

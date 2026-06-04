@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { DEFAULT_TIME_ZONE, getSafeTimeZone, isValidTimeZone } from "@/app/lib/time-zone";
+
+type GroupRow = {
+  id: string;
+  name: string;
+};
+
+type GroupRelationRow = {
+  groups?: GroupRow[];
+};
 
 export async function GET() {
   const supabase = await createClient();
+  const adminSupabase = createAdminClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -13,15 +23,46 @@ export async function GET() {
     return NextResponse.json({ user: null });
   }
 
-  const adminSupabase = createAdminClient();
-  const { data: profile } = await adminSupabase
+  const { data: profile, error } = await supabase
     .from("profiles")
-    .select("nickname, time_zone")
+    .select("nickname, time_zone, role, is_admin")
     .eq("id", user.id)
     .maybeSingle();
 
+  const { data: memberships, error: membershipsError } = await adminSupabase
+    .from("group_members")
+    .select("group_id, groups(id, name)")
+    .eq("user_id", user.id);
+
+  const { data: adminMemberships, error: adminMembershipsError } = await adminSupabase
+    .from("group_admins")
+    .select("group_id, groups(id, name)")
+    .eq("user_id", user.id);
+
+  if (error) {
+    console.error("Failed to fetch profile in /api/me:", error.message);
+  }
+
+  if (membershipsError) {
+    console.error("Failed to fetch groups in /api/me:", membershipsError.message);
+  }
+
+  if (adminMembershipsError) {
+    console.error("Failed to fetch admin groups in /api/me:", adminMembershipsError.message);
+  }
+
+  const groups = Array.from(
+    new Map(
+      [...(memberships ?? []), ...(adminMemberships ?? [])]
+        .map((row: GroupRelationRow) => row.groups?.[0])
+        .filter((group): group is GroupRow => Boolean(group))
+        .map((group) => [group.id, group])
+    ).values()
+  );
+
   return NextResponse.json({
     user: {
+      id: user.id,
       email: user.email,
       nickname:
         profile?.nickname ??
@@ -29,6 +70,13 @@ export async function GET() {
         user.email?.split("@")[0] ??
         null,
       timeZone: getSafeTimeZone(profile?.time_zone),
+      groups,
+      roles:
+        profile?.role
+          ? [profile.role]
+          : profile?.is_admin
+          ? ["player", "admin"]
+          : ["player"],
     },
   });
 }
@@ -50,19 +98,15 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Fuseau horaire invalide." }, { status: 400 });
   }
 
-  const adminSupabase = createAdminClient();
-  const { data: profile } = await adminSupabase
+  const { data: profile } = await supabase
     .from("profiles")
     .select("id")
     .eq("id", user.id)
     .maybeSingle();
 
   const query = profile
-    ? adminSupabase
-        .from("profiles")
-        .update({ time_zone: timeZone })
-        .eq("id", user.id)
-    : adminSupabase.from("profiles").insert({
+    ? supabase.from("profiles").update({ time_zone: timeZone }).eq("id", user.id)
+    : supabase.from("profiles").insert({
         id: user.id,
         nickname: user.email?.split("@")[0] ?? `user_${user.id.slice(0, 8)}`,
         time_zone: timeZone,

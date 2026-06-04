@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import {
   DEFAULT_TIME_ZONE,
   getSafeTimeZone,
+  getStoredTimeZone,
+  setStoredTimeZone,
   USER_TIME_ZONE_UPDATED_EVENT,
 } from "@/app/lib/time-zone";
 
@@ -24,14 +26,23 @@ export function useUserTimeZone() {
       if (!response.ok) return;
 
       const payload = (await response.json()) as CurrentUserResponse;
-      const nextTimeZone = getSafeTimeZone(payload.user?.timeZone);
+      const nextTimeZone = payload.user?.timeZone
+        ? getSafeTimeZone(payload.user.timeZone)
+        : getStoredTimeZone() ?? DEFAULT_TIME_ZONE;
 
       if (isMounted) setTimeZone(nextTimeZone);
+
+      if (payload.user?.timeZone) {
+        setStoredTimeZone(nextTimeZone);
+      }
     }
 
     function handleTimeZoneUpdated(event: Event) {
       const nextTimeZone = (event as CustomEvent<string>).detail;
-      setTimeZone(getSafeTimeZone(nextTimeZone));
+      const safeTimeZone = getSafeTimeZone(nextTimeZone);
+
+      setTimeZone(safeTimeZone);
+      setStoredTimeZone(safeTimeZone);
     }
 
     window.addEventListener(

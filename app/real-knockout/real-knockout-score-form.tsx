@@ -88,7 +88,12 @@ export default function RealKnockoutScoreForm({
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const timeZone = useUserTimeZone();
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     function handleSimulatedDateUpdated(event: Event) {
@@ -199,8 +204,8 @@ const appNowTime = new Date(effectiveNow).getTime();
           <h2 className="text-lg font-semibold text-emerald-950">Mes pronostics</h2>
         </div>
 
-        {isAdmin && (
-          <form action={syncRealMatches}>
+        {isAdmin && isMounted ? (
+          <form action={syncRealMatches} suppressHydrationWarning>
             <button
               type="submit"
               disabled={!firstRoundComplete}
@@ -209,7 +214,9 @@ const appNowTime = new Date(effectiveNow).getTime();
               Synchroniser les matchs réels
             </button>
           </form>
-        )}
+        ) : isAdmin ? (
+          <div className="h-10 w-[220px] rounded bg-transparent" aria-hidden="true" />
+        ) : null}
       </div>
 
       {!firstRoundComplete && (

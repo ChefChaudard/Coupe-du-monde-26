@@ -1,5 +1,6 @@
 export const DEFAULT_TIME_ZONE = "Europe/Paris";
 export const USER_TIME_ZONE_UPDATED_EVENT = "user-time-zone-updated";
+export const USER_TIME_ZONE_STORAGE_KEY = "preferred-time-zone";
 
 const timeZoneOptions = [
   { value: "Asia/Hong_Kong", label: "Hong Kong" },
@@ -20,6 +21,18 @@ export function isValidTimeZone(value: string) {
 
 export function getSafeTimeZone(value?: string | null) {
   return value && isValidTimeZone(value) ? value : DEFAULT_TIME_ZONE;
+}
+
+export function getStoredTimeZone() {
+  if (typeof window === "undefined") return null;
+
+  return getSafeTimeZone(window.localStorage.getItem(USER_TIME_ZONE_STORAGE_KEY));
+}
+
+export function setStoredTimeZone(timeZone: string) {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.setItem(USER_TIME_ZONE_STORAGE_KEY, getSafeTimeZone(timeZone));
 }
 
 export function formatTimeZoneLabel(timeZone: string) {

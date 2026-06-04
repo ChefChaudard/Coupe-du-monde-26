@@ -4,13 +4,47 @@ export const revalidate = 0;
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { ensureRoles } from "@/lib/roles";
 import PredictionForm from "./prediction-form";
 import Leaderboard from "./leaderboard";
+import { syncAvailableRealMatches } from "@/app/real-knockout/real-knockout-sync";
 
 type MatchStats = {
   myPoints: number | null;
   averagePoints: number | null;
 };
+
+type Prediction = {
+  user_id: string;
+  match_id: number;
+  predicted_a: number;
+  predicted_b: number;
+};
+
+type MatchOdds = {
+  one: number;
+  draw: number;
+  two: number;
+};
+
+function getPhasePointBase(phase: string) {
+  const normalizedPhase = phase.toLowerCase();
+
+  if (normalizedPhase.includes("group")) return 1;
+  if (
+    normalizedPhase.includes("16e") ||
+    normalizedPhase.includes("8e") ||
+    normalizedPhase.includes("quart")
+  ) {
+    return 2;
+  }
+  if (normalizedPhase.includes("demi") || normalizedPhase.includes("finale")) {
+    return 3;
+  }
+
+  return 1;
+}
 
 type GroupStandingRow = {
   team: string;
@@ -41,17 +75,55 @@ function getPointsForPrediction(
   predictedB: number,
   actualA: number,
   actualB: number,
-  isFinished: boolean | null
+  isFinished: boolean | null,
+  phase: string
 ) {
   if (!isFinished) return 0;
-  if (predictedA === actualA && predictedB === actualB) return 3;
+  const base = getPhasePointBase(phase);
+
+  if (predictedA === actualA && predictedB === actualB) return 3 * base;
 
   const predictedOutcome =
     predictedA > predictedB ? "A" : predictedA < predictedB ? "B" : "D";
   const actualOutcome =
     actualA > actualB ? "A" : actualA < actualB ? "B" : "D";
 
-  return predictedOutcome === actualOutcome ? 1 : 0;
+  return predictedOutcome === actualOutcome ? base : 0;
+}
+
+function computeMatchOdds(matchPredictions: Prediction[]): MatchOdds {
+  const counts = {
+    one: 0,
+    draw: 0,
+    two: 0,
+  };
+
+  for (const prediction of matchPredictions) {
+    if (prediction.predicted_a > prediction.predicted_b) {
+      counts.one += 1;
+    } else if (prediction.predicted_a < prediction.predicted_b) {
+      counts.two += 1;
+    } else {
+      counts.draw += 1;
+    }
+  }
+
+  const total = counts.one + counts.draw + counts.two;
+
+  if (total === 0) {
+    return { one: 1, draw: 1, two: 1 };
+  }
+
+  const toOdds = (count: number) => {
+    const raw = total / Math.max(count, 1);
+    return Math.max(1, Math.round(raw * 100) / 100);
+  };
+
+  return {
+    one: toOdds(counts.one),
+    draw: toOdds(counts.draw),
+    two: toOdds(counts.two),
+  };
 }
 
 function buildGroupStandings(matches: Match[]) {
@@ -245,6 +317,7 @@ export default async function DashboardPage({
   await supabase.from("profiles").insert({
     id: user.id,
     nickname,
+    roles: ensureRoles(undefined, false),
   });
 }
 
@@ -264,6 +337,7 @@ export default async function DashboardPage({
   );
 
   const matchStats: Record<number, MatchStats> = {};
+  const matchOdds: Record<number, MatchOdds> = {};
   const groupStandings = buildGroupStandings(matches ?? []);
 
   for (const match of matches ?? []) {
@@ -285,7 +359,8 @@ export default async function DashboardPage({
         prediction.predicted_b,
         match.score_a,
         match.score_b,
-        match.is_finished
+        match.is_finished,
+        match.phase
       )
     );
 
@@ -301,7 +376,8 @@ export default async function DashboardPage({
           myPrediction.predicted_b,
           match.score_a,
           match.score_b,
-          match.is_finished
+          match.is_finished,
+          match.phase
         )
       : null;
 
@@ -309,43 +385,8 @@ export default async function DashboardPage({
       myPoints,
       averagePoints,
     };
-  }
 
-  async function updateMatchResult(formData: FormData) {
-    "use server";
-
-    const supabase = await createClient();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/login");
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_admin")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile?.is_admin) {
-      throw new Error("Accès admin refusé");
-    }
-
-    const matchId = Number(formData.get("match_id"));
-    const scoreA = Number(formData.get("score_a"));
-    const scoreB = Number(formData.get("score_b"));
-
-    await supabase
-      .from("matches")
-      .update({
-        score_a: scoreA,
-        score_b: scoreB,
-        is_finished: true,
-      })
-      .eq("id", matchId);
-
-    revalidatePath("/dashboard");
+    matchOdds[match.id] = computeMatchOdds(matchPredictions);
   }
 
   async function createKnockoutMatches() {
@@ -394,6 +435,16 @@ export default async function DashboardPage({
     revalidatePath("/dashboard");
   }
 
+  async function syncRealKnockoutMatches() {
+    "use server";
+
+    const adminSupabase = createAdminClient();
+    await syncAvailableRealMatches(adminSupabase);
+
+    revalidatePath("/real-knockout");
+    revalidatePath("/dashboard");
+  }
+
   return (
     <main className="mx-auto max-w-[1800px] space-y-6 px-6 py-6 text-slate-900">
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-6">
@@ -403,9 +454,10 @@ export default async function DashboardPage({
             existingPredictions={myPredictions}
             userId={user.id}
             matchStats={matchStats}
+            matchOdds={matchOdds}
             isAdmin={isAdmin}
-            updateMatchResult={updateMatchResult}
             createKnockoutMatches={createKnockoutMatches}
+            syncRealKnockoutMatches={syncRealKnockoutMatches}
             initialTab={tab === "tours" ? "tours" : "groupes"}
           />
         </section>

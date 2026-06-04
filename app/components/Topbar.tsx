@@ -4,11 +4,14 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import GroupSelector from "@/app/components/GroupSelector";
 import {
   DEFAULT_TIME_ZONE,
   formatTimeZoneLabel,
   getSafeTimeZone,
+  getStoredTimeZone,
   getTimeZoneOptions,
+  setStoredTimeZone,
   USER_TIME_ZONE_UPDATED_EVENT,
 } from "@/app/lib/time-zone";
 
@@ -22,6 +25,7 @@ const navItems = [
 
 type CurrentUserResponse = {
   user: {
+    email?: string | null;
     nickname?: string | null;
     timeZone?: string | null;
   } | null;
@@ -50,6 +54,7 @@ function formatDateTimeLocalValue(value: string) {
 
 export default function Topbar() {
   const [userName, setUserName] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [timeZone, setTimeZone] = useState(DEFAULT_TIME_ZONE);
   const [timeZoneError, setTimeZoneError] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
@@ -65,31 +70,20 @@ export default function Topbar() {
     async function loadCurrentUser() {
       const apiUser = await fetchCurrentUser();
 
-      const { data: authData } = await supabase.auth.getUser();
-      const authUser = authData.user;
-
-      if (!authUser) {
+      if (!apiUser) {
+        setIsAuthenticated(false);
         setUserName(null);
-        setTimeZone(DEFAULT_TIME_ZONE);
+        setTimeZone(getStoredTimeZone() ?? DEFAULT_TIME_ZONE);
         return;
       }
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("nickname, time_zone")
-        .eq("id", authUser.id)
-        .maybeSingle();
+      setIsAuthenticated(true);
 
       setUserName(
-        profile?.nickname ||
-          apiUser?.nickname ||
-          authUser.email?.split("@")[0] ||
-          `user_${authUser.id.slice(0, 8)}`
+        apiUser.nickname || apiUser.email?.split("@")[0] || null
       );
 
-      setTimeZone(
-        getSafeTimeZone(profile?.time_zone || apiUser?.timeZone)
-      );
+      setTimeZone(getSafeTimeZone(apiUser.timeZone || getStoredTimeZone()));
     }
 
     void loadCurrentUser();
@@ -97,11 +91,13 @@ export default function Topbar() {
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (!session?.user) {
+          setIsAuthenticated(false);
           setUserName(null);
-          setTimeZone(DEFAULT_TIME_ZONE);
+          setTimeZone(getStoredTimeZone() ?? DEFAULT_TIME_ZONE);
           return;
         }
 
+        setIsAuthenticated(true);
         await loadCurrentUser();
       }
     );
@@ -178,9 +174,23 @@ export default function Topbar() {
 
   async function updateTimeZone(nextTimeZone: string) {
     const previousTimeZone = timeZone;
+    const safeTimeZone = getSafeTimeZone(nextTimeZone);
 
     setTimeZoneError("");
-    setTimeZone(nextTimeZone);
+    setTimeZone(safeTimeZone);
+
+    if (!isAuthenticated) {
+      setStoredTimeZone(safeTimeZone);
+
+      window.dispatchEvent(
+        new CustomEvent(USER_TIME_ZONE_UPDATED_EVENT, {
+          detail: safeTimeZone,
+        })
+      );
+
+      router.refresh();
+      return;
+    }
 
     const response = await fetch("/api/me", {
       method: "PATCH",
@@ -188,7 +198,7 @@ export default function Topbar() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        timeZone: nextTimeZone,
+        timeZone: safeTimeZone,
       }),
     });
 
@@ -209,9 +219,11 @@ export default function Topbar() {
 
     window.dispatchEvent(
       new CustomEvent(USER_TIME_ZONE_UPDATED_EVENT, {
-        detail: nextTimeZone,
+        detail: safeTimeZone,
       })
     );
+
+    setStoredTimeZone(safeTimeZone);
 
     router.refresh();
   }
@@ -246,27 +258,47 @@ export default function Topbar() {
   }, [currentKey]);
 
   return (
-    <header className="sticky top-0 z-50 overflow-x-auto border-b border-emerald-900/10 bg-white/90 shadow-[0_10px_30px_rgba(15,118,110,0.08)] backdrop-blur-xl">
-      <div className="mx-auto flex min-w-max max-w-7xl items-center gap-3 px-6 py-3">
-        <nav className="flex shrink-0 items-center gap-2">
+    <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
+        <Link href="/" className="flex shrink-0 items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-slate-900 text-sm font-semibold text-white shadow-sm">
+            WC
+          </span>
+          <span className="leading-tight">
+            <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Pronos
+            </span>
+            <span className="block text-sm font-semibold text-slate-900">
+              Coupe du Monde 2026
+            </span>
+          </span>
+        </Link>
+
+        <nav className="flex shrink-0 flex-wrap items-center gap-2 lg:ml-4">
           {navItems
             .filter((item) => visibleNavKeys.includes(item.key))
             .map((item) => (
               <Link
                 key={item.key}
                 href={item.href}
-                className="rounded-full border border-emerald-100 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-900"
+                className={`rounded-full border px-3 py-2 text-sm font-medium transition sm:px-4 ${
+                  currentKey === item.key
+                    ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+                }`}
               >
                 {item.label}
               </Link>
             ))}
         </nav>
 
-        <div className="ml-auto flex shrink-0 items-center gap-3">
+        <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-3 lg:w-auto">
+          <GroupSelector />
+
           {simulatedNow && (
             <div className="relative shrink-0">
-              <label className="flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50/80 px-3 py-2 text-sm text-emerald-950 shadow-sm">
-                <span className="font-medium">Simulation</span>
+              <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm">
+                <span className="font-medium text-slate-500">Simulation</span>
 
                 <input
                   type="datetime-local"
@@ -274,7 +306,7 @@ export default function Topbar() {
                   onChange={(event) =>
                     updateSimulatedDate(event.target.value)
                   }
-                  className="rounded border border-emerald-200 bg-white px-2 py-1 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  className="rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                 />
               </label>
 
@@ -286,47 +318,52 @@ export default function Topbar() {
             </div>
           )}
 
-          {userName && (
-            <div className="relative shrink-0">
-              <label className="flex items-center gap-2 rounded-full border border-sky-100 bg-sky-50/80 px-3 py-2 text-sm text-sky-950 shadow-sm">
-                <span className="font-medium">Fuseau</span>
+          <div className="relative shrink-0">
+            <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm">
+              <span className="font-medium text-slate-500">Fuseau</span>
 
-                <select
-                  value={timeZone}
-                  onChange={(event) =>
-                    updateTimeZone(event.target.value)
-                  }
-                  className="max-w-[190px] rounded border border-sky-200 bg-white px-2 py-1 text-sm text-slate-800 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-                >
-                  {timeZoneOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {formatTimeZoneLabel(option)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <select
+                value={timeZone}
+                onChange={(event) => updateTimeZone(event.target.value)}
+                className="max-w-[190px] rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+              >
+                {timeZoneOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {formatTimeZoneLabel(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-              {timeZoneError && (
-                <p className="absolute left-3 top-full mt-1 whitespace-nowrap text-xs text-red-600">
-                  {timeZoneError}
-                </p>
-              )}
-            </div>
-          )}
+            {timeZoneError && (
+              <p className="absolute left-3 top-full mt-1 whitespace-nowrap text-xs text-red-600">
+                {timeZoneError}
+              </p>
+            )}
+          </div>
 
-          {userName && (
+          {userName ? (
             <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700"
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
               >
                 Déconnexion
               </button>
 
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">
+              <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-900">
                 {userName}
               </span>
+            </div>
+          ) : (
+            <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
+              <Link
+                href="/login"
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+              >
+                Se connecter
+              </Link>
             </div>
           )}
         </div>

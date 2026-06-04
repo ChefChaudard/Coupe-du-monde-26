@@ -4,48 +4,61 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 
+type ApiUser = {
+  email?: string | null;
+  nickname?: string | null;
+  roles?: string[];
+  timeZone?: string | null;
+};
+
 export default function Home() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [profile, setProfile] = useState<ApiUser | null>(null);
 
   useEffect(() => {
-    const fetchProfile = async (user: any) => {
-      if (!user) {
+    async function loadInitialUser() {
+      try {
+        const res = await fetch("/api/me", { cache: "no-store" });
+        if (!res.ok) {
+          setUserEmail(null);
+          setUserName(null);
+          setIsAdmin(false);
+          return;
+        }
+
+        const payload = (await res.json()) as {
+          user?: { email?: string | null; nickname?: string | null; roles?: string[] } | null;
+        };
+
+        const apiUser = payload.user ?? null;
+        if (!apiUser) {
+          setUserEmail(null);
+          setUserName(null);
+          setProfile(null);
+          setIsAdmin(false);
+          return;
+        }
+
+        setUserEmail(apiUser.email ?? null);
+        setUserName(apiUser.nickname ?? apiUser.email?.split("@")[0] ?? null);
+        setProfile(apiUser);
+        const roles = apiUser.roles ?? [];
+        setIsAdmin(roles.includes("admin") || roles.includes("super_admin"));
+      } catch {
         setUserEmail(null);
         setUserName(null);
+        setProfile(null);
         setIsAdmin(false);
-        return;
       }
-
-      setUserEmail(user.email ?? null);
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_admin, nickname")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      setIsAdmin(!!profile?.is_admin);
-      setUserName(
-        profile?.nickname ||
-          user.email?.split("@")[0] ||
-          `user_${user.id.slice(0, 8)}`
-      );
-    };
-
-    async function loadInitialUser() {
-      const { data } = await supabase.auth.getUser();
-      await fetchProfile(data.user);
     }
 
-    loadInitialUser();
+    void loadInitialUser();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        await fetchProfile(session?.user ?? null);
-      }
-    );
+    const { data: listener } = supabase.auth.onAuthStateChange(async () => {
+      void loadInitialUser();
+    });
 
     return () => {
       listener.subscription.unsubscribe();
@@ -53,23 +66,26 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="flex min-h-[calc(100vh-72px)] items-center justify-center bg-[#12362f] p-8 text-white">
-      <div className="w-full max-w-3xl text-center">
-        <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-amber-200">
-          Pronos WC26
-        </p>
+    <main className="py-8 sm:py-10">
+      <div className="grid items-start gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <section className="rounded-3xl border border-slate-200 bg-white/85 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Pronos WC26
+          </p>
 
-        <h1 className="text-5xl font-bold tracking-tight">Coupe du Monde 2026</h1>
+          <h1 className="mt-4 max-w-2xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
+            Coupe du Monde 2026
+          </h1>
 
-        <p className="mx-auto mt-4 max-w-xl text-lg leading-7 text-emerald-50">
-          Site de pronostics entre amis, avec scores, classements et tours
-          éliminatoires au fil de la compétition.
-        </p>
+          <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
+            Une interface de pronostics claire et rapide: groupes, tours éliminatoires,
+            classement live et suivi des points sans surcharge visuelle.
+          </p>
 
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <div className="mt-8 flex flex-wrap gap-3">
           <Link
             href="/dashboard"
-            className="rounded bg-white px-6 py-3 font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-50"
+            className="rounded-full bg-slate-900 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800"
           >
             Accéder au dashboard
           </Link>
@@ -77,7 +93,7 @@ export default function Home() {
           {!userEmail && (
             <Link
               href="/login"
-              className="rounded bg-sky-600 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-sky-700"
+              className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
             >
               Se connecter
             </Link>
@@ -86,25 +102,75 @@ export default function Home() {
           {userEmail && (
             <Link
               href="/account/password"
-              className="rounded bg-white px-6 py-3 font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-50"
+              className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
             >
               Changer mon mot de passe
             </Link>
           )}
 
           {isAdmin && (
-            <Link
-              href="/admin/users"
-              className="rounded bg-amber-300 px-6 py-3 font-semibold text-emerald-950 shadow-sm transition hover:bg-amber-200"
-            >
-              Créer / gérer utilisateurs
-            </Link>
+            <>
+              <Link
+                href="/admin/users"
+                className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                Créer / gérer utilisateurs
+              </Link>
+              <Link
+                href="/admin/groups"
+                className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                Créer / gérer groupes
+              </Link>
+            </>
           )}
-        </div>
+          </div>
 
-        {userName && (
-          <p className="mt-6 text-sm font-semibold text-amber-100">{userName}</p>
-        )}
+          {userName && (
+            <div className="mt-6 max-w-xl rounded-2xl border border-slate-200 bg-slate-50 p-5 text-left text-sm text-slate-600">
+              <p className="text-base font-semibold text-slate-900">{userName}</p>
+              {profile && (
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <p><span className="font-medium text-slate-500">Email :</span> {profile.email ?? "—"}</p>
+                  <p><span className="font-medium text-slate-500">Rôle :</span> {profile.roles?.join(", ") ?? "Aucun"}</p>
+                  <p><span className="font-medium text-slate-500">Fuseau :</span> {profile.timeZone ?? "—"}</p>
+                  <p><span className="font-medium text-slate-500">Admin :</span> {isAdmin ? "oui" : "non"}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        <aside className="space-y-4">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Repères
+            </p>
+            <div className="mt-4 space-y-3 text-sm text-slate-600">
+              <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3">
+                <span>Pronostics groupes</span>
+                <span className="font-semibold text-slate-900">Base 1</span>
+              </div>
+              <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3">
+                <span>Tours éliminatoires</span>
+                <span className="font-semibold text-slate-900">Base 2 / 3</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>Vainqueur</span>
+                <span className="font-semibold text-slate-900">Bonus 4</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-slate-900 p-6 text-white shadow-[0_20px_60px_rgba(15,23,42,0.16)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-300">
+              Lecture rapide
+            </p>
+            <p className="mt-4 text-lg font-medium leading-7 text-slate-100">
+              Les pages sont désormais centrées sur la donnée, avec moins de bruit visuel et une lecture plus directe.
+            </p>
+          </div>
+        </aside>
       </div>
     </main>
   );

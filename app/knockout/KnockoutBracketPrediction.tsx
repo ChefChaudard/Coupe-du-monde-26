@@ -191,8 +191,34 @@ function getActualWinner(matchInfo?: BracketMatchInfo) {
   return null;
 }
 
+function getWinnerPointsBase(phase: string) {
+  const normalizedPhase = phase.toLowerCase();
+
+  if (normalizedPhase.includes("16e")) return 2;
+  if (normalizedPhase.includes("8e")) return 2;
+  if (normalizedPhase.includes("quart")) return 2;
+  if (normalizedPhase.includes("demi")) return 3;
+  if (normalizedPhase.includes("finale")) return 3;
+
+  return 1;
+}
+
 function getPointsForWinnerPrediction(
   selectedWinner: string,
+  matchInfo?: BracketMatchInfo,
+  phase?: string
+) {
+  const actualWinnerSide = getActualWinner(matchInfo);
+  if (!actualWinnerSide || !selectedWinner || !matchInfo) return null;
+
+  const actualWinner =
+    actualWinnerSide === "A" ? matchInfo.teamA : matchInfo.teamB;
+
+  return selectedWinner === actualWinner ? getWinnerPointsBase(phase ?? "") : 0;
+}
+
+function getChampionBonusPoints(
+  selectedWinner: string | null,
   matchInfo?: BracketMatchInfo
 ) {
   const actualWinnerSide = getActualWinner(matchInfo);
@@ -201,7 +227,7 @@ function getPointsForWinnerPrediction(
   const actualWinner =
     actualWinnerSide === "A" ? matchInfo.teamA : matchInfo.teamB;
 
-  return selectedWinner === actualWinner ? 1 : 0;
+  return selectedWinner === actualWinner ? 4 : 0;
 }
 
 function getMatchStatus(
@@ -284,8 +310,9 @@ useEffect(() => {
     const next: SelectedWinners = {};
 
     for (const row of (data ?? []) as KnockoutPredictionRow[]) {
-      if (row.winner) {
-        next[Number(row.match_key)] = row.winner;
+      const matchKey = Number(row.match_key);
+      if (row.winner && Number.isFinite(matchKey)) {
+        next[matchKey] = row.winner;
       }
     }
 
@@ -359,6 +386,21 @@ async function handleSaveKnockout() {
     updated_at: new Date().toISOString(),
   }));
 
+  const finalMatch = matchesById[31];
+  const champion = selectedWinners[31] ?? null;
+
+  if (champion && finalMatch) {
+    rows.push({
+      user_id: userId,
+      match_key: "champion",
+      round: "Vainqueur",
+      team_a: finalMatch.teamA,
+      team_b: finalMatch.teamB,
+      winner: champion,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
   const { error } = await supabase
     .from("knockout_predictions")
     .upsert(rows, {
@@ -394,6 +436,20 @@ if (error) {
   }, [bracket]);
 
   const champion = selectedWinners[31] ?? null;
+  const championBonus = getChampionBonusPoints(champion, matchInfoById[31]);
+  const totalPoints = useMemo(() => {
+    const roundPoints = bracket.reduce((sum, match) => {
+      const selected = selectedWinners[match.id];
+      const matchInfo = matchInfoById[match.id];
+      const points = selected
+        ? getPointsForWinnerPrediction(selected, matchInfo, match.phase)
+        : null;
+
+      return sum + (points ?? 0);
+    }, 0);
+
+    return roundPoints + (championBonus ?? 0);
+  }, [bracket, championBonus, matchInfoById, selectedWinners]);
   const firstRoundPhase = "16e de finale";
   const nextPhaseOrder = [
     "8e de finale",
@@ -424,7 +480,8 @@ if (error) {
             const status = getMatchStatus(matchInfo, appNowTime);
             const points = getPointsForWinnerPrediction(
               selected,
-              matchInfo
+              matchInfo,
+              match.phase
             );
             const kickoffDate = matchInfo
               ? new Date(matchInfo.kickoffAt)
@@ -544,6 +601,18 @@ if (error) {
           Champion pronostique :{" "}
           <span className="font-semibold text-slate-900">
             {champion ?? "Aucun choix"}
+          </span>
+        </p>
+        <p className="mt-2 text-slate-600">
+          Bonus vainqueur :{" "}
+          <span className="font-semibold text-slate-900">
+            {championBonus !== null ? `${championBonus} pts` : "-"}
+          </span>
+        </p>
+        <p className="mt-2 text-slate-600">
+          Total pronostics :{" "}
+          <span className="font-semibold text-slate-900">
+            {totalPoints} pts
           </span>
         </p>
 {message && <p className="mt-3 text-sm text-green-700">{message}</p>}

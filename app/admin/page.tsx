@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { isAdmin } from "@/lib/roles";
 import { redirect } from "next/navigation";
 
 async function updateMatch(formData: FormData) {
@@ -35,11 +36,11 @@ export default async function AdminPage() {
   // (optionnel mais recommandé) vérifier admin
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin")
+    .select("is_admin, roles")
     .eq("id", user.id)
     .single();
 
-  if (!profile?.is_admin) {
+  if (!profile || !isAdmin(profile)) {
     redirect("/dashboard");
   }
 

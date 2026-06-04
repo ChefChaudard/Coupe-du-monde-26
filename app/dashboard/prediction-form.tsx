@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import {
   formatDashboardDate,
@@ -44,6 +43,12 @@ type Prediction = {
 type MatchStats = {
   myPoints: number | null;
   averagePoints: number | null;
+};
+
+type MatchOdds = {
+  one: number;
+  draw: number;
+  two: number;
 };
 
 type FormValues = Record<number, { a: string; b: string }>;
@@ -250,22 +255,22 @@ export default function PredictionForm({
   existingPredictions,
   userId,
   matchStats,
+  matchOdds,
   isAdmin,
-  updateMatchResult,
   createKnockoutMatches,
+  syncRealKnockoutMatches,
   initialTab,
 }: {
   matches: Match[];
   existingPredictions: Prediction[];
   userId: string;
   matchStats: Record<number, MatchStats>;
+  matchOdds: Record<number, MatchOdds>;
   isAdmin: boolean;
-  updateMatchResult: (formData: FormData) => Promise<void>;
   createKnockoutMatches: (formData: FormData) => Promise<void>;
+  syncRealKnockoutMatches: (formData: FormData) => Promise<void>;
   initialTab?: TabKey;
 }) {
-  const router = useRouter();
-
   const initialValues = useMemo(() => {
     const values: FormValues = {};
 
@@ -465,6 +470,8 @@ const appNowTime = new Date(effectiveNow).getTime();
             return;
           }
         }
+
+        await syncRealKnockoutMatches(new FormData());
       }
 
 setMessage(`Sauvegarde effectuée pour ${phase}.`);
@@ -478,9 +485,11 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
 
   return (
     <section className="space-y-5 text-slate-900">
-      <h1 className="text-3xl font-bold tracking-tight text-slate-950">
-Pronostics Groupes au {formatDashboardDate(effectiveNow, timeZone)}
-      </h1>
+      <div className="grid gap-4 lg:flex lg:items-center lg:justify-between">
+        <h1 className="text-3xl font-bold tracking-tight text-slate-950">
+          Pronostics Groupes au {formatDashboardDate(effectiveNow, timeZone)}
+        </h1>
+      </div>
 
       <h2 className="text-lg font-semibold text-emerald-950">Mes pronostics</h2>
 
@@ -547,6 +556,7 @@ Pronostics Groupes au {formatDashboardDate(effectiveNow, timeZone)}
                     <th className="w-[60px] px-1 py-2">Heure</th>
                     <th className="w-[80px] px-1 py-2">Ville</th>
                     <th className="w-[75px] px-1 py-2">Statut</th>
+                    <th className="w-[110px] px-1 py-2 text-center">Cote</th>
                     <th className="w-[55px] px-1 py-2 text-center">Mes pts</th>
                     <th className="w-[65px] px-1 py-2 text-center">Moy. pts</th>
 
@@ -574,6 +584,11 @@ Pronostics Groupes au {formatDashboardDate(effectiveNow, timeZone)}
                     const stats = matchStats[match.id];
                     const myPoints = stats?.myPoints ?? null;
                     const averagePoints = stats?.averagePoints ?? null;
+                    const odds = matchOdds[match.id] ?? {
+                      one: 1,
+                      draw: 1,
+                      two: 1,
+                    };
 
                     return (
                       <tr
@@ -640,6 +655,10 @@ Pronostics Groupes au {formatDashboardDate(effectiveNow, timeZone)}
                               Bloqué
                             </span>
                           )}
+                        </td>
+
+                        <td className="px-1 py-2 text-center font-mono text-[11px] text-slate-700">
+                          {odds.one.toFixed(2)} / {odds.draw.toFixed(2)} / {odds.two.toFixed(2)}
                         </td>
 
                         <td className="px-1 py-2 text-center font-semibold text-slate-900">

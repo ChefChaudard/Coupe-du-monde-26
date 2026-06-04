@@ -1,21 +1,4 @@
-import type { Metadata } from "next";
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import Leaderboard from "@/app/dashboard/leaderboard";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import RealKnockoutScoreForm from "./real-knockout-score-form";
-
-export const metadata: Metadata = {
-  title: "Pronostics Réel 2nd Tour",
-};
-
-type MatchStats = {
-  myPoints: number | null;
-  averagePoints: number | null;
-};
-
-type Match = {
+export type Match = {
   id: number;
   match_number?: number | null;
   phase: string;
@@ -26,13 +9,6 @@ type Match = {
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
-};
-
-type Prediction = {
-  user_id: string;
-  match_id: number;
-  predicted_a: number;
-  predicted_b: number;
 };
 
 type NewMatchPayload = Omit<Match, "id">;
@@ -203,16 +179,6 @@ function toRealPhase(phase: string) {
   return `${realPhasePrefix}${phase}`;
 }
 
-function fromRealPhase(phase: string) {
-  return phase.startsWith(realPhasePrefix)
-    ? phase.slice(realPhasePrefix.length)
-    : phase;
-}
-
-function isRealPhase(phase: string) {
-  return phase.startsWith(realPhasePrefix);
-}
-
 function normalizeGroupName(phase: string) {
   const match =
     phase.match(/groupe\s*([A-L])/i) || phase.match(/group\s*([A-L])/i);
@@ -309,13 +275,6 @@ function isFirstRoundComplete(matches: Match[]) {
       (group) =>
         group.totalMatches > 0 && group.finishedMatches === group.totalMatches
     )
-  );
-}
-
-function countMissingFirstRoundScores(matches: Match[]) {
-  return Object.values(buildGroupInfo(matches)).reduce(
-    (total, group) => total + Math.max(group.totalMatches - group.finishedMatches, 0),
-    0
   );
 }
 
@@ -505,239 +464,17 @@ function buildAvailableRealMatches(matches: Match[]) {
   return payload;
 }
 
-function getPointsForPrediction(
-  predictedA: number,
-  predictedB: number,
-  actualA: number,
-  actualB: number,
-  isFinished: boolean | null,
-  phase: string
-) {
-  if (!isFinished) return 0;
-  const normalizedPhase = phase.toLowerCase();
-  const base = normalizedPhase.includes("group")
-    ? 1
-    : normalizedPhase.includes("16e") ||
-        normalizedPhase.includes("8e") ||
-        normalizedPhase.includes("quart")
-      ? 2
-      : normalizedPhase.includes("demi") || normalizedPhase.includes("finale")
-        ? 3
-        : 1;
-
-  if (predictedA === actualA && predictedB === actualB) return 3 * base;
-
-  const predictedOutcome =
-    predictedA > predictedB ? "A" : predictedA < predictedB ? "B" : "D";
-  const actualOutcome =
-    actualA > actualB ? "A" : actualA < actualB ? "B" : "D";
-
-  return predictedOutcome === actualOutcome ? base : 0;
-}
-
-async function syncRealMatches() {
-  "use server";
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile?.is_admin) {
-    throw new Error("Accès admin refusé");
-  }
-
-  const adminSupabase = createAdminClient();
-
-  await syncAvailableRealMatches(adminSupabase);
-
-  revalidatePath("/real-knockout");
-  revalidatePath("/dashboard");
-}
-
-async function syncAvailableRealMatches(supabase: Awaited<ReturnType<typeof createClient>>) {
+export async function syncAvailableRealMatches(supabase: any) {
   const { data: matches } = await supabase
     .from("matches")
-    .select("*")
-    .order("kickoff_at", { ascending: true });
+    .select("*");
 
   const payload = buildAvailableRealMatches((matches ?? []) as Match[]);
 
   if (payload.length > 0) {
-    await supabase.from("matches").insert(payload);
-  }
-}
-
-async function updateMatchResult(formData: FormData) {
-  "use server";
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile?.is_admin) {
-    throw new Error("Accès admin refusé");
-  }
-
-  const matchId = Number(formData.get("match_id"));
-  const scoreA = Number(formData.get("score_a"));
-  const scoreB = Number(formData.get("score_b"));
-
-  await supabase
-    .from("matches")
-    .update({
-      score_a: scoreA,
-      score_b: scoreB,
-      is_finished: true,
-    })
-    .eq("id", matchId);
-
-  await syncAvailableRealMatches(supabase);
-
-  revalidatePath("/real-knockout");
-  revalidatePath("/dashboard");
-}
-
-async function autoSyncRealMatches() {
-}
-
-export default async function RealKnockoutPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", user.id)
-    .single();
-
-  const isAdmin = profile?.is_admin === true;
-
-  const { data: matches } = await supabase
-    .from("matches")
-    .select("*")
-    .order("kickoff_at", { ascending: true });
-
-  const { data: predictions } = await supabase
-    .from("predictions")
-    .select("user_id, match_id, predicted_a, predicted_b");
-
-  const safeMatches = (matches ?? []) as Match[];
-  const firstRoundComplete = isFirstRoundComplete(safeMatches);
-  const firstRoundMissingScores = countMissingFirstRoundScores(safeMatches);
-  const realMatches = safeMatches
-    .filter((match) => isRealPhase(match.phase))
-    .map((match) => ({
-      ...match,
-      phase: fromRealPhase(match.phase),
-    }))
-    .sort((a, b) => {
-      const phaseDiff =
-        realPhaseOrder.indexOf(a.phase) - realPhaseOrder.indexOf(b.phase);
-      if (phaseDiff !== 0) return phaseDiff;
-      return (
-        new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime() ||
-        a.id - b.id
-      );
-    });
-
-  const myPredictions = ((predictions ?? []) as Prediction[]).filter(
-    (prediction) => prediction.user_id === user.id
-  );
-  const matchStats: Record<number, MatchStats> = {};
-
-  for (const match of realMatches) {
-    if (!match.is_finished || match.score_a === null || match.score_b === null) {
-      matchStats[match.id] = {
-        myPoints: null,
-        averagePoints: null,
-      };
-      continue;
+    const { error } = await supabase.from("matches").insert(payload);
+    if (error) {
+      throw new Error(error.message);
     }
-
-    const actualA = match.score_a;
-    const actualB = match.score_b;
-    const matchPredictions = ((predictions ?? []) as Prediction[]).filter(
-      (prediction) => prediction.match_id === match.id
-    );
-
-    const allPoints = matchPredictions.map((prediction) =>
-      getPointsForPrediction(
-        prediction.predicted_a,
-        prediction.predicted_b,
-        actualA,
-        actualB,
-        match.is_finished,
-        match.phase
-      )
-    );
-
-    const myPrediction = matchPredictions.find(
-      (prediction) => prediction.user_id === user.id
-    );
-
-    matchStats[match.id] = {
-      myPoints: myPrediction
-        ? getPointsForPrediction(
-            myPrediction.predicted_a,
-            myPrediction.predicted_b,
-            actualA,
-            actualB,
-            match.is_finished,
-            match.phase
-          )
-        : null,
-      averagePoints:
-        allPoints.reduce<number>((sum, points) => sum + points, 0) /
-        (allPoints.length || 1),
-    };
   }
-
-  return (
-    <main className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto grid max-w-[1800px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
-        <section>
-          <RealKnockoutScoreForm
-            matches={realMatches}
-            existingPredictions={myPredictions}
-            userId={user.id}
-            matchStats={matchStats}
-            isAdmin={isAdmin}
-            firstRoundComplete={firstRoundComplete}
-            firstRoundMissingScores={firstRoundMissingScores}
-            updateMatchResult={updateMatchResult}
-            syncRealMatches={syncRealMatches}
-          />
-        </section>
-
-        <section>
-          <div className="xl:sticky xl:top-24">
-            <Leaderboard />
-          </div>
-        </section>
-      </div>
-    </main>
-  );
 }

@@ -14,14 +14,27 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    const remembered = localStorage.getItem("rememberMe") === "true";
-    if (!remembered) return;
+    async function loadUser() {
+      const { data } = await supabase.auth.getUser();
 
-    supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
-        router.push("/dashboard");
+        router.replace("/dashboard");
       }
-    });
+    }
+
+    void loadUser();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (session?.user) {
+          router.replace("/dashboard");
+        }
+      }
+    );
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
   }, [router]);
 
   async function signIn() {
@@ -97,6 +110,7 @@ export default function LoginPage() {
       </label>
 
       <button
+        type="button"
         onClick={signIn}
         disabled={isSubmitting}
         className="w-full rounded bg-emerald-700 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"

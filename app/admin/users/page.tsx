@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ensureRoles, isAdmin, isSuperAdmin } from "@/lib/roles";
 
 async function createUser(formData: FormData) {
   "use server";
@@ -17,18 +18,22 @@ async function createUser(formData: FormData) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin")
+    .select("roles, role, is_admin")
     .eq("id", user.id)
     .single();
 
-  if (!profile?.is_admin) {
+    if (!profile || !isAdmin(profile)) {
     throw new Error("Accès admin refusé.");
   }
+
+  const canGrantAdmin = isSuperAdmin(profile);
+  const canGrantSuperAdmin = isSuperAdmin(profile);
 
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "").trim();
   const nickname = String(formData.get("nickname") ?? "").trim();
-  const isAdmin = String(formData.get("is_admin")) === "on";
+  const isAdminFlag = canGrantAdmin && String(formData.get("is_admin")) === "on";
+  const isSuperAdminFlag = canGrantSuperAdmin && String(formData.get("is_super_admin")) === "on";
 
   if (!email || !password || !nickname) {
     throw new Error("Email, mot de passe et pseudo obligatoires.");
@@ -53,7 +58,10 @@ async function createUser(formData: FormData) {
   await adminSupabase.from("profiles").upsert({
     id: createdUser.user.id,
     nickname,
-    is_admin: isAdmin,
+    is_admin: isAdminFlag,
+    roles: ensureRoles(undefined, isAdminFlag).concat(
+      isSuperAdminFlag ? ["super_admin"] : []
+    ),
   });
 
   await adminSupabase.from("user_scores").upsert({
@@ -77,17 +85,21 @@ async function updateUser(formData: FormData) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin")
+    .select("roles, role, is_admin")
     .eq("id", user.id)
     .single();
 
-  if (!profile?.is_admin) {
+    if (!profile || !isAdmin(profile)) {
     throw new Error("Accès admin refusé.");
   }
 
+  const canGrantAdmin = isSuperAdmin(profile);
+  const canGrantSuperAdmin = isSuperAdmin(profile);
+
   const userId = String(formData.get("user_id") ?? "").trim();
   const nickname = String(formData.get("nickname") ?? "").trim();
-  const isAdmin = String(formData.get("is_admin")) === "on";
+  const isAdminFlag = canGrantAdmin && String(formData.get("is_admin")) === "on";
+  const isSuperAdminFlag = canGrantSuperAdmin && String(formData.get("is_super_admin")) === "on";
   const password = String(formData.get("password") ?? "").trim();
 
   if (!userId || !nickname) {
@@ -108,7 +120,10 @@ async function updateUser(formData: FormData) {
   const { error: profileError } = await adminSupabase.from("profiles").upsert({
     id: userId,
     nickname,
-    is_admin: isAdmin,
+    is_admin: isAdminFlag,
+    roles: ensureRoles(undefined, isAdminFlag).concat(
+      isSuperAdminFlag ? ["super_admin"] : []
+    ),
   });
 
   if (profileError) {
@@ -129,13 +144,15 @@ export default async function AdminUsersPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin")
+    .select("roles, role, is_admin")
     .eq("id", user.id)
     .single();
 
-  if (!profile?.is_admin) {
+    if (!profile || !isAdmin(profile)) {
     redirect("/dashboard");
   }
+
+  const currentUserIsSuperAdmin = isSuperAdmin(profile);
 
   const adminSupabase = createAdminClient();
   const { data: usersData, error: usersError } = await adminSupabase.auth.admin.listUsers({
@@ -149,7 +166,7 @@ export default async function AdminUsersPage() {
   const userIds = usersData.users.map((existingUser) => existingUser.id);
   const { data: profileRows } = await adminSupabase
     .from("profiles")
-    .select("id, nickname, is_admin")
+    .select("id, nickname, is_admin, roles")
     .in("id", userIds);
 
   const profileMap = new Map(profileRows?.map((row) => [row.id, row]));
@@ -216,6 +233,13 @@ export default async function AdminUsersPage() {
           Créer un compte administrateur
         </label>
 
+        {currentUserIsSuperAdmin && (
+          <label className="flex items-center gap-3 text-sm font-medium">
+            <input name="is_super_admin" type="checkbox" className="h-4 w-4 rounded border-gray-300" />
+            Créer un Super Administrateur
+          </label>
+        )}
+
         <button className="w-full rounded bg-black px-4 py-3 font-semibold text-white">
           Créer le compte
         </button>
@@ -278,6 +302,18 @@ export default async function AdminUsersPage() {
                     />
                     Compte admin
                   </label>
+
+                  {currentUserIsSuperAdmin && (
+                    <label className="flex items-center gap-3 text-sm font-medium">
+                      <input
+                        name="is_super_admin"
+                        type="checkbox"
+                        defaultChecked={profile?.roles?.includes("super_admin") ?? false}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      Super Administrateur
+                    </label>
+                  )}
                 </div>
 
                 <button className="mt-4 rounded bg-black px-4 py-3 font-semibold text-white">

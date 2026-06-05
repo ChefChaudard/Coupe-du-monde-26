@@ -4,6 +4,7 @@ import Leaderboard from "@/app/dashboard/leaderboard";
 import KnockoutBracketPrediction, {
   type BracketMatchInfo,
 } from "./KnockoutBracketPrediction";
+import { formatOneDecimal } from "@/app/dashboard/format";
 import { getRealLaterFixture, type RealLaterPhase } from "../real-knockout/real-knockout-fixtures";
 import type { Metadata } from "next";
 
@@ -30,6 +31,14 @@ type PredictionRow = {
   predicted_a: number;
   predicted_b: number;
 };
+
+type KnockoutPredictionRow = {
+  match_key: string;
+  team_a: string | null;
+  team_b: string | null;
+};
+
+type TeamOddsByMatchId = Record<number, Record<string, number>>;
 
 type GroupRanking = Record<string, string[]>;
 
@@ -234,6 +243,69 @@ function collectAllGroupTeams(matches: MatchRow[]) {
   return Array.from(teams).sort((left, right) => left.localeCompare(right));
 }
 
+function getTournamentStartAt(matches: MatchRow[]) {
+  const kickoffTimes = matches
+    .map((match) => match.kickoff_at)
+    .filter((kickoffAt): kickoffAt is string => Boolean(kickoffAt))
+    .map((kickoffAt) => new Date(kickoffAt).getTime())
+    .filter((time) => Number.isFinite(time));
+
+  if (kickoffTimes.length === 0) return null;
+
+  return Math.min(...kickoffTimes);
+}
+
+function normalizeTeamLabel(value?: string | null) {
+  if (!value) return "";
+  return value.trim();
+}
+
+function buildTeamOddsByMatchId(
+  predictions: KnockoutPredictionRow[]
+): TeamOddsByMatchId {
+  const countsByMatchId = new Map<number, Map<string, number>>();
+  const totalsByMatchId = new Map<number, number>();
+
+  for (const prediction of predictions) {
+    const matchId = Number(prediction.match_key);
+    if (!Number.isFinite(matchId)) continue;
+
+    const teams = Array.from(
+      new Set([
+        normalizeTeamLabel(prediction.team_a),
+        normalizeTeamLabel(prediction.team_b),
+      ].filter(Boolean))
+    );
+
+    if (teams.length === 0) continue;
+
+    const currentCounts = countsByMatchId.get(matchId) ?? new Map<string, number>();
+    let currentTotal = totalsByMatchId.get(matchId) ?? 0;
+
+    for (const team of teams) {
+      currentCounts.set(team, (currentCounts.get(team) ?? 0) + 1);
+      currentTotal += 1;
+    }
+
+    countsByMatchId.set(matchId, currentCounts);
+    totalsByMatchId.set(matchId, currentTotal);
+  }
+
+  const oddsByMatchId: TeamOddsByMatchId = {};
+
+  for (const [matchId, counts] of countsByMatchId.entries()) {
+    const total = totalsByMatchId.get(matchId) ?? 0;
+    oddsByMatchId[matchId] = Object.fromEntries(
+      Array.from(counts.entries()).map(([team, count]) => [
+        team,
+        total === 0 ? 1 : Math.max(1, Math.round((total / Math.max(count, 1)) * 100) / 100),
+      ])
+    );
+  }
+
+  return oddsByMatchId;
+}
+
 export default async function KnockoutPage() {
   const supabase = await createClient();
   const {
@@ -254,6 +326,10 @@ export default async function KnockoutPage() {
     .from("predictions")
     .select("match_id, predicted_a, predicted_b")
     .eq("user_id", user.id);
+
+  const { data: knockoutOddsRows } = await supabase
+    .from("knockout_predictions")
+    .select("match_key, team_a, team_b");
 
   const groupRankings = buildPredictedGroupRankings(
     matches ?? [],
@@ -287,6 +363,10 @@ export default async function KnockoutPage() {
   );
   const allTeams = collectAllGroupTeams(matches ?? []);
   const matchInfoById = buildBracketMatchInfo(matches ?? []);
+  const teamOddsByMatchId = buildTeamOddsByMatchId(
+    (knockoutOddsRows ?? []) as KnockoutPredictionRow[]
+  );
+  const tournamentStartAt = getTournamentStartAt(matches ?? []);
 
   return (
     <main className="min-h-screen bg-slate-50 p-6">
@@ -297,6 +377,8 @@ export default async function KnockoutPage() {
             round32Teams={round32Teams}
             matchInfoById={matchInfoById}
             freeChoiceTeams={allTeams}
+            teamOddsByMatchId={teamOddsByMatchId}
+            tournamentStartAt={tournamentStartAt}
             title="2e tours"
             description="Cette page permet de construire vos pronostics des tours à élimination directe. Par défaut, les 16e, 8e, quarts, demies et la finale s'appuient sur les équipes issues des groupes. Si vous cochez l'option de choix libre, les listes déroulantes s'ouvrent sur les 48 pays et vous pouvez composer le tableau indépendamment des résultats de groupes."
           />

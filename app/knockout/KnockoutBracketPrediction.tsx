@@ -6,6 +6,7 @@ import {
   formatMatchDate,
   formatMatchTime,
 } from "@/app/lib/time-zone";
+import { formatOneDecimal } from "@/app/dashboard/format";
 import { getMatchCity } from "@/app/lib/fifa-cities";
 import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
 import { round32Placeholders, type Round32Teams } from "./bracket-data";
@@ -30,6 +31,8 @@ type KnockoutPredictionRow = {
 };
 
 type SelectedMatchTeams = Record<number, { a: string; b: string }>;
+
+type TeamOddsByMatchId = Record<number, Record<string, number>>;
 
 export type BracketMatchInfo = {
   teamA: string;
@@ -305,6 +308,8 @@ export default function KnockoutBracketPrediction({
   round32Teams,
   matchInfoById = {},
   freeChoiceTeams = [],
+  teamOddsByMatchId = {},
+  tournamentStartAt = null,
   storageKey = "knockoutBracketPredictions",
   title = "Pronostics Tours Eliminatoires",
   description = "Les equipes du tableau des 32 sont deduites des resultats de groupes. Pour les tours suivants, selectionnez le vainqueur de chaque match en respectant la logique des tours precedents.",
@@ -312,7 +317,9 @@ export default function KnockoutBracketPrediction({
   userId: string;
   round32Teams?: Round32Teams;
   matchInfoById?: Record<number, BracketMatchInfo>;
+  teamOddsByMatchId?: TeamOddsByMatchId;
   freeChoiceTeams?: string[];
+  tournamentStartAt?: number | null;
   storageKey?: string;
   title?: string;
   description?: string;
@@ -333,6 +340,9 @@ const [saving, setSaving] = useState(false);
 const [saveMessage, setSaveMessage] = useState<string | null>(null);
 const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
 const timeZone = useUserTimeZone();
+const appNowTime = simulatedNow ? new Date(simulatedNow).getTime() : Date.now();
+const isTournamentLocked =
+  tournamentStartAt !== null && Number.isFinite(tournamentStartAt) && appNowTime >= tournamentStartAt;
 
 useEffect(() => {
   if (typeof window === "undefined") return;
@@ -428,6 +438,8 @@ useEffect(() => {
 }, [selectedWinners, hasLoadedStorage]);
 
 function handleWinnerChange(matchId: number, value: string) {
+  if (isTournamentLocked) return;
+
   setSelectedWinners((prev) => {
     const next = { ...prev, [matchId]: value };
     const descendants = collectDescendants(matchId, childMap);
@@ -449,6 +461,8 @@ function handleTeamChange(
   side: "a" | "b",
   value: string
 ) {
+  if (isTournamentLocked) return;
+
   setSelectedTeams((prev) => {
     const next = { ...prev };
     const phaseMatches = bracket.filter((match) => match.phase === phase);
@@ -506,6 +520,8 @@ function handleTeamChange(
 }
 
 async function handleSaveKnockout() {
+  if (isTournamentLocked) return;
+
   setSaving(true);
   setSaveMessage(null);
 
@@ -609,6 +625,11 @@ if (error) {
       : null;
     const phaseSelectedTeams = getTeamsSelectedInPhase(matches, selectedTeams);
 
+    function formatTeamOption(team: string, matchId: number) {
+      const odds = teamOddsByMatchId[matchId]?.[team] ?? 1;
+      return `${team} (${formatOneDecimal(odds)})`;
+    }
+
     return (
       <div
         key={phase}
@@ -638,9 +659,6 @@ if (error) {
               (team) => team === selectedTeamB || !phaseSelectedTeams.includes(team)
             );
             const matchInfo = matchInfoById[match.id];
-            const appNowTime = simulatedNow
-              ? new Date(simulatedNow).getTime()
-              : Date.now();
             const status = getMatchStatus(matchInfo, appNowTime);
             const points = getPointsForWinnerPrediction(
               selected,
@@ -701,12 +719,13 @@ if (error) {
                           onChange={(event) =>
                             handleTeamChange(match.id, phase, "a", event.target.value)
                           }
+                          disabled={isTournamentLocked}
                           className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                         >
                           <option value="">Selectionner</option>
                           {teamAOptions.map((team) => (
                             <option key={`a-${team}`} value={team}>
-                              {team}
+                              {formatTeamOption(team, match.id)}
                             </option>
                           ))}
                         </select>
@@ -719,12 +738,13 @@ if (error) {
                           onChange={(event) =>
                             handleTeamChange(match.id, phase, "b", event.target.value)
                           }
+                          disabled={isTournamentLocked}
                           className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                         >
                           <option value="">Selectionner</option>
                           {teamBOptions.map((team) => (
                             <option key={`b-${team}`} value={team}>
-                              {team}
+                              {formatTeamOption(team, match.id)}
                             </option>
                           ))}
                         </select>
@@ -755,12 +775,13 @@ if (error) {
                         onChange={(event) =>
                           handleTeamChange(match.id, phase, "a", event.target.value)
                         }
+                        disabled={isTournamentLocked}
                         className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                       >
                         <option value="">Selectionner</option>
                         {teamAOptions.map((team) => (
                           <option key={`a-${team}`} value={team}>
-                            {team}
+                            {formatTeamOption(team, match.id)}
                           </option>
                         ))}
                       </select>
@@ -773,12 +794,13 @@ if (error) {
                         onChange={(event) =>
                           handleTeamChange(match.id, phase, "b", event.target.value)
                         }
+                        disabled={isTournamentLocked}
                         className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                       >
                         <option value="">Selectionner</option>
                         {teamBOptions.map((team) => (
                           <option key={`b-${team}`} value={team}>
-                            {team}
+                            {formatTeamOption(team, match.id)}
                           </option>
                         ))}
                       </select>
@@ -794,12 +816,13 @@ if (error) {
                       onChange={(event) =>
                         handleWinnerChange(match.id, event.target.value)
                       }
+                      disabled={isTournamentLocked}
                       className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                     >
                       <option value="">Selectionner le vainqueur</option>
                       {winnerOptions.map((team) => (
                         <option key={`winner-${match.id}-${team}`} value={team}>
-                          {team}
+                          {formatTeamOption(team, match.id)}
                         </option>
                       ))}
                     </select>
@@ -821,6 +844,7 @@ if (error) {
             type="checkbox"
             checked={isFreeChoiceMode}
             onChange={(event) => setIsFreeChoiceMode(event.target.checked)}
+            disabled={isTournamentLocked}
             className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-500"
           />
           Choix libre des équipes: les listes proposent les 48 pays et ne suivent plus les résultats des groupes.
@@ -830,7 +854,7 @@ if (error) {
           <button
             type="button"
             onClick={handleSaveKnockout}
-            disabled={saving}
+            disabled={saving || isTournamentLocked}
             className="rounded bg-[#7a1f2c] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822] disabled:opacity-60"
           >
             {saving ? "Sauvegarde..." : "Sauvegarder"}
@@ -839,12 +863,19 @@ if (error) {
           <button
             type="button"
             onClick={resetBracket}
+            disabled={isTournamentLocked}
             className="rounded bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700"
           >
             Reinitialiser le tableau
           </button>
         </div>
       </div>
+
+      {isTournamentLocked ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+          Les pronostics sont verrouilles depuis le debut du premier match de la Coupe du monde.
+        </p>
+      ) : null}
 
       <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="mb-3 text-3xl font-bold tracking-tight text-slate-950">{title}</h1>

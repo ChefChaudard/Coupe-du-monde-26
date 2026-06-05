@@ -12,7 +12,10 @@ type CreateAccountResponse = {
 export default function CreateAccountPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,8 +25,18 @@ export default function CreateAccountPage() {
     setMessage(null);
     setWarning(null);
 
-    if (!firstName || !lastName || !email) {
-      setMessage("Merci de remplir les 3 champs.");
+    if (!firstName || !lastName || !nickname || !email || !password || !confirmPassword) {
+      setMessage("Merci de remplir tous les champs.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setMessage("Les deux mots de passe ne correspondent pas.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setMessage("Le mot de passe doit contenir au moins 6 caractères.");
       return;
     }
 
@@ -39,7 +52,9 @@ export default function CreateAccountPage() {
         body: JSON.stringify({
           firstName,
           lastName,
+            nickname,
           email,
+          password,
         }),
       });
 
@@ -50,11 +65,14 @@ export default function CreateAccountPage() {
         return;
       }
 
-      setMessage("Compte créé. Vérifie ta boîte mail pour finaliser le mot de passe.");
+      setMessage("Compte créé. Le mot de passe est enregistré.");
       setWarning(payload.warning ?? null);
       setFirstName("");
       setLastName("");
+      setNickname("");
       setEmail("");
+      setPassword("");
+      setConfirmPassword("");
     } finally {
       setLoading(false);
     }
@@ -99,6 +117,17 @@ export default function CreateAccountPage() {
           </div>
 
           <label className="space-y-2 text-sm font-medium text-slate-700">
+            <span>Pseudo</span>
+            <input
+              type="text"
+              value={nickname}
+              onChange={(event) => setNickname(event.target.value)}
+              autoComplete="nickname"
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+            />
+          </label>
+
+          <label className="space-y-2 text-sm font-medium text-slate-700">
             <span>Userid / adresse mail</span>
             <input
               type="email"
@@ -108,6 +137,30 @@ export default function CreateAccountPage() {
               className="w-full rounded-xl border border-slate-200 bg-white p-3 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
             />
           </label>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              <span>Mot de passe</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="new-password"
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+              />
+            </label>
+
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              <span>Confirmer le mot de passe</span>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                autoComplete="new-password"
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+              />
+            </label>
+          </div>
 
           {message && <p className="text-sm text-slate-700">{message}</p>}
           {warning && <p className="text-sm text-amber-700">{warning}</p>}

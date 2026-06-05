@@ -14,6 +14,7 @@ import { getRealLaterFixture, type RealLaterPhase } from "./real-knockout-fixtur
 
 type Match = {
   id: number;
+  match_number?: number | null;
   phase: string;
   team_a: string;
   team_b: string;
@@ -272,6 +273,7 @@ export default function RealKnockoutScoreForm({
           const laterPhase = laterPhases.includes(phase as RealLaterPhase)
             ? (phase as RealLaterPhase)
             : null;
+          const showMatchNumber = phase === "16e de finale";
 
           return (
           <div key={phase} className="overflow-visible rounded-lg border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.07)]">
@@ -291,6 +293,9 @@ export default function RealKnockoutScoreForm({
             <table className="w-full table-fixed text-xs">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50 text-left font-semibold text-slate-500">
+                  {showMatchNumber ? (
+                    <th className="w-[54px] px-1 py-2 text-center">N°</th>
+                  ) : null}
                   <th className="w-[13%] py-2 pr-1">Équipe A</th>
                   <th className="w-[44px] px-1 py-2 text-center">A</th>
                   <th className="w-[44px] px-1 py-2 text-center">B</th>
@@ -299,7 +304,7 @@ export default function RealKnockoutScoreForm({
                   <th className="w-[60px] px-1 py-2">Heure</th>
                   <th className="w-[80px] px-1 py-2">Ville</th>
                   <th className="w-[75px] px-1 py-2">Statut</th>
-                  <th className="w-[120px] px-1 py-2 text-center">Cote</th>
+                  <th className="w-[120px] px-1 py-2 text-center">Cote 1-N-2</th>
                   <th className="w-[55px] px-1 py-2 text-center">Mes pts</th>
                   <th className="w-[65px] px-1 py-2 text-center">Moy. pts</th>
 
@@ -340,6 +345,12 @@ export default function RealKnockoutScoreForm({
 
                   return (
                     <tr key={match.id} className="border-b border-slate-100 transition last:border-b-0 hover:bg-slate-100/70">
+                      {showMatchNumber ? (
+                        <td className="px-1 py-2 text-center font-semibold text-slate-700">
+                          {match.match_number ?? match.id}
+                        </td>
+                      ) : null}
+
                       <td className="py-2 pr-1 font-medium truncate text-slate-900">
                         {match.team_a}
                       </td>

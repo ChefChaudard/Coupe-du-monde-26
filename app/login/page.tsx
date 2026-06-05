@@ -72,51 +72,57 @@ export default function LoginPage() {
       <h1 className="mb-2 text-3xl font-bold tracking-tight text-slate-950">Connexion</h1>
       <p className="mb-6 text-sm text-slate-500">Accès à vos pronostics Coupe du Monde 2026.</p>
 
-      <input
-        type="email"
-        placeholder="email@exemple.com"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="mb-4 w-full rounded border border-slate-200 bg-white p-3 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
-        autoComplete="username"
-      />
-
-      <div className="mb-4 relative">
-        <input
-          type={showPassword ? "text" : "password"}
-          placeholder="Mot de passe"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded border border-slate-200 bg-white p-3 pr-24 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
-          autoComplete="current-password"
-        />
-        <button
-          type="button"
-          onClick={() => setShowPassword((prev) => !prev)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 rounded bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
-        >
-          {showPassword ? "Masquer" : "Afficher"}
-        </button>
-      </div>
-
-      <label className="mb-4 flex items-center gap-3 text-sm text-slate-700">
-        <input
-          type="checkbox"
-          checked={rememberMe}
-          onChange={(e) => setRememberMe(e.target.checked)}
-          className="h-4 w-4 rounded border-gray-300 text-slate-600 focus:ring-slate-500"
-        />
-        Se souvenir de moi
-      </label>
-
-      <button
-        type="button"
-        onClick={signIn}
-        disabled={isSubmitting}
-        className="w-full rounded bg-slate-700 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void signIn();
+        }}
       >
-        Se connecter
-      </button>
+        <input
+          type="email"
+          placeholder="email@exemple.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="mb-4 w-full rounded border border-slate-200 bg-white p-3 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+          autoComplete="username"
+        />
+
+        <div className="mb-4 relative">
+          <input
+            type={showPassword ? "text" : "password"}
+            placeholder="Mot de passe"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded border border-slate-200 bg-white p-3 pr-24 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+            autoComplete="current-password"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((prev) => !prev)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+          >
+            {showPassword ? "Masquer" : "Afficher"}
+          </button>
+        </div>
+
+        <label className="mb-4 flex items-center gap-3 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 text-slate-600 focus:ring-slate-500"
+          />
+          Se souvenir de moi
+        </label>
+
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full rounded bg-slate-700 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Se connecter
+        </button>
+      </form>
 
       <div className="mt-4 space-y-2 text-sm text-slate-600">
         <p className="text-slate-500">

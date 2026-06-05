@@ -2,9 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { listAdminUsers } from "@/lib/supabase/admin-users";
 import { revalidatePath } from "next/cache";
 import { isAdmin, isSuperAdmin } from "@/lib/roles";
 import GroupMembershipMapper from "./GroupMembershipMapper";
+import { resetGroupsToDefault } from "./actions";
+import ResetGroupsForm from "./ResetGroupsForm";
 
 type GroupRow = {
   id: string;
@@ -228,15 +231,9 @@ export default async function AdminGroupsPage() {
     throw new Error(membershipsError.message);
   }
 
-  const { data: usersData, error: usersError } = await adminSupabase.auth.admin.listUsers({
-    perPage: 200,
-  });
+  const usersData = await listAdminUsers(200);
 
-  if (usersError || !usersData) {
-    throw new Error(usersError?.message ?? "Impossible de charger les comptes utilisateur.");
-  }
-
-  const userIds = usersData.users.map((existingUser) => existingUser.id);
+  const userIds = usersData.map((existingUser) => existingUser.id);
   const { data: profileRows } = await adminSupabase
     .from("profiles")
     .select("id, nickname")
@@ -244,7 +241,7 @@ export default async function AdminGroupsPage() {
 
   const profileMap = new Map(profileRows?.map((row: { id: string; nickname: string | null }) => [row.id, row.nickname]));
 
-  const users = usersData.users.map((existingUser) => ({
+  const users = usersData.map((existingUser) => ({
     id: existingUser.id,
     email: existingUser.email ?? null,
     firstName: existingUser.user_metadata?.first_name ?? null,
@@ -336,6 +333,24 @@ export default async function AdminGroupsPage() {
           </div>
         )}
       </section>
+
+      {superAdmin && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
+          <h2 className="mb-4 text-3xl font-bold text-amber-900">Réinitialiser tous les groupes</h2>
+
+          <div className="space-y-4 text-sm text-amber-950">
+            <p>
+              Cette opération supprime tous les groupes existants, conserve uniquement <strong>7eme WC2026</strong>,
+              puis affecte automatiquement tous les utilisateurs à ce groupe.
+            </p>
+            <p>
+              L’action est réservée aux super administrateurs et elle est définitive pour la structure des groupes.
+            </p>
+
+            <ResetGroupsForm action={resetGroupsToDefault} />
+          </div>
+        </section>
+      )}
 
       <GroupMembershipMapper
         groups={groups ?? []}

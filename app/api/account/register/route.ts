@@ -10,26 +10,30 @@ export async function POST(request: NextRequest) {
   const payload = (await request.json().catch(() => ({}))) as {
     firstName?: string;
     lastName?: string;
+    nickname?: string;
     email?: string;
+    password?: string;
   };
 
   const firstName = normalizeField(payload.firstName);
   const lastName = normalizeField(payload.lastName);
+  const nickname = normalizeField(payload.nickname);
   const email = normalizeField(payload.email).toLowerCase();
+  const password = normalizeField(payload.password);
 
-  if (!firstName || !lastName || !email) {
+  if (!firstName || !lastName || !email || !password) {
     return NextResponse.json(
-      { error: "Prenom, nom et email sont obligatoires." },
+      { error: "Prenom, nom, email et mot de passe sont obligatoires." },
       { status: 400 }
     );
   }
 
   const adminSupabase = createAdminClient();
-  const temporaryPassword = `${crypto.randomUUID()}Aa1!`;
+  const defaultGroupName = "7eme WC2026";
 
   const { data: createdUser, error: createError } = await adminSupabase.auth.admin.createUser({
     email,
-    password: temporaryPassword,
+    password,
     email_confirm: true,
     user_metadata: {
       first_name: firstName,
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest) {
 
   const { error: profileError } = await adminSupabase.from("profiles").upsert({
     id: createdUser.user.id,
-    nickname: `${firstName} ${lastName}`.trim(),
+    nickname: nickname || `${firstName} ${lastName}`.trim(),
     roles: ensureRoles(undefined, false),
   });
 
@@ -63,15 +67,45 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: scoreError.message }, { status: 500 });
   }
 
-  const redirectTo = new URL("/reset-password", request.nextUrl.origin).toString();
-  const { error: recoveryError } = await adminSupabase.auth.resetPasswordForEmail(email, {
-    redirectTo,
+  const { data: defaultGroup, error: groupError } = await adminSupabase
+    .from("groups")
+    .select("id")
+    .eq("name", defaultGroupName)
+    .maybeSingle();
+
+  if (groupError) {
+    return NextResponse.json({ error: groupError.message }, { status: 500 });
+  }
+
+  let targetGroupId = defaultGroup?.id ?? null;
+
+  if (!targetGroupId) {
+    const { data: createdGroup, error: createGroupError } = await adminSupabase
+      .from("groups")
+      .insert({ name: defaultGroupName, created_by: null })
+      .select("id")
+      .single();
+
+    if (createGroupError || !createdGroup) {
+      return NextResponse.json(
+        { error: createGroupError?.message ?? "Impossible de créer le groupe par défaut." },
+        { status: 500 }
+      );
+    }
+
+    targetGroupId = createdGroup.id;
+  }
+
+  const { error: membershipError } = await adminSupabase.from("group_members").upsert({
+    group_id: targetGroupId,
+    user_id: createdUser.user.id,
   });
+
+  if (membershipError) {
+    return NextResponse.json({ error: membershipError.message }, { status: 500 });
+  }
 
   return NextResponse.json({
     ok: true,
-    warning: recoveryError
-      ? "Le compte a ete cree, mais l'email de finalisation n'a pas pu etre envoye. Un admin pourra reinitialiser le mot de passe au besoin."
-      : null,
   });
 }

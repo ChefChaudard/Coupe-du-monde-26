@@ -146,6 +146,90 @@ function buildLiveGroupStandings(matches: Match[], appNowTime: number) {
   return standings;
 }
 
+function buildPredictedGroupStandings(
+  matches: Match[],
+  values: FormValues
+) {
+  const standings: Record<string, GroupStandingRow[]> = {};
+
+  const getOrCreateTeam = (groupName: string, team: string) => {
+    if (!standings[groupName]) standings[groupName] = [];
+
+    let row = standings[groupName].find((item) => item.team === team);
+
+    if (!row) {
+      row = {
+        team,
+        played: 0,
+        won: 0,
+        drawn: 0,
+        lost: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        goalDifference: 0,
+        points: 0,
+      };
+
+      standings[groupName].push(row);
+    }
+
+    return row;
+  };
+
+  for (const match of matches) {
+    const groupName = match.phase;
+    if (!isGroupPhase(groupName)) continue;
+
+    const entry = values[match.id];
+    if (!entry || entry.a === "" || entry.b === "") continue;
+
+    const predictedA = Number(entry.a);
+    const predictedB = Number(entry.b);
+    if (Number.isNaN(predictedA) || Number.isNaN(predictedB)) continue;
+
+    const teamA = getOrCreateTeam(groupName, match.team_a);
+    const teamB = getOrCreateTeam(groupName, match.team_b);
+
+    teamA.played += 1;
+    teamB.played += 1;
+    teamA.goalsFor += predictedA;
+    teamA.goalsAgainst += predictedB;
+    teamB.goalsFor += predictedB;
+    teamB.goalsAgainst += predictedA;
+
+    if (predictedA > predictedB) {
+      teamA.won += 1;
+      teamB.lost += 1;
+      teamA.points += 3;
+    } else if (predictedA < predictedB) {
+      teamB.won += 1;
+      teamA.lost += 1;
+      teamB.points += 3;
+    } else {
+      teamA.drawn += 1;
+      teamB.drawn += 1;
+      teamA.points += 1;
+      teamB.points += 1;
+    }
+
+    teamA.goalDifference = teamA.goalsFor - teamA.goalsAgainst;
+    teamB.goalDifference = teamB.goalsFor - teamB.goalsAgainst;
+  }
+
+  for (const groupName of Object.keys(standings)) {
+    standings[groupName].sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.goalDifference !== a.goalDifference) {
+        return b.goalDifference - a.goalDifference;
+      }
+      if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
+      return a.team.localeCompare(b.team);
+    });
+  }
+
+  return standings;
+}
+
 const knockoutPhaseOrder = [
   "32e de finale",
   "16e de finale",
@@ -383,10 +467,10 @@ export default function PredictionForm({
 
 const appNowTime = new Date(effectiveNow).getTime();
 
-  const liveGroupStandings = useMemo(() => {
+  const predictedGroupStandings = useMemo(() => {
     if (!appNowTime) return {};
-    return buildLiveGroupStandings(matches, appNowTime);
-  }, [matches, appNowTime]);
+    return buildPredictedGroupStandings(matches, values);
+  }, [matches, appNowTime, values]);
 
   function updateValue(matchId: number, side: "a" | "b", value: string) {
     setValues((prev) => ({
@@ -534,7 +618,7 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                 {selectedTab === "groupes" ? (
                   <GroupStandingsTooltip
                     groupName={phase}
-                    standings={liveGroupStandings[phase] ?? []}
+                    standings={predictedGroupStandings[phase] ?? []}
                   />
                 ) : (
                   <span className="capitalize">{phase}</span>
@@ -562,7 +646,7 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                     <th className="w-[60px] px-1 py-2">Heure</th>
                     <th className="w-[80px] px-1 py-2">Ville</th>
                     <th className="w-[75px] px-1 py-2">Statut</th>
-                    <th className="w-[110px] px-1 py-2 text-center">Cote</th>
+                    <th className="w-[110px] px-1 py-2 text-center">Cote 1-N-2</th>
                     <th className="w-[55px] px-1 py-2 text-center">Mes pts</th>
                     <th className="w-[65px] px-1 py-2 text-center">Moy. pts</th>
 

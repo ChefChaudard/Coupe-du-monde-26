@@ -584,6 +584,8 @@ if (error) {
             const displayVenue = matchInfo?.venue ?? phaseFixture?.venue ?? null;
             const displayCity = matchInfo?.city ?? phaseFixture?.city ?? null;
             const isFirstRound = phase === firstRoundPhase;
+            const isFinal = phase === "Finale";
+            const winnerOptions = isFinal ? possibleTeams : [];
 
             return (
               <div
@@ -708,6 +710,26 @@ if (error) {
                     </label>
                   </div>
                 )}
+
+                {isFinal ? (
+                  <label className="space-y-1 text-sm font-medium text-slate-600">
+                    <span>Vainqueur</span>
+                    <select
+                      value={selected}
+                      onChange={(event) =>
+                        handleWinnerChange(match.id, event.target.value)
+                      }
+                      className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                    >
+                      <option value="">Selectionner le vainqueur</option>
+                      {winnerOptions.map((team) => (
+                        <option key={`winner-${match.id}-${team}`} value={team}>
+                          {team}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </div>
             );
           })}

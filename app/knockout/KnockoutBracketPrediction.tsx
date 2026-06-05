@@ -98,14 +98,29 @@ function dedupe(values: string[]) {
   return Array.from(new Set(values));
 }
 
+function isSyntheticTeamLabel(value: string) {
+  return /^(Vainqueur|1er du groupe|2eme du groupe|3eme du groupe)\b/i.test(
+    value.trim()
+  );
+}
+
+function normalizeTeamSelection(value?: string | null) {
+  if (!value || isSyntheticTeamLabel(value)) return "";
+  return value;
+}
+
 function getSelectedOrPossibleTeams(
   match: BracketMatch,
   matchesById: Record<number, BracketMatch>,
   selectedTeams: SelectedMatchTeams
 ): string[] {
   const selected = selectedTeams[match.id];
-  if (selected?.a || selected?.b) {
-    return dedupe([selected.a, selected.b].filter(Boolean));
+  const selectedTeamsList = [selected?.a, selected?.b]
+    .map((team) => normalizeTeamSelection(team))
+    .filter(Boolean);
+
+  if (selectedTeamsList.length > 0) {
+    return dedupe(selectedTeamsList);
   }
 
   if (!match.leftMatchId || !match.rightMatchId) {
@@ -344,10 +359,13 @@ useEffect(() => {
         next[matchKey] = row.winner;
       }
 
-      if (Number.isFinite(matchKey) && (row.team_a || row.team_b)) {
+      const teamA = normalizeTeamSelection(row.team_a);
+      const teamB = normalizeTeamSelection(row.team_b);
+
+      if (Number.isFinite(matchKey) && (teamA || teamB)) {
         nextTeams[matchKey] = {
-          a: row.team_a ?? "",
-          b: row.team_b ?? "",
+          a: teamA,
+          b: teamB,
         };
       }
     }
@@ -431,12 +449,14 @@ async function handleSaveKnockout() {
     user_id: userId,
     match_key: String(match.id),
     round: match.phase,
-    team_a: isFreeChoiceMode
-      ? selectedTeams[match.id]?.a ?? match.teamA
-      : match.teamA,
-    team_b: isFreeChoiceMode
-      ? selectedTeams[match.id]?.b ?? match.teamB
-      : match.teamB,
+    team_a:
+      normalizeTeamSelection(
+        isFreeChoiceMode ? selectedTeams[match.id]?.a ?? match.teamA : match.teamA
+      ) || null,
+    team_b:
+      normalizeTeamSelection(
+        isFreeChoiceMode ? selectedTeams[match.id]?.b ?? match.teamB : match.teamB
+      ) || null,
     winner: selectedWinners[match.id] ?? null,
     updated_at: new Date().toISOString(),
   }));
@@ -540,8 +560,12 @@ if (error) {
               isFreeChoiceMode ? freeChoiceTeams : undefined
             );
             const selected = selectedWinners[match.id] ?? "";
-            const selectedTeamA = selectedTeams[match.id]?.a ?? match.teamA;
-            const selectedTeamB = selectedTeams[match.id]?.b ?? match.teamB;
+            const selectedTeamA = normalizeTeamSelection(
+              selectedTeams[match.id]?.a ?? match.teamA
+            );
+            const selectedTeamB = normalizeTeamSelection(
+              selectedTeams[match.id]?.b ?? match.teamB
+            );
             const matchInfo = matchInfoById[match.id];
             const appNowTime = simulatedNow
               ? new Date(simulatedNow).getTime()

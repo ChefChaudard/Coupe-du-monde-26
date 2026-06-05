@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { computeMatchOdds, type MatchOdds } from "@/app/dashboard/scoring";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import Leaderboard from "@/app/dashboard/leaderboard";
@@ -37,6 +38,8 @@ type Prediction = {
   predicted_a: number;
   predicted_b: number;
 };
+
+type MatchOddsById = Record<number, MatchOdds>;
 
 type NewMatchPayload = Omit<Match, "id">;
 
@@ -429,6 +432,18 @@ function getWinner(match: Match) {
   return null;
 }
 
+function getTournamentStartAt(matches: Match[]) {
+  const kickoffTimes = matches
+    .map((match) => match.kickoff_at)
+    .filter((kickoffAt): kickoffAt is string => Boolean(kickoffAt))
+    .map((kickoffAt) => new Date(kickoffAt).getTime())
+    .filter((time) => Number.isFinite(time));
+
+  if (kickoffTimes.length === 0) return null;
+
+  return Math.min(...kickoffTimes);
+}
+
 function buildAvailableRealMatches(matches: Match[]) {
   if (!isFirstRoundComplete(matches)) return [];
 
@@ -679,6 +694,7 @@ export default async function RealKnockoutPage() {
   const safeMatches = (matches ?? []) as Match[];
   const firstRoundComplete = isFirstRoundComplete(safeMatches);
   const firstRoundMissingScores = countMissingFirstRoundScores(safeMatches);
+  const tournamentStartAt = getTournamentStartAt(safeMatches);
   const realMatches = safeMatches
     .filter((match) => isRealPhase(match.phase))
     .map((match) => ({
@@ -698,6 +714,19 @@ export default async function RealKnockoutPage() {
   const myPredictions = ((predictions ?? []) as Prediction[]).filter(
     (prediction) => prediction.user_id === user.id
   );
+  const matchOdds: MatchOddsById = {};
+
+  for (const match of realMatches) {
+    const matchPredictions = ((predictions ?? []) as Prediction[])
+      .filter((prediction) => prediction.match_id === match.id)
+      .map((prediction) => ({
+        predicted_a: prediction.predicted_a,
+        predicted_b: prediction.predicted_b,
+      }));
+
+    matchOdds[match.id] = computeMatchOdds(matchPredictions);
+  }
+
   const matchStats: Record<number, MatchStats> = {};
 
   for (const match of realMatches) {
@@ -756,9 +785,11 @@ export default async function RealKnockoutPage() {
             existingPredictions={myPredictions}
             userId={user.id}
             matchStats={matchStats}
+            matchOdds={matchOdds}
             isAdmin={isAdmin}
             firstRoundComplete={firstRoundComplete}
             firstRoundMissingScores={firstRoundMissingScores}
+            tournamentStartAt={tournamentStartAt}
             updateMatchResult={updateMatchResult}
             syncRealMatches={syncRealMatches}
           />

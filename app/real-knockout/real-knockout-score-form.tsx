@@ -36,6 +36,12 @@ type MatchStats = {
   averagePoints: number | null;
 };
 
+type MatchOdds = {
+  one: number;
+  draw: number;
+  two: number;
+};
+
 type FormValues = Record<number, { a: string; b: string }>;
 
 export default function RealKnockoutScoreForm({
@@ -43,9 +49,11 @@ export default function RealKnockoutScoreForm({
   existingPredictions,
   userId,
   matchStats,
+  matchOdds,
   isAdmin,
   firstRoundComplete,
   firstRoundMissingScores,
+  tournamentStartAt = null,
   updateMatchResult,
   syncRealMatches,
 }: {
@@ -53,9 +61,11 @@ export default function RealKnockoutScoreForm({
   existingPredictions: Prediction[];
   userId: string;
   matchStats: Record<number, MatchStats>;
+  matchOdds: Record<number, MatchOdds>;
   isAdmin: boolean;
   firstRoundComplete: boolean;
   firstRoundMissingScores: number;
+  tournamentStartAt?: number | null;
   updateMatchResult: (formData: FormData) => Promise<void>;
   syncRealMatches: (formData: FormData) => Promise<void>;
 }) {
@@ -105,6 +115,10 @@ export default function RealKnockoutScoreForm({
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const timeZone = useUserTimeZone();
+  const effectiveNow = simulatedNow ?? matches[0]?.kickoff_at ?? new Date(0).toISOString();
+  const appNowTime = new Date(effectiveNow).getTime();
+  const isTournamentLocked =
+    tournamentStartAt !== null && Number.isFinite(tournamentStartAt) && appNowTime >= tournamentStartAt;
 
   useEffect(() => {
     setIsMounted(true);
@@ -144,12 +158,9 @@ export default function RealKnockoutScoreForm({
     };
   }, []);
 
-  const effectiveNow =
-  simulatedNow ?? matches[0]?.kickoff_at ?? new Date(0).toISOString();
-
-const appNowTime = new Date(effectiveNow).getTime();
-
   function updateValue(matchId: number, side: "a" | "b", value: string) {
+    if (isTournamentLocked) return;
+
     setValues((prev) => ({
       ...prev,
       [matchId]: {
@@ -160,6 +171,8 @@ const appNowTime = new Date(effectiveNow).getTime();
   }
 
   async function saveGroup(matchesInGroup: Match[], phase: string) {
+    if (isTournamentLocked) return;
+
     setMessage("");
     setSavingGroup(phase);
 
@@ -169,8 +182,7 @@ const appNowTime = new Date(effectiveNow).getTime();
       const entry = values[match.id];
       if (!entry || entry.a === "" || entry.b === "") continue;
 
-      const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
-      if (!firstRoundComplete || hasStarted) continue;
+      if (!firstRoundComplete) continue;
 
       const predictedA = Number(entry.a);
       const predictedB = Number(entry.b);
@@ -223,7 +235,7 @@ const appNowTime = new Date(effectiveNow).getTime();
           <form action={syncRealMatches} suppressHydrationWarning>
             <button
               type="submit"
-              disabled={!firstRoundComplete}
+              disabled={!firstRoundComplete || isTournamentLocked}
               className="rounded bg-slate-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               Synchroniser les matchs réels
@@ -234,7 +246,11 @@ const appNowTime = new Date(effectiveNow).getTime();
         ) : null}
       </div>
 
-      {!firstRoundComplete && (
+      {isTournamentLocked ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-center text-amber-900 shadow-sm">
+          <p>Les pronostics du 2nd tour sont verrouillés depuis le début du premier match de la Coupe du monde.</p>
+        </div>
+      ) : !firstRoundComplete ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
           <p>Les pronostics du 2nd tour ouvriront quand le 1er tour sera terminé.</p>
           {firstRoundMissingScores > 0 && (
@@ -245,9 +261,9 @@ const appNowTime = new Date(effectiveNow).getTime();
             </p>
           )}
         </div>
-      )}
+      ) : null}
 
-      {firstRoundComplete && groupedMatches.length === 0 ? (
+      {!isTournamentLocked && firstRoundComplete && groupedMatches.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
           Aucun match réel du 2nd tour n&apos;est disponible pour le moment.
         </div>
@@ -264,7 +280,7 @@ const appNowTime = new Date(effectiveNow).getTime();
 
               <button
                 onClick={() => saveGroup(phaseMatches, phase)}
-                disabled={savingGroup === phase || !firstRoundComplete}
+                disabled={savingGroup === phase || !firstRoundComplete || isTournamentLocked}
                 className="rounded bg-[#7a1f2c] px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {savingGroup === phase ? "Sauvegarde..." : "Sauvegarder"}
@@ -283,6 +299,7 @@ const appNowTime = new Date(effectiveNow).getTime();
                   <th className="w-[60px] px-1 py-2">Heure</th>
                   <th className="w-[80px] px-1 py-2">Ville</th>
                   <th className="w-[75px] px-1 py-2">Statut</th>
+                  <th className="w-[120px] px-1 py-2 text-center">Cote</th>
                   <th className="w-[55px] px-1 py-2 text-center">Mes pts</th>
                   <th className="w-[65px] px-1 py-2 text-center">Moy. pts</th>
 
@@ -317,6 +334,7 @@ const appNowTime = new Date(effectiveNow).getTime();
                     match.score_b !== null;
 
                   const stats = matchStats[match.id];
+                  const odds = matchOdds[match.id] ?? { one: 1, draw: 1, two: 1 };
                   const myPoints = stats?.myPoints ?? null;
                   const averagePoints = stats?.averagePoints ?? null;
 
@@ -334,7 +352,7 @@ const appNowTime = new Date(effectiveNow).getTime();
                           onChange={(event) =>
                             updateValue(match.id, "a", event.target.value)
                           }
-                          disabled={!canPredict}
+                          disabled={!canPredict || isTournamentLocked}
                           className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
@@ -347,7 +365,7 @@ const appNowTime = new Date(effectiveNow).getTime();
                           onChange={(event) =>
                             updateValue(match.id, "b", event.target.value)
                           }
-                          disabled={!canPredict}
+                          disabled={!canPredict || isTournamentLocked}
                           className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
@@ -384,6 +402,10 @@ const appNowTime = new Date(effectiveNow).getTime();
                         )}
                       </td>
 
+                      <td className="px-1 py-2 text-center text-slate-600">
+                        {formatOneDecimal(odds.one)} / {formatOneDecimal(odds.draw)} / {formatOneDecimal(odds.two)}
+                      </td>
+
                       <td className="px-1 py-2 text-center font-semibold text-slate-900">
                         {myPoints !== null ? formatOneDecimal(myPoints) : "-"}
                       </td>
@@ -404,11 +426,12 @@ const appNowTime = new Date(effectiveNow).getTime();
                             {match.score_b ?? "-"}
                           </td>
 
-                          <td className="py-2 pl-1 text-right">
+                          <td className="py-2 pl-1 text-right" suppressHydrationWarning>
                             {canEnterRealScore && (
                               <form
                                 action={updateMatchResult}
                                 className="flex justify-end gap-1"
+                                suppressHydrationWarning
                               >
                                 <input
                                   type="hidden"

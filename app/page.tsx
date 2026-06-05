@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import {
+  USER_TIME_ZONE_UPDATED_EVENT,
+  getSafeTimeZone,
+} from "@/app/lib/time-zone";
 
 type ApiUser = {
   email?: string | null;
@@ -28,12 +32,18 @@ export default function Home() {
         if (!res.ok) {
           setUserEmail(null);
           setUserName(null);
+          setProfile(null);
           setIsAdmin(false);
           return;
         }
 
         const payload = (await res.json()) as {
-          user?: { email?: string | null; nickname?: string | null; roles?: string[] } | null;
+          user?: {
+            email?: string | null;
+            nickname?: string | null;
+            roles?: string[];
+            timeZone?: string | null;
+          } | null;
         };
 
         const apiUser = payload.user ?? null;
@@ -64,8 +74,39 @@ export default function Home() {
       void loadInitialUser();
     });
 
+    function handleTimeZoneUpdated(event: Event) {
+      const nextTimeZone = (event as CustomEvent<string>).detail;
+      const safeTimeZone = getSafeTimeZone(nextTimeZone);
+
+      setProfile((current) =>
+        current ? { ...current, timeZone: safeTimeZone } : current
+      );
+    }
+
+    function handleWindowFocus() {
+      void loadInitialUser();
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void loadInitialUser();
+      }
+    }
+
+    window.addEventListener("focus", handleWindowFocus);
+    window.addEventListener("pageshow", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener(USER_TIME_ZONE_UPDATED_EVENT, handleTimeZoneUpdated);
+
     return () => {
       listener.subscription.unsubscribe();
+      window.removeEventListener("focus", handleWindowFocus);
+      window.removeEventListener("pageshow", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener(
+        USER_TIME_ZONE_UPDATED_EVENT,
+        handleTimeZoneUpdated
+      );
     };
   }, []);
 
@@ -95,12 +136,20 @@ export default function Home() {
           </Link>
 
           {!userEmail && (
-            <Link
-              href="/login"
-              className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
-            >
-              Se connecter
-            </Link>
+            <>
+              <Link
+                href="/create-account"
+                className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                Créer un compte
+              </Link>
+              <Link
+                href="/login"
+                className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                Se connecter
+              </Link>
+            </>
           )}
 
           {userEmail && (
@@ -118,7 +167,7 @@ export default function Home() {
                 href="/admin/users"
                 className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
               >
-                Créer / gérer utilisateurs
+                Comptes et mots de passe
               </Link>
               <Link
                 href="/admin/groups"
@@ -145,36 +194,6 @@ export default function Home() {
           )}
         </section>
 
-        <aside className="space-y-4">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Repères
-            </p>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3">
-                <span>Pronostics groupes</span>
-                <span className="font-semibold text-slate-900">Base 1</span>
-              </div>
-              <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3">
-                <span>Tours éliminatoires</span>
-                <span className="font-semibold text-slate-900">Base 2 / 3</span>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span>Vainqueur</span>
-                <span className="font-semibold text-slate-900">Bonus 4</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-slate-900 p-6 text-white shadow-[0_20px_60px_rgba(15,23,42,0.16)]">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-300">
-              Lecture rapide
-            </p>
-            <p className="mt-4 text-lg font-medium leading-7 text-slate-100">
-              Les pages sont désormais centrées sur la donnée, avec moins de bruit visuel et une lecture plus directe.
-            </p>
-          </div>
-        </aside>
       </div>
     </main>
   );

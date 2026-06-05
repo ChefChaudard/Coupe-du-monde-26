@@ -118,11 +118,15 @@ export default function LoginPage() {
         Se connecter
       </button>
 
-      <div className="mt-4 flex items-center justify-between gap-4 text-sm text-slate-600">
-        <a href="/reset-password" className="font-medium text-sky-700 hover:underline">
-          Mot de passe oublié ?
-        </a>
-        <span className="italic">Afficher le mot de passe si nécessaire.</span>
+      <div className="mt-4 space-y-2 text-sm text-slate-600">
+        <p className="text-slate-500">
+          Pour un nouveau mot de passe, contacte l&apos;admin de ton groupe ou un super admin.
+        </p>
+        <p>
+          <a href="/create-account" className="font-medium text-slate-700 hover:text-slate-950">
+            Créer un compte
+          </a>
+        </p>
       </div>
 
       {message && <p className="mt-4 text-sm text-red-600">{message}</p>}

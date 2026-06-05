@@ -16,8 +16,22 @@ export default function ChangePasswordPage() {
 
   useEffect(() => {
     async function loadUser() {
-      const { data } = await supabase.auth.getUser();
-      const user = data.user;
+      const response = await fetch("/api/me", { cache: "no-store" });
+
+      if (!response.ok) {
+        router.push("/login");
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        user?: {
+          id?: string;
+          email?: string | null;
+          nickname?: string | null;
+        } | null;
+      };
+
+      const user = payload.user ?? null;
 
       if (!user) {
         router.push("/login");
@@ -29,10 +43,10 @@ export default function ChangePasswordPage() {
       const { data: profile } = await supabase
         .from("profiles")
         .select("nickname")
-        .eq("id", user.id)
+        .eq("id", user.id ?? "")
         .single();
 
-      setUserName(profile?.nickname ?? user.email?.split("@")[0] ?? null);
+      setUserName(profile?.nickname ?? user.nickname ?? user.email?.split("@")[0] ?? null);
     }
 
     loadUser();
@@ -64,32 +78,39 @@ export default function ChangePasswordPage() {
 
     setLoading(true);
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email: userEmail,
-      password: oldPassword,
-    });
+    try {
+      const response = await fetch("/api/account/password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify({
+          oldPassword,
+          newPassword,
+        }),
+      });
 
-    if (authError) {
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+
+        setMessage(
+          payload.error ??
+            "Impossible de mettre à jour le mot de passe."
+        );
+        return;
+      }
+
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setMessage("Mot de passe changé.");
+      router.refresh();
+    } finally {
       setLoading(false);
-      setMessage("Ancien mot de passe incorrect.");
-      return;
     }
-
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: newPassword,
-    });
-
-    setLoading(false);
-
-    if (updateError) {
-      setMessage(updateError.message);
-      return;
-    }
-
-    setOldPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setMessage("Mot de passe mis à jour avec succès.");
   }
 
   return (

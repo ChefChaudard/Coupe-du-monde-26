@@ -4,73 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureRoles, isAdmin, isSuperAdmin } from "@/lib/roles";
-
-async function createUser(formData: FormData) {
-  "use server";
-
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("roles, role, is_admin")
-    .eq("id", user.id)
-    .single();
-
-    if (!profile || !isAdmin(profile)) {
-    throw new Error("Accès admin refusé.");
-  }
-
-  const canGrantAdmin = isSuperAdmin(profile);
-  const canGrantSuperAdmin = isSuperAdmin(profile);
-
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "").trim();
-  const nickname = String(formData.get("nickname") ?? "").trim();
-  const isAdminFlag = canGrantAdmin && String(formData.get("is_admin")) === "on";
-  const isSuperAdminFlag = canGrantSuperAdmin && String(formData.get("is_super_admin")) === "on";
-
-  if (!email || !password || !nickname) {
-    throw new Error("Email, mot de passe et pseudo obligatoires.");
-  }
-
-  const adminSupabase = createAdminClient();
-
-  const { data: createdUser, error } = await adminSupabase.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (!createdUser.user) {
-    throw new Error("Utilisateur non créé.");
-  }
-
-  await adminSupabase.from("profiles").upsert({
-    id: createdUser.user.id,
-    nickname,
-    is_admin: isAdminFlag,
-    roles: ensureRoles(undefined, isAdminFlag).concat(
-      isSuperAdminFlag ? ["super_admin"] : []
-    ),
-  });
-
-  await adminSupabase.from("user_scores").upsert({
-    user_id: createdUser.user.id,
-    points: 0,
-  });
-
-  revalidatePath("/admin/users");
-}
+import AccountEmailField from "./AccountEmailField";
 
 async function updateUser(formData: FormData) {
   "use server";
@@ -97,16 +31,24 @@ async function updateUser(formData: FormData) {
   const canGrantSuperAdmin = isSuperAdmin(profile);
 
   const userId = String(formData.get("user_id") ?? "").trim();
-  const nickname = String(formData.get("nickname") ?? "").trim();
+  const email = String(formData.get("account_email") ?? "").trim().toLowerCase();
   const isAdminFlag = canGrantAdmin && String(formData.get("is_admin")) === "on";
   const isSuperAdminFlag = canGrantSuperAdmin && String(formData.get("is_super_admin")) === "on";
   const password = String(formData.get("password") ?? "").trim();
 
-  if (!userId || !nickname) {
-    throw new Error("Utilisateur et pseudo obligatoires.");
+  if (!userId || !email) {
+    throw new Error("Utilisateur et email obligatoires.");
   }
 
   const adminSupabase = createAdminClient();
+
+  const { error: emailError } = await adminSupabase.auth.admin.updateUserById(userId, {
+    email,
+  });
+
+  if (emailError) {
+    throw new Error(emailError.message);
+  }
 
   if (password) {
     const { error } = await adminSupabase.auth.admin.updateUserById(userId, {
@@ -119,7 +61,7 @@ async function updateUser(formData: FormData) {
 
   const { error: profileError } = await adminSupabase.from("profiles").upsert({
     id: userId,
-    nickname,
+    nickname: profile?.nickname ?? email.split("@")[0] ?? email,
     is_admin: isAdminFlag,
     roles: ensureRoles(undefined, isAdminFlag).concat(
       isSuperAdminFlag ? ["super_admin"] : []
@@ -184,69 +126,13 @@ export default async function AdminUsersPage() {
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-        Seuls les administrateurs peuvent créer et modifier des comptes.
+        Seuls les administrateurs peuvent modifier des comptes. Ce tableau sert aussi à définir un nouveau mot de passe pour un joueur qui en fait la demande.
       </div>
 
-      <h1 className="mb-6 text-3xl font-bold">Créer un utilisateur</h1>
-
-      <form action={createUser} className="space-y-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium">Pseudo</label>
-          <input
-            name="nickname"
-            type="text"
-            required
-            placeholder="ex: fabrice"
-            className="w-full rounded border p-3"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium">
-            Email / identifiant
-          </label>
-          <input
-            name="email"
-            type="email"
-            required
-            placeholder="ami@email.com"
-            className="w-full rounded border p-3"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium">
-            Mot de passe
-          </label>
-          <input
-            name="password"
-            type="password"
-            required
-            minLength={6}
-            placeholder="Mot de passe"
-            className="w-full rounded border p-3"
-          />
-        </div>
-
-        <label className="flex items-center gap-3 text-sm font-medium">
-          <input name="is_admin" type="checkbox" className="h-4 w-4 rounded border-gray-300" />
-          Créer un compte administrateur
-        </label>
-
-        {currentUserIsSuperAdmin && (
-          <label className="flex items-center gap-3 text-sm font-medium">
-            <input name="is_super_admin" type="checkbox" className="h-4 w-4 rounded border-gray-300" />
-            Créer un Super Administrateur
-          </label>
-        )}
-
-        <button className="w-full rounded bg-black px-4 py-3 font-semibold text-white">
-          Créer le compte
-        </button>
-      </form>
+      <h1 className="mb-6 text-3xl font-bold">Comptes existants et mots de passe</h1>
 
       <section className="rounded-2xl border p-6">
-        <h2 className="mb-4 text-2xl font-bold">Comptes existants</h2>
+        <h2 className="mb-4 text-2xl font-bold">Réinitialiser un mot de passe</h2>
 
         <div className="space-y-4">
           {usersData.users.map((existingUser) => {
@@ -266,25 +152,24 @@ export default async function AdminUsersPage() {
                   </div>
 
                   <div className="text-right text-sm text-slate-600">
-                    <p>{existingUser.email}</p>
+                    <p className="font-semibold text-slate-900">
+                      {profile?.nickname ?? existingUser.user_metadata?.nickname ?? "—"}
+                    </p>
                     <p className="mt-1">Créé le {new Date(existingUser.created_at).toLocaleDateString()}</p>
                   </div>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-3">
                   <label className="space-y-2 text-sm font-medium">
-                    <span>Pseudo</span>
-                    <input
-                      name="nickname"
-                      type="text"
-                      defaultValue={profile?.nickname ?? ""}
-                      required
-                      className="w-full rounded border p-3"
+                    <span>Userid / adresse mail</span>
+                    <AccountEmailField
+                      name="account_email"
+                      initialEmail={existingUser.email ?? ""}
                     />
                   </label>
 
                   <label className="space-y-2 text-sm font-medium">
-                    <span>Mot de passe</span>
+                    <span>Nouveau mot de passe</span>
                     <input
                       name="password"
                       type="password"
@@ -317,7 +202,7 @@ export default async function AdminUsersPage() {
                 </div>
 
                 <button className="mt-4 rounded bg-black px-4 py-3 font-semibold text-white">
-                  Mettre à jour le compte
+                  Enregistrer le compte
                 </button>
               </form>
             );

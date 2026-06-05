@@ -259,6 +259,7 @@ export default function Topbar() {
 
   const currentKey = useMemo(() => {
     if (pathname === "/") return "home";
+    if (pathname.startsWith("/account/")) return "account";
     if (pathname === "/knockout") return "knockout";
     if (pathname === "/real-knockout") return "realKnockout";
 
@@ -274,6 +275,7 @@ export default function Topbar() {
   const visibleNavKeys = useMemo(() => {
     const mapping: Record<string, string[]> = {
       home: ["groupes", "knockout", "realKnockout"],
+      account: ["home", "groupes", "knockout", "realKnockout"],
       groupes: ["home", "knockout", "realKnockout"],
       tours: ["home", "knockout", "realKnockout"],
       knockout: ["home", "groupes", "realKnockout"],

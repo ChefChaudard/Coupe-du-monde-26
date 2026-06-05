@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/roles";
 import { redirect } from "next/navigation";
@@ -51,7 +52,12 @@ export default async function AdminPage() {
 
   return (
     <main className="mx-auto max-w-3xl p-8">
-      <h1 className="mb-6 text-3xl font-bold">Admin résultats</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold">Admin résultats</h1>
+        <Link href="/admin/users" className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50">
+          Comptes et mots de passe
+        </Link>
+      </div>
 
       <div className="space-y-4">
         {(matches ?? []).map((match) => (

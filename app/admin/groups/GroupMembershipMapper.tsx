@@ -11,6 +11,8 @@ type GroupRow = {
 type UserRow = {
   id: string;
   email: string | null;
+  firstName: string | null;
+  lastName: string | null;
   nickname: string | null;
 };
 
@@ -85,9 +87,21 @@ export default function GroupMembershipMapper({
   }, [groupMembers]);
 
   const formatUserLabel = (user: UserRow) =>
-    user.nickname
-      ? `${user.nickname}${user.email ? ` (${user.email})` : ""}`
-      : user.email ?? user.id;
+    [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+    user.nickname ||
+    user.email ||
+    user.id;
+
+  const formatUserDetails = (user: UserRow) => {
+    const displayName = [user.firstName, user.lastName].filter(Boolean).join(" ");
+    const labelParts = [displayName, user.nickname].filter(Boolean);
+
+    if (user.email) {
+      labelParts.push(user.email);
+    }
+
+    return labelParts.length ? labelParts.join(" · ") : user.id;
+  };
 
   if (groups.length === 0) {
     return null;
@@ -138,7 +152,7 @@ export default function GroupMembershipMapper({
             ) : (
               availableUsers.map((user) => (
                 <option key={user.id} value={user.id}>
-                  {formatUserLabel(user)}
+                  {formatUserDetails(user)}
                 </option>
               ))
             )}
@@ -184,7 +198,7 @@ export default function GroupMembershipMapper({
             ) : (
               groupMembers.map((membership) => (
                 <option key={membership.user_id} value={membership.user_id}>
-                  {membership.profiles?.[0]?.nickname ?? userById.get(membership.user_id)?.nickname ?? userById.get(membership.user_id)?.email ?? membership.user_id}
+                  {membership.profiles?.[0]?.nickname ?? formatUserLabel(userById.get(membership.user_id) ?? { id: membership.user_id, email: null, firstName: null, lastName: null, nickname: null })}
                 </option>
               ))
             )}

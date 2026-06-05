@@ -247,6 +247,8 @@ export default async function AdminGroupsPage() {
   const users = usersData.users.map((existingUser) => ({
     id: existingUser.id,
     email: existingUser.email ?? null,
+    firstName: existingUser.user_metadata?.first_name ?? null,
+    lastName: existingUser.user_metadata?.last_name ?? null,
     nickname: profileMap.get(existingUser.id) ?? existingUser.user_metadata?.nickname ?? null,
   }));
 

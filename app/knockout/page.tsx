@@ -50,6 +50,8 @@ type GroupStatsRow = {
   predictedMatches: number;
 };
 
+type GroupTeamsByLetter = Record<string, string[]>;
+
 const realPhasePrefix = "Reel - ";
 const bracketPhaseStartIds: Record<string, number> = {
   "16e de finale": 1,
@@ -155,6 +157,29 @@ function buildPredictedGroupRankings(
 
       return [group, sortedTeams];
     })
+  );
+}
+
+function buildGroupTeamsByLetter(matches: MatchRow[]): GroupTeamsByLetter {
+  const groups: Record<string, Set<string>> = {};
+
+  for (const match of matches) {
+    const group = normalizeGroupName(match.phase);
+    if (!group) continue;
+
+    if (!groups[group]) {
+      groups[group] = new Set<string>();
+    }
+
+    if (match.team_a) groups[group].add(match.team_a);
+    if (match.team_b) groups[group].add(match.team_b);
+  }
+
+  return Object.fromEntries(
+    Object.entries(groups).map(([group, teams]) => [
+      group,
+      Array.from(teams).sort((left, right) => left.localeCompare(right)),
+    ])
   );
 }
 
@@ -335,6 +360,7 @@ export default async function KnockoutPage() {
     matches ?? [],
     predictions ?? []
   );
+  const groupTeamsByLetter = buildGroupTeamsByLetter(matches ?? []);
 
   const round32Placeholders: Round32Teams = [
     ["1er du groupe A", "3eme du groupe F"],
@@ -375,12 +401,12 @@ export default async function KnockoutPage() {
           <KnockoutBracketPrediction
             userId={user.id}
             round32Teams={round32Teams}
+            groupTeamsByLetter={groupTeamsByLetter}
             matchInfoById={matchInfoById}
-            freeChoiceTeams={allTeams}
             teamOddsByMatchId={teamOddsByMatchId}
             tournamentStartAt={tournamentStartAt}
             title="2e tours"
-            description="Cette page permet de construire vos pronostics des tours à élimination directe. Par défaut, les 16e, 8e, quarts, demies et la finale s'appuient sur les équipes issues des groupes. Si vous cochez l'option de choix libre, les listes déroulantes s'ouvrent sur les 48 pays et vous pouvez composer le tableau indépendamment des résultats de groupes."
+            description="Cette page permet de construire vos pronostics des tours à élimination directe. Les 16e proposent uniquement les équipes du groupe correspondant à chaque case. Si vous cochez l'option de choix libre, les tours suivants restent contraints par la logique du tableau mais les 16e restent limités aux groupes possibles."
           />
         </section>
 

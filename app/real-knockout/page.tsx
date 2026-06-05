@@ -6,6 +6,7 @@ import { getMatchCity } from "@/app/lib/fifa-cities";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import RealKnockoutScoreForm from "./real-knockout-score-form";
+import { getRealLaterFixture, getRealLaterPhaseMatches } from "./real-knockout-fixtures";
 
 export const metadata: Metadata = {
   title: "2e tours Réels",
@@ -428,18 +429,6 @@ function getWinner(match: Match) {
   return null;
 }
 
-function getNextKickoffDate(sourceMatches: Match[], daysAfter: number) {
-  const latestTime = sourceMatches.reduce((latest, match) => {
-    const kickoffTime = new Date(match.kickoff_at).getTime();
-    return Number.isNaN(kickoffTime) ? latest : Math.max(latest, kickoffTime);
-  }, Date.now());
-
-  const date = new Date(latestTime);
-  date.setDate(date.getDate() + daysAfter);
-  date.setHours(20, 0, 0, 0);
-  return date.toISOString();
-}
-
 function buildAvailableRealMatches(matches: Match[]) {
   if (!isFirstRoundComplete(matches)) return [];
 
@@ -492,13 +481,20 @@ function buildAvailableRealMatches(matches: Match[]) {
       if (!teamA || !teamB) continue;
       if (hasPairing(existingTarget, teamA, teamB)) continue;
 
+      const fixture = getRealLaterFixture(
+        targetPhase as "8e de finale" | "Quarts de finale" | "Demi-finales" | "Finale",
+        index / 2
+      );
+
+      if (!fixture) continue;
+
       payload.push({
         phase: toRealPhase(targetPhase),
         team_a: teamA,
         team_b: teamB,
-        kickoff_at: getNextKickoffDate(previousMatches, index / 2 + 1),
-        venue: null,
-        city: null,
+        kickoff_at: fixture.kickoff_at,
+        venue: fixture.venue,
+        city: getMatchCity(fixture.venue),
         score_a: null,
         score_b: null,
         is_finished: false,
@@ -573,10 +569,36 @@ async function syncAvailableRealMatches(supabase: Awaited<ReturnType<typeof crea
     .select("*")
     .order("kickoff_at", { ascending: true });
 
-  const payload = buildAvailableRealMatches((matches ?? []) as Match[]);
+  const safeMatches = (matches ?? []) as Match[];
+  const payload = buildAvailableRealMatches(safeMatches);
 
   if (payload.length > 0) {
     await supabase.from("matches").insert(payload);
+  }
+
+  const existingLaterMatches = getRealLaterPhaseMatches(safeMatches);
+  for (const item of existingLaterMatches) {
+    if (!item.fixture) continue;
+
+    const nextCity = getMatchCity(item.fixture.venue);
+    const current = safeMatches.find((match) => match.id === item.id);
+
+    if (
+      current?.kickoff_at === item.fixture.kickoff_at &&
+      current?.venue === item.fixture.venue &&
+      current?.city === nextCity
+    ) {
+      continue;
+    }
+
+    await supabase
+      .from("matches")
+      .update({
+        kickoff_at: item.fixture.kickoff_at,
+        venue: item.fixture.venue,
+        city: nextCity,
+      })
+      .eq("id", item.id);
   }
 }
 
@@ -620,6 +642,8 @@ async function updateMatchResult(formData: FormData) {
 }
 
 async function autoSyncRealMatches() {
+  const adminSupabase = createAdminClient();
+  await syncAvailableRealMatches(adminSupabase);
 }
 
 export default async function RealKnockoutPage() {
@@ -638,6 +662,10 @@ export default async function RealKnockoutPage() {
     .single();
 
   const isAdmin = profile?.is_admin === true;
+
+  if (isAdmin) {
+    await autoSyncRealMatches();
+  }
 
   const { data: matches } = await supabase
     .from("matches")

@@ -10,6 +10,7 @@ import {
 } from "@/app/lib/time-zone";
 import { getMatchCity } from "@/app/lib/fifa-cities";
 import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
+import { getRealLaterFixture, type RealLaterPhase } from "./real-knockout-fixtures";
 
 type Match = {
   id: number;
@@ -58,6 +59,13 @@ export default function RealKnockoutScoreForm({
   updateMatchResult: (formData: FormData) => Promise<void>;
   syncRealMatches: (formData: FormData) => Promise<void>;
 }) {
+  const laterPhases: RealLaterPhase[] = [
+    "8e de finale",
+    "Quarts de finale",
+    "Demi-finales",
+    "Finale",
+  ];
+
   const initialValues = useMemo(() => {
     const values: FormValues = {};
 
@@ -208,7 +216,7 @@ const appNowTime = new Date(effectiveNow).getTime();
             2e tours Réels au{" "}
             {formatDashboardDate(effectiveNow, timeZone)}
           </h1>
-          <h2 className="text-lg font-semibold text-emerald-950">Mes pronostics</h2>
+          <h2 className="text-lg font-semibold text-slate-950">Mes pronostics</h2>
         </div>
 
         {isAdmin && isMounted ? (
@@ -216,7 +224,7 @@ const appNowTime = new Date(effectiveNow).getTime();
             <button
               type="submit"
               disabled={!firstRoundComplete}
-              className="rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="rounded bg-slate-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               Synchroniser les matchs réels
             </button>
@@ -227,7 +235,7 @@ const appNowTime = new Date(effectiveNow).getTime();
       </div>
 
       {!firstRoundComplete && (
-        <div className="rounded-lg border border-dashed border-emerald-200 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
           <p>Les pronostics du 2nd tour ouvriront quand le 1er tour sera terminé.</p>
           {firstRoundMissingScores > 0 && (
             <p className="mt-2 text-sm">
@@ -240,19 +248,24 @@ const appNowTime = new Date(effectiveNow).getTime();
       )}
 
       {firstRoundComplete && groupedMatches.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-emerald-200 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
           Aucun match réel du 2nd tour n&apos;est disponible pour le moment.
         </div>
       ) : (
-        groupedMatches.map(([phase, phaseMatches]) => (
-          <div key={phase} className="overflow-visible rounded-lg border border-emerald-100 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.07)]">
-            <div className="flex items-center justify-between gap-4 rounded-t-lg border-b border-emerald-100 bg-emerald-50/80 px-4 py-3">
-              <div className="text-base font-bold capitalize text-emerald-950">{phase}</div>
+        groupedMatches.map(([phase, phaseMatches]) => {
+          const laterPhase = laterPhases.includes(phase as RealLaterPhase)
+            ? (phase as RealLaterPhase)
+            : null;
+
+          return (
+          <div key={phase} className="overflow-visible rounded-lg border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.07)]">
+            <div className="flex items-center justify-between gap-4 rounded-t-lg border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-base font-bold capitalize text-slate-950">{phase}</div>
 
               <button
                 onClick={() => saveGroup(phaseMatches, phase)}
                 disabled={savingGroup === phase || !firstRoundComplete}
-                className="rounded bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded bg-[#7a1f2c] px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {savingGroup === phase ? "Sauvegarde..." : "Sauvegarder"}
               </button>
@@ -284,9 +297,17 @@ const appNowTime = new Date(effectiveNow).getTime();
               </thead>
 
               <tbody>
-                {phaseMatches.map((match) => {
-                  const kickoffDate = new Date(match.kickoff_at);
-                  const hasStarted = kickoffDate.getTime() <= appNowTime;
+                {phaseMatches.map((match, matchIndex) => {
+                  const phaseFixture = laterPhase
+                    ? getRealLaterFixture(laterPhase, matchIndex)
+                    : null;
+                  const kickoffAt = match.kickoff_at || phaseFixture?.kickoff_at || null;
+                  const displayVenue = match.venue || phaseFixture?.venue || null;
+                  const displayCity = match.city || phaseFixture?.city || null;
+                  const kickoffDate = kickoffAt ? new Date(kickoffAt) : null;
+                  const hasStarted = kickoffDate
+                    ? kickoffDate.getTime() <= appNowTime
+                    : false;
                   const canPredict = firstRoundComplete && !hasStarted;
                   const canEnterRealScore = isAdmin && hasStarted;
 
@@ -300,7 +321,7 @@ const appNowTime = new Date(effectiveNow).getTime();
                   const averagePoints = stats?.averagePoints ?? null;
 
                   return (
-                    <tr key={match.id} className="border-b border-slate-100 transition last:border-b-0 hover:bg-emerald-50/45">
+                    <tr key={match.id} className="border-b border-slate-100 transition last:border-b-0 hover:bg-slate-100/70">
                       <td className="py-2 pr-1 font-medium truncate text-slate-900">
                         {match.team_a}
                       </td>
@@ -314,7 +335,7 @@ const appNowTime = new Date(effectiveNow).getTime();
                             updateValue(match.id, "a", event.target.value)
                           }
                           disabled={!canPredict}
-                          className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
 
@@ -327,7 +348,7 @@ const appNowTime = new Date(effectiveNow).getTime();
                             updateValue(match.id, "b", event.target.value)
                           }
                           disabled={!canPredict}
-                          className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
 
@@ -336,27 +357,28 @@ const appNowTime = new Date(effectiveNow).getTime();
                       </td>
 
                       <td className="px-1 py-2 whitespace-nowrap text-slate-600">
-                        {formatMatchDate(kickoffDate, timeZone)}
+                        {kickoffDate ? formatMatchDate(kickoffDate, timeZone) : "-"}
                       </td>
 
                       <td className="px-1 py-2 whitespace-nowrap text-slate-600">
-                        {formatMatchTime(kickoffDate, timeZone)}
+                        {kickoffDate ? formatMatchTime(kickoffDate, timeZone) : "-"}
                       </td>
 
                       <td className="px-1 py-2 truncate text-slate-600">
-                        {getMatchCity(
-                          match.venue,
-                          match.city,
-                          match.team_a,
-                          match.team_b
-                        )}
+                        {displayCity ??
+                          getMatchCity(
+                            displayVenue,
+                            displayCity,
+                            match.team_a,
+                            match.team_b
+                          )}
                       </td>
 
                       <td className="px-1 py-2 whitespace-nowrap">
                         {hasOfficialScore ? (
                           <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-800">Terminé</span>
                         ) : canPredict ? (
-                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">Ouvert</span>
+                          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">Ouvert</span>
                         ) : (
                           <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">Bloqué</span>
                         )}
@@ -425,7 +447,8 @@ const appNowTime = new Date(effectiveNow).getTime();
             </table>
             </div>
           </div>
-        ))
+        );
+        })
       )}
 
       {message && <p className="text-sm">{message}</p>}

@@ -28,13 +28,13 @@ export default function GroupStandingsTooltip({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <span className="cursor-help font-semibold text-emerald-950 underline decoration-emerald-300 decoration-dotted underline-offset-4">
+      <span className="cursor-help font-serif text-lg font-bold tracking-[0.08em] text-white underline decoration-white/50 decoration-dotted underline-offset-4">
         {groupName}
       </span>
 
       {isHovered ? (
-        <div className="absolute left-0 top-full z-50 mt-2 w-[min(620px,calc(100vw-3rem))] rounded-lg border border-emerald-100 bg-white p-3 text-sm font-normal text-slate-800 shadow-xl">
-          <h4 className="mb-2 font-semibold text-emerald-950">
+        <div className="absolute left-0 top-full z-50 mt-2 w-[min(620px,calc(100vw-3rem))] rounded-2xl border border-slate-900/12 bg-white p-5 text-sm font-normal text-slate-800 shadow-[0_18px_45px_rgba(15,23,42,0.12)]">
+          <h4 className="mb-2 font-semibold text-slate-950">
             {groupName} - classement a l&apos;instant t
           </h4>
 
@@ -43,8 +43,8 @@ export default function GroupStandingsTooltip({
           ) : (
             <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="border-b border-emerald-100 bg-emerald-50/70 text-left text-emerald-900">
-                  <th className="py-1 pr-2">Equipe</th>
+                <tr className="border-b border-slate-200 bg-slate-100 text-left text-slate-900">
+                  <th className="w-[220px] py-1 pl-8 pr-4">Equipe</th>
                   <th className="px-1 text-center">J</th>
                   <th className="px-1 text-center">G</th>
                   <th className="px-1 text-center">N</th>
@@ -58,7 +58,7 @@ export default function GroupStandingsTooltip({
               <tbody>
                 {standings.map((row) => (
                   <tr key={row.team} className="border-b border-slate-100 last:border-b-0">
-                    <td className="py-1 pr-2 font-medium">{row.team}</td>
+                    <td className="w-[220px] py-1 pl-8 pr-4 font-medium">{row.team}</td>
                     <td className="px-1 text-center">{row.played}</td>
                     <td className="px-1 text-center">{row.won}</td>
                     <td className="px-1 text-center">{row.drawn}</td>

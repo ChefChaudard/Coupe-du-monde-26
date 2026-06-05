@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
@@ -9,6 +9,7 @@ import {
 import { getMatchCity } from "@/app/lib/fifa-cities";
 import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
 import { round32Placeholders, type Round32Teams } from "./bracket-data";
+import { getRealLaterFixture, type RealLaterPhase } from "../real-knockout/real-knockout-fixtures";
 
 type BracketMatch = {
   id: number;
@@ -23,8 +24,12 @@ type SelectedWinners = Record<number, string>;
 
 type KnockoutPredictionRow = {
   match_key: string;
+  team_a: string | null;
+  team_b: string | null;
   winner: string | null;
 };
+
+type SelectedMatchTeams = Record<number, { a: string; b: string }>;
 
 export type BracketMatchInfo = {
   teamA: string;
@@ -96,10 +101,12 @@ function dedupe(values: string[]) {
 function getSelectedOrPossibleTeams(
   match: BracketMatch,
   matchesById: Record<number, BracketMatch>,
-  selectedWinners: SelectedWinners
+  selectedTeams: SelectedMatchTeams
 ): string[] {
-  const selected = selectedWinners[match.id];
-  if (selected) return [selected];
+  const selected = selectedTeams[match.id];
+  if (selected?.a || selected?.b) {
+    return dedupe([selected.a, selected.b].filter(Boolean));
+  }
 
   if (!match.leftMatchId || !match.rightMatchId) {
     return [match.teamA, match.teamB];
@@ -109,10 +116,10 @@ function getSelectedOrPossibleTeams(
   const rightMatch = matchesById[match.rightMatchId];
 
   const leftTeams = leftMatch
-    ? getSelectedOrPossibleTeams(leftMatch, matchesById, selectedWinners)
+    ? getSelectedOrPossibleTeams(leftMatch, matchesById, selectedTeams)
     : [];
   const rightTeams = rightMatch
-    ? getSelectedOrPossibleTeams(rightMatch, matchesById, selectedWinners)
+    ? getSelectedOrPossibleTeams(rightMatch, matchesById, selectedTeams)
     : [];
 
   return dedupe([...leftTeams, ...rightTeams]);
@@ -121,8 +128,13 @@ function getSelectedOrPossibleTeams(
 function getPossibleTeams(
   match: BracketMatch,
   matchesById: Record<number, BracketMatch>,
-  selectedWinners: SelectedWinners
+  selectedTeams: SelectedMatchTeams,
+  freeChoiceTeams?: string[]
 ): string[] {
+  if (freeChoiceTeams?.length) {
+    return freeChoiceTeams;
+  }
+
   if (!match.leftMatchId || !match.rightMatchId) {
     return [match.teamA, match.teamB];
   }
@@ -131,10 +143,10 @@ function getPossibleTeams(
   const rightMatch = matchesById[match.rightMatchId];
 
   const leftTeams = leftMatch
-    ? getSelectedOrPossibleTeams(leftMatch, matchesById, selectedWinners)
+    ? getSelectedOrPossibleTeams(leftMatch, matchesById, selectedTeams)
     : [];
   const rightTeams = rightMatch
-    ? getSelectedOrPossibleTeams(rightMatch, matchesById, selectedWinners)
+    ? getSelectedOrPossibleTeams(rightMatch, matchesById, selectedTeams)
     : [];
 
   return dedupe([...leftTeams, ...rightTeams]);
@@ -211,7 +223,7 @@ function getPointsForWinnerPrediction(
   const actualWinner =
     actualWinnerSide === "A" ? matchInfo.teamA : matchInfo.teamB;
 
-  return selectedWinner === actualWinner ? getWinnerPointsBase(phase ?? "") : 0;
+  return selectedWinner === actualWinner ? 4 : 0;
 }
 
 function getChampionBonusPoints(
@@ -262,6 +274,7 @@ export default function KnockoutBracketPrediction({
   userId,
   round32Teams,
   matchInfoById = {},
+  freeChoiceTeams = [],
   storageKey = "knockoutBracketPredictions",
   title = "Pronostics Tours Eliminatoires",
   description = "Les equipes du tableau des 32 sont deduites des resultats de groupes. Pour les tours suivants, selectionnez le vainqueur de chaque match en respectant la logique des tours precedents.",
@@ -269,6 +282,7 @@ export default function KnockoutBracketPrediction({
   userId: string;
   round32Teams?: Round32Teams;
   matchInfoById?: Record<number, BracketMatchInfo>;
+  freeChoiceTeams?: string[];
   storageKey?: string;
   title?: string;
   description?: string;
@@ -280,7 +294,9 @@ export default function KnockoutBracketPrediction({
   );
   const childMap = useMemo(() => getChildMatchIds(bracket), [bracket]);
 
+const [isFreeChoiceMode, setIsFreeChoiceMode] = useState(false);
 const [selectedWinners, setSelectedWinners] = useState<SelectedWinners>({});
+const [selectedTeams, setSelectedTeams] = useState<SelectedMatchTeams>({});
 const [hasLoadedStorage, setHasLoadedStorage] = useState(false);
 const [message, setMessage] = useState<string | null>(null);
 const [saving, setSaving] = useState(false);
@@ -289,10 +305,25 @@ const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
 const timeZone = useUserTimeZone();
 
 useEffect(() => {
+  if (typeof window === "undefined") return;
+
+  setIsFreeChoiceMode(window.localStorage.getItem("knockoutFreeChoiceTeams") === "true");
+}, []);
+
+useEffect(() => {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.setItem(
+    "knockoutFreeChoiceTeams",
+    isFreeChoiceMode ? "true" : "false"
+  );
+}, [isFreeChoiceMode]);
+
+useEffect(() => {
   async function loadKnockoutPredictions() {
     const { data, error } = await supabase
       .from("knockout_predictions")
-      .select("match_key, winner")
+      .select("match_key, team_a, team_b, winner")
       .eq("user_id", userId);
 
     if (error) {
@@ -305,56 +336,65 @@ useEffect(() => {
     }
 
     const next: SelectedWinners = {};
+    const nextTeams: SelectedMatchTeams = {};
 
     for (const row of (data ?? []) as KnockoutPredictionRow[]) {
       const matchKey = Number(row.match_key);
       if (row.winner && Number.isFinite(matchKey)) {
         next[matchKey] = row.winner;
       }
+
+      if (Number.isFinite(matchKey) && (row.team_a || row.team_b)) {
+        nextTeams[matchKey] = {
+          a: row.team_a ?? "",
+          b: row.team_b ?? "",
+        };
+      }
     }
 
     setSelectedWinners(next);
+    setSelectedTeams(nextTeams);
     setHasLoadedStorage(true);
   }
 
   void loadKnockoutPredictions();
 }, [userId]);
 
-  useEffect(() => {
-    function handleSimulatedDateUpdated(event: Event) {
-      const nextValue = (event as CustomEvent<string>).detail;
-      if (nextValue) setSimulatedNow(nextValue);
-    }
+useEffect(() => {
+  function handleSimulatedDateUpdated(event: Event) {
+    const nextValue = (event as CustomEvent<string>).detail;
+    if (nextValue) setSimulatedNow(nextValue);
+  }
 
-    async function loadSimulatedDate() {
-      const { data } = await supabase
-        .from("app_settings")
-        .select("value")
-        .eq("key", "simulated_date")
-        .single();
+  async function loadSimulatedDate() {
+    const { data } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "simulated_date")
+      .single();
 
-      setSimulatedNow(data?.value ?? new Date().toISOString());
-    }
+    setSimulatedNow(data?.value ?? new Date().toISOString());
+  }
 
-    window.addEventListener(
+  window.addEventListener(
+    "simulated-date-updated",
+    handleSimulatedDateUpdated
+  );
+  void loadSimulatedDate();
+
+  return () => {
+    window.removeEventListener(
       "simulated-date-updated",
       handleSimulatedDateUpdated
     );
-    void loadSimulatedDate();
-
-    return () => {
-      window.removeEventListener(
-        "simulated-date-updated",
-        handleSimulatedDateUpdated
-      );
-    };
-  }, []);
+  };
+}, []);
 
 useEffect(() => {
   if (!hasLoadedStorage) return;
 }, [selectedWinners, hasLoadedStorage]);
 
- function handleWinnerChange(matchId: number, value: string) {
+function handleWinnerChange(matchId: number, value: string) {
   setSelectedWinners((prev) => {
     const next = { ...prev, [matchId]: value };
     const descendants = collectDescendants(matchId, childMap);
@@ -369,6 +409,20 @@ useEffect(() => {
   setMessage(null);
   setSaveMessage(null);
 }
+
+function handleTeamChange(matchId: number, side: "a" | "b", value: string) {
+  setSelectedTeams((prev) => ({
+    ...prev,
+    [matchId]: {
+      a: side === "a" ? value : prev[matchId]?.a ?? "",
+      b: side === "b" ? value : prev[matchId]?.b ?? "",
+    },
+  }));
+
+  setMessage(null);
+  setSaveMessage(null);
+}
+
 async function handleSaveKnockout() {
   setSaving(true);
   setSaveMessage(null);
@@ -377,8 +431,12 @@ async function handleSaveKnockout() {
     user_id: userId,
     match_key: String(match.id),
     round: match.phase,
-    team_a: match.teamA,
-    team_b: match.teamB,
+    team_a: isFreeChoiceMode
+      ? selectedTeams[match.id]?.a ?? match.teamA
+      : match.teamA,
+    team_b: isFreeChoiceMode
+      ? selectedTeams[match.id]?.b ?? match.teamB
+      : match.teamB,
     winner: selectedWinners[match.id] ?? null,
     updated_at: new Date().toISOString(),
   }));
@@ -416,7 +474,7 @@ if (error) {
   return;
 }
 
-  setSaveMessage("Pronostics sauvegardés.");
+  setSaveMessage("Pronostics sauvegard├®s.");
 }
 
   function resetBracket() {
@@ -454,22 +512,36 @@ if (error) {
     "Demi-finales",
     "Finale",
   ];
+  const laterPhases: RealLaterPhase[] = [
+    "8e de finale",
+    "Quarts de finale",
+    "Demi-finales",
+    "Finale",
+  ];
 
   function renderPhaseCard(phase: string, matches: BracketMatch[]) {
+    const laterPhase = laterPhases.includes(phase as RealLaterPhase)
+      ? (phase as RealLaterPhase)
+      : null;
+
     return (
       <div
         key={phase}
-        className="rounded-lg border border-emerald-100 bg-white p-5 shadow-[0_12px_30px_rgba(15,118,110,0.07)]"
+        className="rounded-lg border border-slate-200 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.07)]"
       >
-        <h2 className="mb-4 text-xl font-bold text-emerald-950">{phase}</h2>
+        <h2 className="mb-4 text-xl font-bold text-slate-950">{phase}</h2>
         <div className="space-y-4">
           {matches.map((match) => {
+            const matchIndex = matches.indexOf(match);
             const possibleTeams = getPossibleTeams(
               match,
               matchesById,
-              selectedWinners
+              selectedTeams,
+              isFreeChoiceMode ? freeChoiceTeams : undefined
             );
             const selected = selectedWinners[match.id] ?? "";
+            const selectedTeamA = selectedTeams[match.id]?.a ?? match.teamA;
+            const selectedTeamB = selectedTeams[match.id]?.b ?? match.teamB;
             const matchInfo = matchInfoById[match.id];
             const appNowTime = simulatedNow
               ? new Date(simulatedNow).getTime()
@@ -480,35 +552,33 @@ if (error) {
               matchInfo,
               match.phase
             );
-            const kickoffDate = matchInfo
-              ? new Date(matchInfo.kickoffAt)
+            const phaseFixture = laterPhase
+              ? getRealLaterFixture(laterPhase, matchIndex)
               : null;
-            const canPredict = status === "Ouvert";
+            const kickoffAt = matchInfo?.kickoffAt ?? phaseFixture?.kickoff_at ?? null;
+            const kickoffDate = kickoffAt ? new Date(kickoffAt) : null;
+            const displayVenue = matchInfo?.venue ?? phaseFixture?.venue ?? null;
+            const displayCity = matchInfo?.city ?? phaseFixture?.city ?? null;
+            const isFirstRound = phase === firstRoundPhase;
 
             return (
               <div
                 key={match.id}
                 className="rounded-lg border border-slate-200 bg-slate-50/80 p-4 transition hover:border-emerald-200 hover:bg-emerald-50/55"
               >
-                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mb-3">
                   <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
-                    <span>Match #{match.id}</span>
                     <span>
-                      Ville: {getMatchCity(
-                        matchInfo?.venue,
-                        matchInfo?.city,
-                        matchInfo?.teamA,
-                        matchInfo?.teamB
-                      )}
+                      Ville: {getMatchCity(displayVenue, displayCity, matchInfo?.teamA, matchInfo?.teamB)}
                     </span>
                     <span>
-                      Date:{" "}
+                      Date: {" "}
                       {kickoffDate
                         ? formatMatchDate(kickoffDate, timeZone)
                         : "-"}
                     </span>
                     <span>
-                      Heure:{" "}
+                      Heure: {" "}
                       {kickoffDate
                         ? formatMatchTime(kickoffDate, timeZone)
                         : "-"}
@@ -518,24 +588,102 @@ if (error) {
                       {status === "Termine" ? "Termine" : status}
                     </span>
                   </p>
-                  <p className="min-w-0 font-semibold text-slate-900 sm:text-right">
-                    {match.teamA} vs {match.teamB}
-                  </p>
                 </div>
 
-                <select
-                  value={selected}
-                  onChange={(e) => handleWinnerChange(match.id, e.target.value)}
-                  disabled={!canPredict}
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500"
-                >
-                  <option value="">Selectionner</option>
-                  {possibleTeams.map((team) => (
-                    <option key={team} value={team}>
-                      {team}
-                    </option>
-                  ))}
-                </select>
+                {isFirstRound ? (
+                  isFreeChoiceMode ? (
+                    <div className="mb-3 grid gap-3 rounded-md border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2">
+                      <label className="space-y-1 text-sm font-medium text-slate-600">
+                        <span>Equipe A</span>
+                        <select
+                          value={selectedTeamA}
+                          onChange={(event) =>
+                            handleTeamChange(match.id, "a", event.target.value)
+                          }
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                        >
+                          <option value="">Selectionner</option>
+                          {possibleTeams.map((team) => (
+                            <option key={`a-${team}`} value={team}>
+                              {team}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="space-y-1 text-sm font-medium text-slate-600">
+                        <span>Equipe B</span>
+                        <select
+                          value={selectedTeamB}
+                          onChange={(event) =>
+                            handleTeamChange(match.id, "b", event.target.value)
+                          }
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                        >
+                          <option value="">Selectionner</option>
+                          {possibleTeams.map((team) => (
+                            <option key={`b-${team}`} value={team}>
+                              {team}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="mb-3 space-y-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="font-medium text-slate-500">Equipe A</span>
+                        <span className="min-w-0 flex-1 text-right font-semibold break-words">
+                          {match.teamA}
+                        </span>
+                      </div>
+                      <div className="flex items-start justify-between gap-3 border-t border-slate-100 pt-1.5">
+                        <span className="font-medium text-slate-500">Equipe B</span>
+                        <span className="min-w-0 flex-1 text-right font-semibold break-words">
+                          {match.teamB}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  <div className="mb-3 grid gap-3 rounded-md border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2">
+                    <label className="space-y-1 text-sm font-medium text-slate-600">
+                      <span>Equipe A</span>
+                      <select
+                        value={selectedTeamA}
+                        onChange={(event) =>
+                          handleTeamChange(match.id, "a", event.target.value)
+                        }
+                        className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                      >
+                        <option value="">Selectionner</option>
+                        {possibleTeams.map((team) => (
+                          <option key={`a-${team}`} value={team}>
+                            {team}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-1 text-sm font-medium text-slate-600">
+                      <span>Equipe B</span>
+                      <select
+                        value={selectedTeamB}
+                        onChange={(event) =>
+                          handleTeamChange(match.id, "b", event.target.value)
+                        }
+                        className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                      >
+                        <option value="">Selectionner</option>
+                        {possibleTeams.map((team) => (
+                          <option key={`b-${team}`} value={team}>
+                            {team}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -546,26 +694,38 @@ if (error) {
 
   return (
     <section className="space-y-6 text-slate-900">
-<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-  <button
-    type="button"
-    onClick={handleSaveKnockout}
-    disabled={saving}
-    className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
-  >
-    {saving ? "Sauvegarde..." : "Sauvegarder"}
-  </button>
+      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
+          <input
+            type="checkbox"
+            checked={isFreeChoiceMode}
+            onChange={(event) => setIsFreeChoiceMode(event.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-500"
+          />
+          Choix libre des équipes: les listes proposent les 48 pays et ne suivent plus les résultats des groupes.
+        </label>
 
-  <button
-    type="button"
-    onClick={resetBracket}
-          className="rounded bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700"
-        >
-          Reinitialiser le tableau
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={handleSaveKnockout}
+            disabled={saving}
+            className="rounded bg-[#7a1f2c] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822] disabled:opacity-60"
+          >
+            {saving ? "Sauvegarde..." : "Sauvegarder"}
+          </button>
+
+          <button
+            type="button"
+            onClick={resetBracket}
+            className="rounded bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700"
+          >
+            Reinitialiser le tableau
+          </button>
+        </div>
       </div>
 
-      <div className="rounded-lg border border-emerald-100 bg-white p-6 shadow-sm">
+      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="mb-3 text-3xl font-bold tracking-tight text-slate-950">{title}</h1>
         <p className="text-sm leading-6 text-slate-600">
           {description}
@@ -584,32 +744,8 @@ if (error) {
         </div>
       </div>
 
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-6">
-        <h2 className="text-2xl font-bold text-amber-950">Resume</h2>
-        <p className="mt-2 text-slate-600">
-          Champion pronostique :{" "}
-          <span className="font-semibold text-slate-900">
-            {champion ?? "Aucun choix"}
-          </span>
-        </p>
-        <p className="mt-2 text-slate-600">
-          Bonus vainqueur :{" "}
-          <span className="font-semibold text-slate-900">
-            {championBonus !== null ? `${championBonus} pts` : "-"}
-          </span>
-        </p>
-        <p className="mt-2 text-slate-600">
-          Total pronostics :{" "}
-          <span className="font-semibold text-slate-900">
-            {totalPoints} pts
-          </span>
-        </p>
-{message && <p className="mt-3 text-sm text-green-700">{message}</p>}
-
-{saveMessage && (
-  <p className="mt-3 text-sm text-green-700">{saveMessage}</p>
-)}
-      </div>
+      {message && <p className="text-sm">{message}</p>}
+      {saveMessage && <p className="text-sm">{saveMessage}</p>}
     </section>
   );
 }

@@ -308,12 +308,12 @@ export default function Leaderboard() {
   return (
     <section className="w-full">
       {message ? (
-        <p className="rounded-lg border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+        <p className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
           {message}
         </p>
       ) : (
-        <div className="relative w-full overflow-visible rounded-lg border border-emerald-200 bg-white shadow-[0_18px_45px_rgba(15,118,110,0.10)]">
-          <div className="flex items-center justify-between gap-3 rounded-t-lg border-b border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-slate-900">
+        <div className="relative w-full overflow-visible rounded-lg border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.10)]">
+          <div className="flex items-center justify-between gap-3 rounded-t-lg border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
             <span>Classement live</span>
             <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-900">
               Live

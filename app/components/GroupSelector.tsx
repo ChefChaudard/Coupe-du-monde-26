@@ -244,7 +244,7 @@ export default function GroupSelector() {
 
   if (loading) {
     return (
-      <div className="rounded-full border border-emerald-100 bg-white px-3 py-2 text-sm text-slate-700">
+      <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
         Chargement des groupes...
       </div>
     );
@@ -260,14 +260,14 @@ export default function GroupSelector() {
 
   if (!groups.length) {
     return (
-      <div className="rounded-full border border-emerald-100 bg-white px-3 py-2 text-sm text-slate-700">
+      <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
         Aucun groupe actif
       </div>
     );
   }
 
   return (
-    <label className="rounded-full border border-emerald-100 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm">
+    <label className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm">
       <span className="sr-only">Sélecteur de groupe actif</span>
       <select
         value={activeGroup?.id ?? ""}

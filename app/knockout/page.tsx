@@ -4,6 +4,7 @@ import Leaderboard from "@/app/dashboard/leaderboard";
 import KnockoutBracketPrediction, {
   type BracketMatchInfo,
 } from "./KnockoutBracketPrediction";
+import { getRealLaterFixture, type RealLaterPhase } from "../real-knockout/real-knockout-fixtures";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -175,10 +176,20 @@ function buildBracketMatchInfo(matches: MatchRow[]) {
   );
 
   const matchInfoById: Record<number, BracketMatchInfo> = {};
+  const laterPhases: RealLaterPhase[] = [
+    "8e de finale",
+    "Quarts de finale",
+    "Demi-finales",
+    "Finale",
+  ];
 
   for (const [phase, phaseMatches] of Object.entries(groupedRealMatches)) {
     const startId = bracketPhaseStartIds[phase];
     if (!startId) continue;
+
+    const laterPhase = laterPhases.includes(phase as RealLaterPhase)
+      ? (phase as RealLaterPhase)
+      : null;
 
     phaseMatches
       .slice()
@@ -190,14 +201,17 @@ function buildBracketMatchInfo(matches: MatchRow[]) {
         return a.id - b.id;
       })
       .forEach((match, index) => {
-        if (!match.kickoff_at) return;
+        const fixture = laterPhase ? getRealLaterFixture(laterPhase, index) : null;
+        const kickoffAt = match.kickoff_at ?? fixture?.kickoff_at ?? null;
+
+        if (!kickoffAt) return;
 
         matchInfoById[startId + index] = {
           teamA: match.team_a,
           teamB: match.team_b,
-          kickoffAt: match.kickoff_at,
-          venue: match.venue,
-            city: match.city,
+          kickoffAt,
+          venue: match.venue ?? fixture?.venue ?? null,
+          city: match.city ?? fixture?.city ?? null,
           scoreA: match.score_a ?? null,
           scoreB: match.score_b ?? null,
           isFinished: match.is_finished ?? false,
@@ -206,6 +220,18 @@ function buildBracketMatchInfo(matches: MatchRow[]) {
   }
 
   return matchInfoById;
+}
+
+function collectAllGroupTeams(matches: MatchRow[]) {
+  const teams = new Set<string>();
+
+  for (const match of matches) {
+    if (!match.phase.toLowerCase().includes("group")) continue;
+    if (match.team_a) teams.add(match.team_a);
+    if (match.team_b) teams.add(match.team_b);
+  }
+
+  return Array.from(teams).sort((left, right) => left.localeCompare(right));
 }
 
 export default async function KnockoutPage() {
@@ -259,6 +285,7 @@ export default async function KnockoutPage() {
       resolveTeamPlaceholder(placeholderB, groupRankings),
     ]
   );
+  const allTeams = collectAllGroupTeams(matches ?? []);
   const matchInfoById = buildBracketMatchInfo(matches ?? []);
 
   return (
@@ -269,7 +296,9 @@ export default async function KnockoutPage() {
             userId={user.id}
             round32Teams={round32Teams}
             matchInfoById={matchInfoById}
+            freeChoiceTeams={allTeams}
             title="2e tours"
+            description="Cette page permet de construire vos pronostics des tours à élimination directe. Par défaut, les 16e, 8e, quarts, demies et la finale s'appuient sur les équipes issues des groupes. Si vous cochez l'option de choix libre, les listes déroulantes s'ouvrent sur les 48 pays et vous pouvez composer le tableau indépendamment des résultats de groupes."
           />
         </section>
 

@@ -497,10 +497,10 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
         </h1>
       </div>
 
-      <h2 className="text-lg font-semibold text-emerald-950">Mes pronostics</h2>
+      <h2 className="text-lg font-semibold text-slate-950">Mes pronostics</h2>
 
       {filteredMatches.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-emerald-200 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
           {selectedTab === "groupes" ? (
             "Aucun match de groupe n'est disponible pour le moment."
           ) : (
@@ -510,7 +510,7 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                 <form action={createKnockoutMatches} className="mt-4">
                   <button
                     type="submit"
-                    className="rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800"
+                    className="rounded bg-slate-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                   >
                     Créer les matchs des tours suivants
                   </button>
@@ -527,9 +527,9 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
         filteredMatches.map(([phase, phaseMatches]) => (
           <div
             key={phase}
-            className="overflow-visible rounded-lg border border-emerald-100 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.07)]"
+            className="overflow-visible rounded-2xl border border-slate-900/12 bg-white shadow-[0_14px_36px_rgba(15,23,42,0.08)]"
           >
-            <div className="flex items-center justify-between gap-4 rounded-t-lg border-b border-emerald-100 bg-emerald-50/80 px-4 py-3">
+            <div className="flex items-center justify-between gap-4 rounded-t-2xl border-b border-slate-900/10 bg-slate-900 px-4 py-3 text-white">
               <div className="text-base font-bold">
                 {selectedTab === "groupes" ? (
                   <GroupStandingsTooltip
@@ -544,7 +544,7 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
               <button
                 onClick={() => saveGroup(phaseMatches, phase)}
                 disabled={savingGroup === phase}
-                className="rounded bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-full bg-[#7a1f2c] px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {savingGroup === phase ? "Sauvegarde..." : "Sauvegarder"}
               </button>
@@ -554,7 +554,7 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
               <table className="w-full table-fixed text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50 text-left font-semibold text-slate-500">
-                    <th className="w-[13%] py-2 pr-1">Équipe A</th>
+                    <th className="w-[13%] py-2 pl-4 pr-1">Équipe A</th>
                     <th className="w-[44px] px-1 py-2 text-center">A</th>
                     <th className="w-[44px] px-1 py-2 text-center">B</th>
                     <th className="w-[13%] px-1 py-2">Équipe B</th>
@@ -604,9 +604,9 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                     return (
                       <tr
                         key={match.id}
-                        className="border-b border-slate-100 transition last:border-b-0 hover:bg-emerald-50/45"
+                        className="border-b border-slate-100 transition last:border-b-0 hover:bg-slate-100/70"
                       >
-                        <td className="py-2 pr-1 font-medium truncate text-slate-900">
+                        <td className="py-2 pl-4 pr-1 font-medium truncate text-slate-900">
                           {getDisplayTeam(match, "a", matchIndex, selectedTab)}
                         </td>
 
@@ -619,7 +619,7 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                               updateValue(match.id, "a", e.target.value)
                             }
                             disabled={!canPredict}
-                            className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500"
+                            className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-500"
                           />
                         </td>
 
@@ -632,7 +632,7 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                               updateValue(match.id, "b", e.target.value)
                             }
                             disabled={!canPredict}
-                            className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500"
+                            className="w-10 rounded border border-slate-200 bg-white px-1 py-1 text-center text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-500"
                           />
                         </td>
 
@@ -663,7 +663,7 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                               Terminé
                             </span>
                           ) : statusLabel === "Ouvert" ? (
-                            <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
                               Ouvert
                             </span>
                           ) : (
@@ -737,7 +737,7 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
       )}
 
       {message && (
-        <p className="rounded-lg border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+        <p className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
           {message}
         </p>
       )}

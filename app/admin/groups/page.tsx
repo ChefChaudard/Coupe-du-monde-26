@@ -314,7 +314,7 @@ export default async function AdminGroupsPage() {
                 <input name="name" type="text" required className="w-full rounded border p-3" />
               </label>
 
-              <button className="h-fit rounded bg-emerald-700 px-4 py-3 text-white">Renommer</button>
+              <button className="h-fit rounded bg-slate-700 px-4 py-3 text-white">Renommer</button>
             </form>
 
             <form action={deleteGroup} className="grid gap-4 lg:grid-cols-[1fr_auto]">

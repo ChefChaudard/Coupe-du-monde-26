@@ -68,7 +68,7 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-[calc(100vh-72px)] max-w-md flex-col justify-center p-8">
-      <div className="rounded-lg border border-emerald-100 bg-white p-6 shadow-[0_18px_45px_rgba(15,118,110,0.10)]">
+      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-[0_18px_45px_rgba(15,23,42,0.10)]">
       <h1 className="mb-2 text-3xl font-bold tracking-tight text-slate-950">Connexion</h1>
       <p className="mb-6 text-sm text-slate-500">Accès à vos pronostics Coupe du Monde 2026.</p>
 
@@ -77,7 +77,7 @@ export default function LoginPage() {
         placeholder="email@exemple.com"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="mb-4 w-full rounded border border-slate-200 bg-white p-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+        className="mb-4 w-full rounded border border-slate-200 bg-white p-3 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
         autoComplete="username"
       />
 
@@ -87,7 +87,7 @@ export default function LoginPage() {
           placeholder="Mot de passe"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded border border-slate-200 bg-white p-3 pr-24 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+          className="w-full rounded border border-slate-200 bg-white p-3 pr-24 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
           autoComplete="current-password"
         />
         <button
@@ -104,7 +104,7 @@ export default function LoginPage() {
           type="checkbox"
           checked={rememberMe}
           onChange={(e) => setRememberMe(e.target.checked)}
-          className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+          className="h-4 w-4 rounded border-gray-300 text-slate-600 focus:ring-slate-500"
         />
         Se souvenir de moi
       </label>
@@ -113,7 +113,7 @@ export default function LoginPage() {
         type="button"
         onClick={signIn}
         disabled={isSubmitting}
-        className="w-full rounded bg-emerald-700 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded bg-slate-700 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
       >
         Se connecter
       </button>

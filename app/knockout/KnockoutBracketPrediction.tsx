@@ -174,6 +174,35 @@ function getPossibleTeams(
   return dedupe([...leftTeams, ...rightTeams]);
 }
 
+function getPossibleTeamsForSide(
+  match: BracketMatch,
+  side: "a" | "b",
+  matchesById: Record<number, BracketMatch>,
+  selectedTeams: SelectedMatchTeams,
+  freeChoiceTeams?: string[]
+) {
+  if (freeChoiceTeams?.length) {
+    return freeChoiceTeams;
+  }
+
+  if (!match.leftMatchId || !match.rightMatchId) {
+    return side === "a" ? [match.teamA] : [match.teamB];
+  }
+
+  const parentMatchId = side === "a" ? match.leftMatchId : match.rightMatchId;
+  const parentMatch = matchesById[parentMatchId];
+
+  if (!parentMatch) {
+    return side === "a" ? [match.teamA] : [match.teamB];
+  }
+
+  if (parentMatch.phase === "16e de finale") {
+    return [parentMatch.teamA, parentMatch.teamB];
+  }
+
+  return getSelectedOrPossibleTeams(parentMatch, matchesById, selectedTeams);
+}
+
 function getTeamsSelectedInPhase(
   phaseMatches: BracketMatch[],
   selectedTeams: SelectedMatchTeams
@@ -314,6 +343,14 @@ function formatFirstRoundPrinciple(matchId: number) {
     value?.replace(/^1er\s+du\s+groupe\s+/i, "Vainqueur du groupe ") ?? "";
 
   return `${principleTeam(teamA)} contre ${principleTeam(teamB)}`;
+}
+
+function formatMatchPrinciple(match: BracketMatch, isFirstRound: boolean) {
+  if (isFirstRound) {
+    return formatFirstRoundPrinciple(match.id);
+  }
+
+  return `${match.teamA} contre ${match.teamB}`;
 }
 
 export default function KnockoutBracketPrediction({
@@ -665,12 +702,20 @@ if (error) {
             const selectedTeamB = normalizeTeamSelection(
               selectedTeams[match.id]?.b ?? match.teamB
             );
-            const teamAOptions = possibleTeams.filter(
-              (team) => team === selectedTeamA || !phaseSelectedTeams.includes(team)
-            );
-            const teamBOptions = possibleTeams.filter(
-              (team) => team === selectedTeamB || !phaseSelectedTeams.includes(team)
-            );
+            const teamAOptions = getPossibleTeamsForSide(
+              match,
+              "a",
+              matchesById,
+              selectedTeams,
+              isFreeChoiceMode ? freeChoiceTeams : undefined
+            ).filter((team) => team === selectedTeamA || !phaseSelectedTeams.includes(team));
+            const teamBOptions = getPossibleTeamsForSide(
+              match,
+              "b",
+              matchesById,
+              selectedTeams,
+              isFreeChoiceMode ? freeChoiceTeams : undefined
+            ).filter((team) => team === selectedTeamB || !phaseSelectedTeams.includes(team));
             const matchInfo = matchInfoById[match.id];
             const status = getMatchStatus(matchInfo, appNowTime);
             const points = getPointsForWinnerPrediction(
@@ -694,43 +739,47 @@ if (error) {
                 ? possibleTeams
                 : dedupe([selectedTeamA, selectedTeamB].filter(Boolean))
               : [];
+            const selectedValueA = teamAOptions.includes(selectedTeamA)
+              ? selectedTeamA
+              : "";
+            const selectedValueB = teamBOptions.includes(selectedTeamB)
+              ? selectedTeamB
+              : "";
 
             return (
               <div
                 key={match.id}
-                className={`relative rounded-lg border border-slate-200 bg-slate-50/80 p-4 transition hover:border-emerald-200 hover:bg-emerald-50/55 ${isFirstRound ? "pt-20" : ""}`}
+                className="relative rounded-lg border border-slate-200 bg-slate-50/80 p-4 pt-20 transition hover:border-emerald-200 hover:bg-emerald-50/55"
               >
-                {isFirstRound ? (
-                  <div className="absolute left-4 top-3 flex max-w-[74%] flex-col items-start gap-1 text-left">
-                    <div className="flex flex-wrap items-center justify-start gap-x-2 gap-y-1 text-[11px] font-semibold leading-tight text-slate-500">
-                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                        Match {match.id}
-                      </span>
-                      <span>
-                        Ville: {getMatchCity(displayVenue, displayCity, matchInfo?.teamA, matchInfo?.teamB)}
-                      </span>
-                      <span>
-                        Date: {" "}
-                        {kickoffDate
-                          ? formatMatchDate(kickoffDate, timeZone)
-                          : "-"}
-                      </span>
-                      <span>
-                        Heure: {" "}
-                        {kickoffDate
-                          ? formatMatchTime(kickoffDate, timeZone)
-                          : "-"}
-                      </span>
-                      <span className="whitespace-nowrap">Pts: {points ?? "-"}</span>
-                      <span className={`${getStatusClass(status)} whitespace-nowrap`}>
-                        {status === "Termine" ? "Termine" : status}
-                      </span>
-                    </div>
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      {formatFirstRoundPrinciple(match.id)}
-                    </div>
+                <div className="absolute left-4 top-3 flex max-w-[74%] flex-col items-start gap-1 text-left">
+                  <div className="flex flex-wrap items-center justify-start gap-x-2 gap-y-1 text-[11px] font-semibold leading-tight text-slate-500">
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                      Match {match.id}
+                    </span>
+                    <span>
+                      Ville: {getMatchCity(displayVenue, displayCity, matchInfo?.teamA, matchInfo?.teamB)}
+                    </span>
+                    <span>
+                      Date: {" "}
+                      {kickoffDate
+                        ? formatMatchDate(kickoffDate, timeZone)
+                        : "-"}
+                    </span>
+                    <span>
+                      Heure: {" "}
+                      {kickoffDate
+                        ? formatMatchTime(kickoffDate, timeZone)
+                        : "-"}
+                    </span>
+                    <span className="whitespace-nowrap">Pts: {points ?? "-"}</span>
+                    <span className={`${getStatusClass(status)} whitespace-nowrap`}>
+                      {status === "Termine" ? "Termine" : status}
+                    </span>
                   </div>
-                ) : null}
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    {formatMatchPrinciple(match, isFirstRound)}
+                  </div>
+                </div>
 
                 {isFirstRound ? (
                   isFreeChoiceMode ? (
@@ -738,7 +787,7 @@ if (error) {
                       <label className="space-y-1 text-sm font-medium text-slate-600">
                         <span>Equipe A</span>
                         <select
-                          value={selectedTeamA}
+                          value={selectedValueA}
                           onChange={(event) =>
                             handleTeamChange(match.id, phase, "a", event.target.value)
                           }
@@ -757,7 +806,7 @@ if (error) {
                       <label className="space-y-1 text-sm font-medium text-slate-600">
                         <span>Equipe B</span>
                         <select
-                          value={selectedTeamB}
+                          value={selectedValueB}
                           onChange={(event) =>
                             handleTeamChange(match.id, phase, "b", event.target.value)
                           }
@@ -794,7 +843,7 @@ if (error) {
                     <label className="space-y-1 text-sm font-medium text-slate-600">
                       <span>Equipe A</span>
                       <select
-                        value={selectedTeamA}
+                        value={selectedValueA}
                         onChange={(event) =>
                           handleTeamChange(match.id, phase, "a", event.target.value)
                         }
@@ -813,7 +862,7 @@ if (error) {
                     <label className="space-y-1 text-sm font-medium text-slate-600">
                       <span>Equipe B</span>
                       <select
-                        value={selectedTeamB}
+                        value={selectedValueB}
                         onChange={(event) =>
                           handleTeamChange(match.id, phase, "b", event.target.value)
                         }

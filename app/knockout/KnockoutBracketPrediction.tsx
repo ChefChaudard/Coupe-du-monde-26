@@ -167,6 +167,21 @@ function getPossibleTeams(
   return dedupe([...leftTeams, ...rightTeams]);
 }
 
+function getTeamsSelectedInPhase(
+  phaseMatches: BracketMatch[],
+  selectedTeams: SelectedMatchTeams
+) {
+  return dedupe(
+    phaseMatches.flatMap((match) => {
+      const selected = selectedTeams[match.id];
+      return [
+        normalizeTeamSelection(selected?.a),
+        normalizeTeamSelection(selected?.b),
+      ].filter(Boolean);
+    })
+  );
+}
+
 function getChildMatchIds(matches: BracketMatch[]) {
   return matches.reduce<Record<number, number[]>>((acc, match) => {
     if (match.leftMatchId) {
@@ -428,14 +443,63 @@ function handleWinnerChange(matchId: number, value: string) {
   setSaveMessage(null);
 }
 
-function handleTeamChange(matchId: number, side: "a" | "b", value: string) {
-  setSelectedTeams((prev) => ({
-    ...prev,
-    [matchId]: {
-      a: side === "a" ? value : prev[matchId]?.a ?? "",
-      b: side === "b" ? value : prev[matchId]?.b ?? "",
-    },
-  }));
+function handleTeamChange(
+  matchId: number,
+  phase: string,
+  side: "a" | "b",
+  value: string
+) {
+  setSelectedTeams((prev) => {
+    const next = { ...prev };
+    const phaseMatches = bracket.filter((match) => match.phase === phase);
+
+    if (value) {
+      for (const phaseMatch of phaseMatches) {
+        if (phaseMatch.id === matchId) continue;
+
+        const current = next[phaseMatch.id];
+        if (!current) continue;
+
+        let changed = false;
+
+        if (current.a === value) {
+          current.a = "";
+          changed = true;
+        }
+
+        if (current.b === value) {
+          current.b = "";
+          changed = true;
+        }
+
+        if (changed && !current.a && !current.b) {
+          delete next[phaseMatch.id];
+        }
+      }
+    }
+
+    const currentMatch = next[matchId] ?? { a: "", b: "" };
+    const nextMatch = {
+      ...currentMatch,
+      [side]: value,
+    };
+
+    if (nextMatch.a && nextMatch.a === nextMatch.b) {
+      if (side === "a") {
+        nextMatch.b = "";
+      } else {
+        nextMatch.a = "";
+      }
+    }
+
+    if (!nextMatch.a && !nextMatch.b) {
+      delete next[matchId];
+    } else {
+      next[matchId] = nextMatch;
+    }
+
+    return next;
+  });
 
   setMessage(null);
   setSaveMessage(null);
@@ -543,6 +607,7 @@ if (error) {
     const laterPhase = laterPhases.includes(phase as RealLaterPhase)
       ? (phase as RealLaterPhase)
       : null;
+    const phaseSelectedTeams = getTeamsSelectedInPhase(matches, selectedTeams);
 
     return (
       <div
@@ -566,6 +631,12 @@ if (error) {
             const selectedTeamB = normalizeTeamSelection(
               selectedTeams[match.id]?.b ?? match.teamB
             );
+            const teamAOptions = possibleTeams.filter(
+              (team) => team === selectedTeamA || !phaseSelectedTeams.includes(team)
+            );
+            const teamBOptions = possibleTeams.filter(
+              (team) => team === selectedTeamB || !phaseSelectedTeams.includes(team)
+            );
             const matchInfo = matchInfoById[match.id];
             const appNowTime = simulatedNow
               ? new Date(simulatedNow).getTime()
@@ -585,7 +656,11 @@ if (error) {
             const displayCity = matchInfo?.city ?? phaseFixture?.city ?? null;
             const isFirstRound = phase === firstRoundPhase;
             const isFinal = phase === "Finale";
-            const winnerOptions = isFinal ? possibleTeams : [];
+            const winnerOptions = isFinal
+              ? isFreeChoiceMode
+                ? possibleTeams
+                : dedupe([selectedTeamA, selectedTeamB].filter(Boolean))
+              : [];
 
             return (
               <div
@@ -624,12 +699,12 @@ if (error) {
                         <select
                           value={selectedTeamA}
                           onChange={(event) =>
-                            handleTeamChange(match.id, "a", event.target.value)
+                            handleTeamChange(match.id, phase, "a", event.target.value)
                           }
                           className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                         >
                           <option value="">Selectionner</option>
-                          {possibleTeams.map((team) => (
+                          {teamAOptions.map((team) => (
                             <option key={`a-${team}`} value={team}>
                               {team}
                             </option>
@@ -642,12 +717,12 @@ if (error) {
                         <select
                           value={selectedTeamB}
                           onChange={(event) =>
-                            handleTeamChange(match.id, "b", event.target.value)
+                            handleTeamChange(match.id, phase, "b", event.target.value)
                           }
                           className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                         >
                           <option value="">Selectionner</option>
-                          {possibleTeams.map((team) => (
+                          {teamBOptions.map((team) => (
                             <option key={`b-${team}`} value={team}>
                               {team}
                             </option>
@@ -678,12 +753,12 @@ if (error) {
                       <select
                         value={selectedTeamA}
                         onChange={(event) =>
-                          handleTeamChange(match.id, "a", event.target.value)
+                          handleTeamChange(match.id, phase, "a", event.target.value)
                         }
                         className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                       >
                         <option value="">Selectionner</option>
-                        {possibleTeams.map((team) => (
+                        {teamAOptions.map((team) => (
                           <option key={`a-${team}`} value={team}>
                             {team}
                           </option>
@@ -696,12 +771,12 @@ if (error) {
                       <select
                         value={selectedTeamB}
                         onChange={(event) =>
-                          handleTeamChange(match.id, "b", event.target.value)
+                          handleTeamChange(match.id, phase, "b", event.target.value)
                         }
                         className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                       >
                         <option value="">Selectionner</option>
-                        {possibleTeams.map((team) => (
+                        {teamBOptions.map((team) => (
                           <option key={`b-${team}`} value={team}>
                             {team}
                           </option>

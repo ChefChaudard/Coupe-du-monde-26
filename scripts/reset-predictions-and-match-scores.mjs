@@ -13,18 +13,31 @@ if (!supabaseUrl || !serviceRoleKey) {
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
 async function main() {
-  const [{ count: predictionsCount, error: predictionsCountError }, { count: matchesCount, error: matchesCountError }] =
+  const [
+    { count: predictionsCount, error: predictionsCountError },
+    { count: knockoutPredictionsCount, error: knockoutPredictionsError },
+    { count: matchesCount, error: matchesCountError },
+  ] =
     await Promise.all([
       supabase.from("predictions").select("match_id", { count: "exact", head: true }),
+      supabase.from("knockout_predictions").select("match_key", { count: "exact", head: true }),
       supabase.from("matches").select("id", { count: "exact", head: true }),
     ]);
 
   if (predictionsCountError) throw predictionsCountError;
+  if (knockoutPredictionsError) throw knockoutPredictionsError;
   if (matchesCountError) throw matchesCountError;
 
   const { error: deletePredictionsError } = await supabase.from("predictions").delete().neq("match_id", -1);
 
   if (deletePredictionsError) throw deletePredictionsError;
+
+  const { error: deleteKnockoutPredictionsError } = await supabase
+    .from("knockout_predictions")
+    .delete()
+    .neq("match_key", "-1");
+
+  if (deleteKnockoutPredictionsError) throw deleteKnockoutPredictionsError;
 
   const { data: matchRows, error: loadMatchesError } = await supabase
     .from("matches")
@@ -60,6 +73,7 @@ async function main() {
     JSON.stringify(
       {
         deletedPredictions: predictionsCount ?? 0,
+        deletedKnockoutPredictions: knockoutPredictionsCount ?? 0,
         resetMatches: matchesCount ?? 0,
       },
       null,

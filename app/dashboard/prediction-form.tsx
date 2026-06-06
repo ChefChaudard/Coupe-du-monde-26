@@ -66,6 +66,14 @@ type PredictionDraft = {
 
 type TabKey = "groupes" | "tours";
 
+const SIMULATED_DATE_STORAGE_KEY = "simulated-date";
+
+function readStoredSimulatedDate() {
+  if (typeof window === "undefined") return null;
+
+  return window.localStorage.getItem(SIMULATED_DATE_STORAGE_KEY) || null;
+}
+
 function isGroupPhase(phase: string) {
   return phase.toLowerCase().includes("group");
 }
@@ -495,7 +503,11 @@ export default function PredictionForm({
   useEffect(() => {
     function handleSimulatedDateUpdated(event: Event) {
       const nextValue = (event as CustomEvent<string>).detail;
-      if (nextValue) setSimulatedNow(nextValue);
+      setSimulatedNow(nextValue || null);
+    }
+
+    function syncSimulatedDateFromStorage() {
+      setSimulatedNow(readStoredSimulatedDate());
     }
 
     async function loadSimulatedDate() {
@@ -503,12 +515,12 @@ export default function PredictionForm({
         .from("app_settings")
         .select("value")
         .eq("key", "simulated_date")
-        .single();
+        .maybeSingle();
 
       if (data?.value) {
         setSimulatedNow(data.value);
       } else {
-        setSimulatedNow(new Date().toISOString());
+        setSimulatedNow(readStoredSimulatedDate());
       }
     }
 
@@ -517,6 +529,9 @@ export default function PredictionForm({
       handleSimulatedDateUpdated
     );
 
+    syncSimulatedDateFromStorage();
+    const intervalId = window.setInterval(syncSimulatedDateFromStorage, 500);
+
     void loadSimulatedDate();
 
     return () => {
@@ -524,6 +539,7 @@ export default function PredictionForm({
         "simulated-date-updated",
         handleSimulatedDateUpdated
       );
+      window.clearInterval(intervalId);
     };
   }, []);
 
@@ -678,7 +694,7 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
     <section className="space-y-5 text-slate-900">
       <div className="grid gap-4 lg:flex lg:items-center lg:justify-between">
         <h1 className="text-3xl font-bold tracking-tight text-slate-950">
-          Pronostics Groupes au {formatDashboardDate(effectiveNow, timeZone)}
+          Pronostics Groupes
         </h1>
       </div>
 

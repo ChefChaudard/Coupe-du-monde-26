@@ -28,6 +28,14 @@ type Match = {
   is_finished: boolean | null;
 };
 
+const SIMULATED_DATE_STORAGE_KEY = "simulated-date";
+
+function readStoredSimulatedDate() {
+  if (typeof window === "undefined") return null;
+
+  return window.localStorage.getItem(SIMULATED_DATE_STORAGE_KEY) || null;
+}
+
 type Prediction = {
   match_id: number;
   predicted_a: number;
@@ -118,7 +126,7 @@ export default function RealKnockoutScoreForm({
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const timeZone = useUserTimeZone();
-  const effectiveNow = simulatedNow ?? matches[0]?.kickoff_at ?? new Date(0).toISOString();
+  const effectiveNow = simulatedNow ?? new Date().toISOString();
   const appNowTime = new Date(effectiveNow).getTime();
   const isTournamentLocked =
     tournamentStartAt !== null && Number.isFinite(tournamentStartAt) && appNowTime >= tournamentStartAt;
@@ -130,7 +138,11 @@ export default function RealKnockoutScoreForm({
   useEffect(() => {
     function handleSimulatedDateUpdated(event: Event) {
       const nextValue = (event as CustomEvent<string>).detail;
-      if (nextValue) setSimulatedNow(nextValue);
+      setSimulatedNow(nextValue || null);
+    }
+
+    function syncSimulatedDateFromStorage() {
+      setSimulatedNow(readStoredSimulatedDate());
     }
 
     async function loadSimulatedDate() {
@@ -138,12 +150,12 @@ export default function RealKnockoutScoreForm({
         .from("app_settings")
         .select("value")
         .eq("key", "simulated_date")
-        .single();
+        .maybeSingle();
 
       if (data?.value) {
         setSimulatedNow(data.value);
       } else {
-        setSimulatedNow(new Date().toISOString());
+        setSimulatedNow(readStoredSimulatedDate());
       }
     }
 
@@ -151,6 +163,8 @@ export default function RealKnockoutScoreForm({
       "simulated-date-updated",
       handleSimulatedDateUpdated
     );
+    syncSimulatedDateFromStorage();
+    const intervalId = window.setInterval(syncSimulatedDateFromStorage, 500);
     void loadSimulatedDate();
 
     return () => {
@@ -158,6 +172,7 @@ export default function RealKnockoutScoreForm({
         "simulated-date-updated",
         handleSimulatedDateUpdated
       );
+      window.clearInterval(intervalId);
     };
   }, []);
 

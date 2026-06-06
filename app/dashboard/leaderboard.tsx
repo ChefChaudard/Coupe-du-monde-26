@@ -295,26 +295,6 @@ function LeaderboardRowItem({
               <p className="text-slate-500">Aucun détail disponible.</p>
             )}
 
-            {phaseDetails?.length ? (
-              <div className="mt-4 border-t border-slate-100 pt-3">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  Base par étape
-                </p>
-                <div className="space-y-1.5">
-                  {phaseDetails.map((phaseRow) => (
-                    <div
-                      key={phaseRow.phase}
-                      className="flex items-center justify-between gap-4 text-slate-600"
-                    >
-                      <span className="truncate pr-2">{phaseRow.phase}</span>
-                      <strong className="shrink-0 text-slate-900">
-                        base {formatOneDecimal(phaseRow.base)} - {formatOneDecimal(phaseRow.points)} pts
-                      </strong>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </div>
         ) : null}
       </span>

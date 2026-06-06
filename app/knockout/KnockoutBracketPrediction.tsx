@@ -53,6 +53,14 @@ export type BracketMatchInfo = {
 
 type MatchStatus = "Ouvert" | "Bloque" | "Termine";
 
+const SIMULATED_DATE_STORAGE_KEY = "simulated-date";
+
+function readStoredSimulatedDate() {
+  if (typeof window === "undefined") return null;
+
+  return window.localStorage.getItem(SIMULATED_DATE_STORAGE_KEY) || null;
+}
+
 function buildBracket(round32Teams?: Round32Teams): BracketMatch[] {
   const matches: BracketMatch[] = [];
 
@@ -444,7 +452,11 @@ useEffect(() => {
 useEffect(() => {
   function handleSimulatedDateUpdated(event: Event) {
     const nextValue = (event as CustomEvent<string>).detail;
-    if (nextValue) setSimulatedNow(nextValue);
+    setSimulatedNow(nextValue || null);
+  }
+
+  function syncSimulatedDateFromStorage() {
+    setSimulatedNow(readStoredSimulatedDate());
   }
 
   async function loadSimulatedDate() {
@@ -452,15 +464,17 @@ useEffect(() => {
       .from("app_settings")
       .select("value")
       .eq("key", "simulated_date")
-      .single();
+      .maybeSingle();
 
-    setSimulatedNow(data?.value ?? new Date().toISOString());
+    setSimulatedNow(data?.value ?? readStoredSimulatedDate());
   }
 
   window.addEventListener(
     "simulated-date-updated",
     handleSimulatedDateUpdated
   );
+  syncSimulatedDateFromStorage();
+  const intervalId = window.setInterval(syncSimulatedDateFromStorage, 500);
   void loadSimulatedDate();
 
   return () => {
@@ -468,6 +482,7 @@ useEffect(() => {
       "simulated-date-updated",
       handleSimulatedDateUpdated
     );
+    window.clearInterval(intervalId);
   };
 }, []);
 
@@ -743,7 +758,7 @@ if (error) {
               teamAPoints !== null || teamBPoints !== null
                 ? (teamAPoints ?? 0) + (teamBPoints ?? 0)
                 : null;
-            const winnerPoints = getPointsForWinnerPrediction(
+            const winnerPredictionPoints = getPointsForWinnerPrediction(
               selected,
               matchInfo,
               match.phase
@@ -751,7 +766,7 @@ if (error) {
             const pointsLabel =
               match.phase === firstRoundPhase
                 ? `Pts A: ${formatDisplayedPoints(teamAPoints)} / Pts B: ${formatDisplayedPoints(teamBPoints)}`
-                : `Pts: ${formatDisplayedPoints(placementPoints ?? winnerPoints)}`;
+                : `Pts: ${formatDisplayedPoints(placementPoints ?? winnerPredictionPoints)}`;
             const tooltipText =
               match.phase === firstRoundPhase
                 ? `${getMatchTooltipLabel(match)}\n${pointsLabel}\nChaque équipe rapporte sa propre valeur si elle apparaît bien dans le tour à 32.`

@@ -24,6 +24,8 @@ const navItems = [
   { key: "tours", label: "Tours suivants", href: "/dashboard?tab=tours" },
 ];
 
+const SIMULATED_DATE_STORAGE_KEY = "simulated-date";
+
 type CurrentUserResponse = {
   user: {
     email?: string | null;
@@ -61,6 +63,7 @@ export default function Topbar() {
   const [timeZone, setTimeZone] = useState(DEFAULT_TIME_ZONE);
   const [timeZoneError, setTimeZoneError] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
+  const [simulatedInput, setSimulatedInput] = useState<string>("");
   const [simulatedDateError, setSimulatedDateError] = useState("");
   const [savingGroups, setSavingGroups] = useState(false);
 
@@ -119,21 +122,31 @@ export default function Topbar() {
   useEffect(() => {
     if (!isSuperAdmin) {
       setSimulatedNow(null);
+      setSimulatedInput("");
       setSimulatedDateError("");
       return;
     }
 
     async function loadSimulatedDate() {
+      const storedValue = readStoredSimulatedDate();
+
+      if (storedValue) {
+        setSimulatedNow(storedValue);
+        setSimulatedInput(formatDateTimeLocalValue(storedValue));
+      }
+
       const { data } = await supabase
         .from("app_settings")
         .select("value")
         .eq("key", "simulated_date")
-        .single();
+        .maybeSingle();
 
       if (data?.value) {
         setSimulatedNow(data.value);
-      } else {
-        setSimulatedNow(new Date().toISOString());
+        setSimulatedInput(formatDateTimeLocalValue(data.value));
+      } else if (!storedValue) {
+        setSimulatedNow(storedValue);
+        setSimulatedInput(storedValue ? formatDateTimeLocalValue(storedValue) : "");
       }
     }
 
@@ -156,42 +169,31 @@ export default function Topbar() {
     setIsSuperAdmin(false);
     setUserName(null);
     setSimulatedNow(null);
+    setSimulatedInput("");
     setSimulatedDateError("");
     localStorage.removeItem("rememberMe");
     window.location.replace(loginUrl);
   }
 
   async function updateSimulatedDate(value: string) {
+    if (!value) {
+      return;
+    }
+
+    setSimulatedInput(value);
+
     const nextDate = new Date(value);
 
     if (Number.isNaN(nextDate.getTime())) return;
 
     const nextValue = nextDate.toISOString();
     const previousValue = simulatedNow;
+    const previousInput = simulatedInput;
 
     setSimulatedDateError("");
     setSimulatedNow(nextValue);
-
-    const { data, error } = await supabase
-      .from("app_settings")
-      .update({
-        value: nextValue,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("key", "simulated_date")
-      .select("key")
-      .maybeSingle();
-
-    if (error || !data) {
-      setSimulatedNow(previousValue);
-
-      setSimulatedDateError(
-        error?.message ??
-          "Date simulée introuvable dans les réglages."
-      );
-
-      return;
-    }
+    setSimulatedInput(value);
+    writeStoredSimulatedDate(nextValue);
 
     window.dispatchEvent(
       new CustomEvent("simulated-date-updated", {
@@ -199,7 +201,49 @@ export default function Topbar() {
       })
     );
 
-    router.refresh();
+    const { error } = await supabase
+      .from("app_settings")
+      .upsert({
+        key: "simulated_date",
+        value: nextValue,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "key" })
+      ;
+
+    if (error) {
+      setSimulatedDateError(
+        error?.message ??
+          "Date simulée introuvable dans les réglages."
+      );
+
+      return;
+    }
+  }
+
+  async function clearSimulatedDate() {
+    const previousValue = simulatedNow;
+    const previousInput = simulatedInput;
+
+    setSimulatedDateError("");
+    setSimulatedNow(null);
+    setSimulatedInput("");
+    writeStoredSimulatedDate(null);
+
+    window.dispatchEvent(
+      new CustomEvent("simulated-date-updated", {
+        detail: "",
+      })
+    );
+
+    const { error } = await supabase
+      .from("app_settings")
+      .delete()
+      .eq("key", "simulated_date");
+
+    if (error) {
+      setSimulatedDateError(error.message);
+      return;
+    }
   }
 
   async function updateTimeZone(nextTimeZone: string) {
@@ -354,7 +398,7 @@ export default function Topbar() {
 
           <GroupSelector />
 
-          {isSuperAdmin && simulatedNow && (
+          {isSuperAdmin && (
             <div className="relative shrink-0">
               <div className="flex items-center gap-2">
                 <label className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-sm sm:text-sm">
@@ -362,7 +406,7 @@ export default function Topbar() {
 
                   <input
                     type="datetime-local"
-                    value={formatDateTimeLocalValue(simulatedNow)}
+                    value={simulatedInput}
                     onChange={(event) =>
                       updateSimulatedDate(event.target.value)
                     }
@@ -372,12 +416,10 @@ export default function Topbar() {
 
                 <button
                   type="button"
-                  onClick={() =>
-                    void updateSimulatedDate(new Date().toISOString())
-                  }
+                  onClick={() => void clearSimulatedDate()}
                   className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 sm:px-4 sm:py-2 sm:text-sm"
                 >
-                  Maintenant
+                  Date sys
                 </button>
               </div>
 
@@ -441,4 +483,20 @@ export default function Topbar() {
       </div>
     </header>
   );
+}
+
+function readStoredSimulatedDate() {
+  if (typeof window === "undefined") return null;
+
+  return window.localStorage.getItem(SIMULATED_DATE_STORAGE_KEY) || null;
+}
+
+function writeStoredSimulatedDate(value: string | null) {
+  if (typeof window === "undefined") return;
+
+  if (value) {
+    window.localStorage.setItem(SIMULATED_DATE_STORAGE_KEY, value);
+  } else {
+    window.localStorage.removeItem(SIMULATED_DATE_STORAGE_KEY);
+  }
 }

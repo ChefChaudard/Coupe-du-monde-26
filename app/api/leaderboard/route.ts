@@ -44,34 +44,34 @@ export async function GET(request: Request) {
       }
     }
 
-    const [{ data: predictions, error: predictionsError }, { data: profiles, error: profilesError }] = await Promise.all([
+    const [{ data: predictions, error: predictionsError }, { data: profiles, error: profilesError }, { data: matches, error: matchesError }, { data: knockoutPredictions, error: knockoutPredictionsError }] = await Promise.all([
       client
         .from("predictions")
         .select(`
           user_id,
           match_id,
           predicted_a,
-          predicted_b,
-          matches (
-            phase,
-            score_a,
-            score_b,
-            is_finished
-          )
+          predicted_b
         `),
       client.from("profiles").select("id, nickname"),
+      client
+        .from("matches")
+        .select("id, phase, team_a, team_b, kickoff_at, venue, city, score_a, score_b, is_finished"),
+      client
+        .from("knockout_predictions")
+        .select("user_id, match_key, team_a, team_b, winner, round"),
     ]);
 
-    return { predictions, profiles, predictionsError, profilesError };
+    return { predictions, profiles, matches, knockoutPredictions, predictionsError, profilesError, matchesError, knockoutPredictionsError };
   };
 
   let leaderboardData = await loadLeaderboard(true);
 
-  if (leaderboardData.predictionsError || leaderboardData.profilesError) {
+  if (leaderboardData.predictionsError || leaderboardData.profilesError || leaderboardData.matchesError || leaderboardData.knockoutPredictionsError) {
     leaderboardData = await loadLeaderboard(false);
   }
 
-  const { predictions, profiles, predictionsError, profilesError } = leaderboardData;
+  const { predictions, profiles, matches, knockoutPredictions, predictionsError, profilesError, matchesError, knockoutPredictionsError } = leaderboardData;
 
   if (predictionsError) {
     return NextResponse.json({ error: predictionsError.message }, { status: 500 });
@@ -81,10 +81,31 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: profilesError.message }, { status: 500 });
   }
 
+  if (matchesError) {
+    return NextResponse.json({ error: matchesError.message }, { status: 500 });
+  }
+
+  if (knockoutPredictionsError) {
+    return NextResponse.json({ error: knockoutPredictionsError.message }, { status: 500 });
+  }
+
+  const matchesById = new Map(
+    (matches ?? []).map((match: { id: number; phase: string; team_a: string; team_b: string; kickoff_at?: string | null; venue?: string | null; city?: string | null; score_a: number | null; score_b: number | null; is_finished: boolean | null }) => [match.id, match])
+  );
+
+  const predictionsWithMatches = (predictions ?? []).map(
+    (prediction: { user_id: string; match_id: number; predicted_a: number; predicted_b: number }) => ({
+      ...prediction,
+      matches: matchesById.get(prediction.match_id) ?? null,
+    })
+  );
+
   const payload = computeLeaderboardData(
-    (predictions ?? []) as unknown as Parameters<typeof computeLeaderboardData>[0],
+    predictionsWithMatches as unknown as Parameters<typeof computeLeaderboardData>[0],
     (profiles ?? []) as unknown as Parameters<typeof computeLeaderboardData>[1],
-    groupMemberIds
+    groupMemberIds,
+    (knockoutPredictions ?? []) as unknown as Parameters<typeof computeLeaderboardData>[3],
+    (matches ?? []) as unknown as Parameters<typeof computeLeaderboardData>[4]
   );
 
   return NextResponse.json(payload);

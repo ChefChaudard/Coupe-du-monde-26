@@ -33,12 +33,15 @@ type PredictionRow = {
 };
 
 type KnockoutPredictionRow = {
+  user_id: string;
   match_key: string;
   team_a: string | null;
   team_b: string | null;
+  round: string | null;
 };
 
 type TeamOddsByMatchId = Record<number, Record<string, number>>;
+type TeamOddsByPhase = Record<string, Record<string, number>>;
 
 type GroupRanking = Record<string, string[]>;
 
@@ -68,12 +71,12 @@ function fromRealPhase(phase: string) {
 }
 
 function normalizeGroupName(phase: string) {
-  const match = phase.match(/groupe\s*([A-H])/i) || phase.match(/group\s*([A-H])/i);
+  const match = phase.match(/groupe\s*([A-L])/i) || phase.match(/group\s*([A-L])/i);
   return match ? match[1].toUpperCase() : null;
 }
 
 function getGroupPositionFromPlaceholder(placeholder: string) {
-  const match = placeholder.match(/^(1er|2eme|3eme) du groupe ([A-H])/i);
+  const match = placeholder.match(/^(1er|2eme|3eme) du groupe ([A-L])/i);
   if (!match) return null;
 
   const position = match[1] === "1er" ? 1 : match[1] === "2eme" ? 2 : 3;
@@ -236,9 +239,7 @@ function buildBracketMatchInfo(matches: MatchRow[]) {
       })
       .forEach((match, index) => {
         const fixture = laterPhase ? getRealLaterFixture(laterPhase, index) : null;
-        const kickoffAt = match.kickoff_at ?? fixture?.kickoff_at ?? null;
-
-        if (!kickoffAt) return;
+        const kickoffAt = match.kickoff_at ?? fixture?.kickoff_at ?? "";
 
         matchInfoById[startId + index] = {
           teamA: match.team_a,
@@ -283,6 +284,29 @@ function getTournamentStartAt(matches: MatchRow[]) {
 function normalizeTeamLabel(value?: string | null) {
   if (!value) return "";
   return value.trim();
+}
+
+function buildActualTeamsByPhase(matches: MatchRow[]) {
+  const teamsByPhase = new Map<string, Set<string>>();
+
+  for (const match of matches) {
+    if (!match.phase.startsWith(realPhasePrefix)) continue;
+
+    const phase = fromRealPhase(match.phase);
+    const phaseTeams = teamsByPhase.get(phase) ?? new Set<string>();
+
+    if (match.team_a) phaseTeams.add(match.team_a);
+    if (match.team_b) phaseTeams.add(match.team_b);
+
+    teamsByPhase.set(phase, phaseTeams);
+  }
+
+  return Object.fromEntries(
+    Array.from(teamsByPhase.entries()).map(([phase, teams]) => [
+      phase,
+      Array.from(teams).sort((left, right) => left.localeCompare(right)),
+    ])
+  );
 }
 
 function buildTeamOddsByMatchId(
@@ -331,6 +355,55 @@ function buildTeamOddsByMatchId(
   return oddsByMatchId;
 }
 
+function buildTeamOddsByPhase(
+  predictions: KnockoutPredictionRow[]
+): TeamOddsByPhase {
+  const participantsByPhase = new Map<string, Set<string>>();
+  const teamParticipantsByPhase = new Map<string, Map<string, Set<string>>>();
+
+  for (const prediction of predictions) {
+    if (!prediction.round) continue;
+
+    const phase = fromRealPhase(prediction.round);
+    const teams = Array.from(
+      new Set([
+        normalizeTeamLabel(prediction.team_a),
+        normalizeTeamLabel(prediction.team_b),
+      ].filter(Boolean))
+    );
+
+    if (teams.length === 0) continue;
+
+    const phaseParticipants = participantsByPhase.get(phase) ?? new Set<string>();
+    phaseParticipants.add(prediction.user_id);
+    participantsByPhase.set(phase, phaseParticipants);
+
+    const currentTeamParticipants = teamParticipantsByPhase.get(phase) ?? new Map<string, Set<string>>();
+
+    for (const team of teams) {
+      const teamParticipants = currentTeamParticipants.get(team) ?? new Set<string>();
+      teamParticipants.add(prediction.user_id);
+      currentTeamParticipants.set(team, teamParticipants);
+    }
+
+    teamParticipantsByPhase.set(phase, currentTeamParticipants);
+  }
+
+  const oddsByPhase: TeamOddsByPhase = {};
+
+  for (const [phase, teamParticipants] of teamParticipantsByPhase.entries()) {
+    const total = participantsByPhase.get(phase)?.size ?? 0;
+    oddsByPhase[phase] = Object.fromEntries(
+      Array.from(teamParticipants.entries()).map(([team, participants]) => [
+        team,
+        total === 0 ? 1 : Math.max(1, Math.round((total / Math.max(participants.size, 1)) * 100) / 100),
+      ])
+    );
+  }
+
+  return oddsByPhase;
+}
+
 export default async function KnockoutPage() {
   const supabase = await createClient();
   const {
@@ -354,7 +427,7 @@ export default async function KnockoutPage() {
 
   const { data: knockoutOddsRows } = await supabase
     .from("knockout_predictions")
-    .select("match_key, team_a, team_b");
+    .select("match_key, team_a, team_b, round");
 
   const groupRankings = buildPredictedGroupRankings(
     matches ?? [],
@@ -363,22 +436,22 @@ export default async function KnockoutPage() {
   const groupTeamsByLetter = buildGroupTeamsByLetter(matches ?? []);
 
   const round32Placeholders: Round32Teams = [
-    ["1er du groupe A", "3eme du groupe F"],
-    ["1er du groupe C", "3eme du groupe E"],
-    ["1er du groupe B", "3eme du groupe D"],
-    ["1er du groupe D", "3eme du groupe C"],
-    ["1er du groupe E", "3eme du groupe B"],
-    ["1er du groupe F", "3eme du groupe A"],
-    ["1er du groupe G", "2eme du groupe H"],
-    ["1er du groupe H", "2eme du groupe G"],
-    ["2eme du groupe A", "2eme du groupe F"],
-    ["2eme du groupe C", "2eme du groupe E"],
-    ["2eme du groupe B", "2eme du groupe D"],
-    ["2eme du groupe D", "2eme du groupe C"],
-    ["2eme du groupe E", "2eme du groupe B"],
-    ["2eme du groupe F", "2eme du groupe A"],
-    ["3eme du groupe G", "3eme du groupe H"],
-    ["3eme du groupe H", "3eme du groupe G"],
+    ["1er du groupe A", "3eme du groupe L"],
+    ["1er du groupe B", "3eme du groupe K"],
+    ["1er du groupe C", "3eme du groupe J"],
+    ["1er du groupe D", "3eme du groupe I"],
+    ["1er du groupe E", "3eme du groupe H"],
+    ["1er du groupe F", "3eme du groupe G"],
+    ["1er du groupe G", "2eme du groupe F"],
+    ["1er du groupe H", "2eme du groupe E"],
+    ["2eme du groupe A", "2eme du groupe L"],
+    ["2eme du groupe B", "2eme du groupe K"],
+    ["2eme du groupe C", "2eme du groupe J"],
+    ["2eme du groupe D", "2eme du groupe I"],
+    ["2eme du groupe E", "2eme du groupe H"],
+    ["2eme du groupe F", "2eme du groupe G"],
+    ["3eme du groupe A", "3eme du groupe C"],
+    ["3eme du groupe B", "3eme du groupe D"],
   ];
 
   const round32Teams: Round32Teams = round32Placeholders.map(
@@ -389,7 +462,8 @@ export default async function KnockoutPage() {
   );
   const allTeams = collectAllGroupTeams(matches ?? []);
   const matchInfoById = buildBracketMatchInfo(matches ?? []);
-  const teamOddsByMatchId = buildTeamOddsByMatchId(
+  const actualTeamsByPhase = buildActualTeamsByPhase(matches ?? []);
+  const teamOddsByPhase = buildTeamOddsByPhase(
     (knockoutOddsRows ?? []) as KnockoutPredictionRow[]
   );
   const tournamentStartAt = getTournamentStartAt(matches ?? []);
@@ -403,7 +477,8 @@ export default async function KnockoutPage() {
             round32Teams={round32Teams}
             groupTeamsByLetter={groupTeamsByLetter}
             matchInfoById={matchInfoById}
-            teamOddsByMatchId={teamOddsByMatchId}
+            actualTeamsByPhase={actualTeamsByPhase}
+            teamOddsByPhase={teamOddsByPhase}
             tournamentStartAt={tournamentStartAt}
             title="2e tours"
             description="Cette page permet de construire vos pronostics des tours à élimination directe. Les 16e proposent les 48 équipes qualifiées. Pour les tours suivants, les listes se basent automatiquement sur les équipes du tour précédent, avec une seule occurrence possible par tour. Chaque équipe correctement pronostiquée rapporte 2 points multipliés par sa cote. La cote d'une issue correspond au total des joueurs ayant pronostiqué ce match divisé par le nombre de joueurs ayant joué cette issue."

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 import {
   formatDashboardDate,
   formatMatchDate,
@@ -11,6 +12,8 @@ import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
 import GroupStandingsTooltip from "./group-standings-tooltip";
 import { formatOneDecimal } from "./format";
 import { getMatchCity } from "@/app/lib/fifa-cities";
+
+const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
 
 type Match = {
   id: number;
@@ -244,22 +247,22 @@ const knockoutPhaseOrder = [
 ];
 
 const round32Placeholders: [string, string][] = [
-  ["1er du groupe A", "3eme du groupe F"],
-  ["1er du groupe C", "3eme du groupe E"],
-  ["1er du groupe B", "3eme du groupe D"],
-  ["1er du groupe D", "3eme du groupe C"],
-  ["1er du groupe E", "3eme du groupe B"],
-  ["1er du groupe F", "3eme du groupe A"],
-  ["1er du groupe G", "2eme du groupe H"],
-  ["1er du groupe H", "2eme du groupe G"],
-  ["2eme du groupe A", "2eme du groupe F"],
-  ["2eme du groupe C", "2eme du groupe E"],
-  ["2eme du groupe B", "2eme du groupe D"],
-  ["2eme du groupe D", "2eme du groupe C"],
-  ["2eme du groupe E", "2eme du groupe B"],
-  ["2eme du groupe F", "2eme du groupe A"],
-  ["3eme du groupe G", "3eme du groupe H"],
-  ["3eme du groupe H", "3eme du groupe G"],
+  ["1er du groupe A", "3eme du groupe L"],
+  ["1er du groupe B", "3eme du groupe K"],
+  ["1er du groupe C", "3eme du groupe J"],
+  ["1er du groupe D", "3eme du groupe I"],
+  ["1er du groupe E", "3eme du groupe H"],
+  ["1er du groupe F", "3eme du groupe G"],
+  ["1er du groupe G", "2eme du groupe F"],
+  ["1er du groupe H", "2eme du groupe E"],
+  ["2eme du groupe A", "2eme du groupe L"],
+  ["2eme du groupe B", "2eme du groupe K"],
+  ["2eme du groupe C", "2eme du groupe J"],
+  ["2eme du groupe D", "2eme du groupe I"],
+  ["2eme du groupe E", "2eme du groupe H"],
+  ["2eme du groupe F", "2eme du groupe G"],
+  ["3eme du groupe A", "3eme du groupe C"],
+  ["3eme du groupe B", "3eme du groupe D"],
 ];
 
 function getKnockoutTeamLabel(match: Match, side: "a" | "b", matchIndex: number) {
@@ -413,6 +416,8 @@ export default function PredictionForm({
     return values;
   }, [existingPredictions]);
 
+  const router = useRouter();
+
   const initialRealScores = useMemo(() => {
     const values: FormValues = {};
 
@@ -531,6 +536,11 @@ const appNowTime = new Date(effectiveNow).getTime();
     return buildPredictedGroupStandings(matches, values);
   }, [matches, appNowTime, values]);
 
+  const liveGroupStandings = useMemo(() => {
+    if (!appNowTime) return {};
+    return buildLiveGroupStandings(matches, appNowTime);
+  }, [matches, appNowTime]);
+
   function updateValue(matchId: number, side: "a" | "b", value: string) {
     setValues((prev) => ({
       ...prev,
@@ -589,6 +599,9 @@ const appNowTime = new Date(effectiveNow).getTime();
           setMessage(`Erreur sauvegarde pronostics : ${error.message}`);
           return;
         }
+
+        window.dispatchEvent(new Event(LEADERBOARD_REFRESH_EVENT));
+        router.refresh();
       }
 
       if (isAdmin) {
@@ -618,9 +631,14 @@ const appNowTime = new Date(effectiveNow).getTime();
             setMessage(`Erreur sauvegarde score réel : ${error.message}`);
             return;
           }
+
+          window.dispatchEvent(new Event(LEADERBOARD_REFRESH_EVENT));
+          router.refresh();
         }
 
         await syncRealKnockoutMatches(new FormData());
+        window.dispatchEvent(new Event(LEADERBOARD_REFRESH_EVENT));
+        router.refresh();
       }
 
 setMessage(`Sauvegarde effectuée pour ${phase}.`);
@@ -701,7 +719,8 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                 {selectedTab === "groupes" ? (
                   <GroupStandingsTooltip
                     groupName={phase}
-                    standings={predictedGroupStandings[phase] ?? []}
+                    predictedStandings={predictedGroupStandings[phase] ?? []}
+                    actualStandings={liveGroupStandings[phase] ?? []}
                   />
                 ) : (
                   <span className="capitalize">{phase}</span>

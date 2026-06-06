@@ -12,6 +12,8 @@ import { getMatchCity } from "@/app/lib/fifa-cities";
 import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
 import { getRealLaterFixture, type RealLaterPhase } from "./real-knockout-fixtures";
 
+const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
+
 type Match = {
   id: number;
   match_number?: number | null;
@@ -443,6 +445,9 @@ export default function RealKnockoutScoreForm({
                                 action={updateMatchResult}
                                 className="flex justify-end gap-1"
                                 suppressHydrationWarning
+                                onSubmit={() => {
+                                  window.dispatchEvent(new Event(LEADERBOARD_REFRESH_EVENT));
+                                }}
                               >
                                 <input
                                   type="hidden"

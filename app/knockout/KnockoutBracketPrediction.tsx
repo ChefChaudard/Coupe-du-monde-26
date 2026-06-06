@@ -16,6 +16,8 @@ import {
   type RealLaterPhase,
 } from "../real-knockout/real-knockout-fixtures";
 
+const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
+
 type BracketMatch = {
   id: number;
   phase: string;
@@ -36,7 +38,7 @@ type KnockoutPredictionRow = {
 
 type SelectedMatchTeams = Record<number, { a: string; b: string }>;
 
-type TeamOddsByMatchId = Record<number, Record<string, number>>;
+type TeamOddsByPhase = Record<string, Record<string, number>>;
 
 export type BracketMatchInfo = {
   teamA: string;
@@ -113,7 +115,15 @@ function isSyntheticTeamLabel(value: string) {
 
 function normalizeTeamSelection(value?: string | null) {
   if (!value || isSyntheticTeamLabel(value)) return "";
-  return value;
+  return value.trim();
+}
+
+function normalizeTeamKey(value?: string | null) {
+  return (value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 function getAvailableTeamsForMatch(
@@ -258,6 +268,21 @@ function getChampionBonusPoints(
   return selectedWinner === actualWinner ? 4 : 0;
 }
 
+function getPlacementPointsForTeam(
+  selectedTeam: string,
+  actualTeams: Array<string | undefined>,
+  phase: string,
+  odds: number
+) {
+  if (!selectedTeam) return null;
+
+  const selectedKey = normalizeTeamKey(selectedTeam);
+
+  return actualTeams.some((team) => normalizeTeamKey(team) === selectedKey)
+    ? Math.max(1, Math.round(getWinnerPointsBase(phase) * odds * 100) / 100)
+    : 0;
+}
+
 function getMatchStatus(
   matchInfo: BracketMatchInfo | undefined,
   appNowTime: number
@@ -299,11 +324,19 @@ function formatTheoreticalTeamLabel(label: string) {
   return trimmed;
 }
 
+function getRound32QualificationRuleLabel() {
+  return [
+    "Règle FIFA 2026 pour le tour à 32:",
+    "12 premiers de groupe + 12 deuxièmes + 8 meilleurs troisièmes.",
+    "Les groupes vont de A à L.",
+  ].join(" ");
+}
+
 function getTheoreticalMatchLabel(match: BracketMatch) {
   if (match.phase === "16e de finale") {
     const placeholder = round32Placeholders[match.id - 1] ?? [match.teamA, match.teamB];
 
-    return `${formatTheoreticalTeamLabel(placeholder[0])} contre ${formatTheoreticalTeamLabel(placeholder[1])}`;
+    return `${getRound32QualificationRuleLabel()} ${formatTheoreticalTeamLabel(placeholder[0])} contre ${formatTheoreticalTeamLabel(placeholder[1])}`;
   }
 
   const previousPhase = getPreviousPhaseName(match.phase);
@@ -319,12 +352,17 @@ function getMatchTooltipLabel(match: BracketMatch) {
   return `En théorie: ${getTheoreticalMatchLabel(match)}`;
 }
 
+function formatDisplayedPoints(value: number | null) {
+  return value === null ? "-" : formatOneDecimal(value);
+}
+
 export default function KnockoutBracketPrediction({
   userId,
   round32Teams,
   groupTeamsByLetter = {},
   matchInfoById = {},
-  teamOddsByMatchId = {},
+  actualTeamsByPhase = {},
+  teamOddsByPhase = {},
   tournamentStartAt = null,
   storageKey = "knockoutBracketPredictions",
   title = "Pronostics Tours Eliminatoires",
@@ -334,7 +372,8 @@ export default function KnockoutBracketPrediction({
   round32Teams?: Round32Teams;
   groupTeamsByLetter?: Record<string, string[]>;
   matchInfoById?: Record<number, BracketMatchInfo>;
-  teamOddsByMatchId?: TeamOddsByMatchId;
+  actualTeamsByPhase?: Record<string, string[]>;
+  teamOddsByPhase?: TeamOddsByPhase;
   tournamentStartAt?: number | null;
   storageKey?: string;
   title?: string;
@@ -579,6 +618,7 @@ if (error) {
   return;
 }
 
+  window.dispatchEvent(new Event(LEADERBOARD_REFRESH_EVENT));
   setSaveMessage("Pronostics sauvegard├®s.");
 }
 
@@ -643,8 +683,8 @@ if (error) {
         ? allRound32Teams
         : [];
 
-    function formatTeamOption(team: string, matchId: number) {
-      const odds = teamOddsByMatchId[matchId]?.[team] ?? 1;
+    function formatTeamOption(team: string) {
+      const odds = teamOddsByPhase[phase]?.[team] ?? 1;
       return `${team} (${formatOneDecimal(odds)})`;
     }
 
@@ -682,11 +722,40 @@ if (error) {
             );
             const matchInfo = matchInfoById[match.id];
             const status = getMatchStatus(matchInfo, appNowTime);
-            const points = getPointsForWinnerPrediction(
+            const actualTeams =
+              actualTeamsByPhase[phase] ??
+              [matchInfo?.teamA, matchInfo?.teamB].filter(
+                (team): team is string => Boolean(team)
+              );
+            const teamAPoints = getPlacementPointsForTeam(
+              selectedTeamA,
+              actualTeams,
+              match.phase,
+              teamOddsByPhase[phase]?.[selectedTeamA] ?? 1
+            );
+            const teamBPoints = getPlacementPointsForTeam(
+              selectedTeamB,
+              actualTeams,
+              match.phase,
+              teamOddsByPhase[phase]?.[selectedTeamB] ?? 1
+            );
+            const placementPoints =
+              teamAPoints !== null || teamBPoints !== null
+                ? (teamAPoints ?? 0) + (teamBPoints ?? 0)
+                : null;
+            const winnerPoints = getPointsForWinnerPrediction(
               selected,
               matchInfo,
               match.phase
             );
+            const pointsLabel =
+              match.phase === firstRoundPhase
+                ? `Pts A: ${formatDisplayedPoints(teamAPoints)} / Pts B: ${formatDisplayedPoints(teamBPoints)}`
+                : `Pts: ${formatDisplayedPoints(placementPoints ?? winnerPoints)}`;
+            const tooltipText =
+              match.phase === firstRoundPhase
+                ? `${getMatchTooltipLabel(match)}\n${pointsLabel}\nChaque équipe rapporte sa propre valeur si elle apparaît bien dans le tour à 32.`
+                : getMatchTooltipLabel(match);
             const phaseFixture = isFirstRound
               ? getRealRound32Fixture(matchIndex)
               : laterPhase
@@ -720,8 +789,8 @@ if (error) {
                         Match {match.id}
                       </span>
 
-                      <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-[min(420px,calc(100vw-3rem))] translate-y-1 rounded-xl border border-slate-200 bg-white p-3 text-xs font-normal text-slate-700 opacity-0 shadow-[0_12px_30px_rgba(15,23,42,0.12)] transition duration-150 group-hover:translate-y-0 group-hover:opacity-100">
-                        {getMatchTooltipLabel(match)}
+                      <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-[min(420px,calc(100vw-3rem))] translate-y-1 rounded-xl border border-slate-200 bg-white p-3 text-xs font-normal text-slate-700 opacity-0 shadow-[0_12px_30px_rgba(15,23,42,0.12)] transition duration-150 group-hover:translate-y-0 group-hover:opacity-100 whitespace-pre-line">
+                        {tooltipText}
                       </div>
                     </div>
 
@@ -738,7 +807,9 @@ if (error) {
                         ? formatMatchTime(kickoffDate, timeZone)
                         : "-"}
                     </span>
-                    <span className="whitespace-nowrap">Pts: {points ?? "-"}</span>
+                    <span className="whitespace-nowrap">
+                      {pointsLabel}
+                    </span>
                     <span className={`${getStatusClass(status)} ml-auto whitespace-nowrap text-right`}>
                       {status === "Termine" ? "Termine" : status}
                     </span>
@@ -759,7 +830,7 @@ if (error) {
                       <option value="">Selectionner</option>
                       {teamAOptions.map((team) => (
                         <option key={`a-${team}`} value={team}>
-                          {formatTeamOption(team, match.id)}
+                          {formatTeamOption(team)}
                         </option>
                       ))}
                     </select>
@@ -778,7 +849,7 @@ if (error) {
                       <option value="">Selectionner</option>
                       {teamBOptions.map((team) => (
                         <option key={`b-${team}`} value={team}>
-                          {formatTeamOption(team, match.id)}
+                          {formatTeamOption(team)}
                         </option>
                       ))}
                     </select>
@@ -799,7 +870,7 @@ if (error) {
                       <option value="">Selectionner le vainqueur</option>
                       {winnerOptions.map((team) => (
                         <option key={`winner-${match.id}-${team}`} value={team}>
-                          {formatTeamOption(team, match.id)}
+                          {formatTeamOption(team)}
                         </option>
                       ))}
                     </select>

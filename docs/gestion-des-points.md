@@ -12,6 +12,15 @@ $$
 
 Si l'issue du pronostic ne correspond pas au resultat reel, le score est nul.
 
+Pour les phases de groupes, un bonus supplementaire est ajoute lorsque le classement final d'une equipe correspond au rang predit.
+
+$$
+Bonus_{classement} = Base_{groupe} 	imes Cote_{rang}
+$$
+
+La cote du rang correspond au nombre total de participants au groupe divise par le nombre de participants ayant predit cette equipe a ce rang.
+Le bonus n'est applique que lorsque tous les matchs du groupe sont termines.
+
 ## Base par phase
 - Phase de groupes: $1$
 - 32e de finale: $1$
@@ -43,6 +52,7 @@ Le classement live est la somme des points de tous les pronostics valides d'un u
 
 - Le classement global additionne tous les points.
 - Le detail par phase ventile les points entre groupes, tours eliminatoires et pronostics reels.
+- Les groupes incluent aussi un bonus de classement final pour chaque equipe bien placee.
 - Le classement se recalcule a partir des donnees courantes des matchs et des pronostics, pas a partir d'un score pre-calculé figé.
 
 ## Exemple

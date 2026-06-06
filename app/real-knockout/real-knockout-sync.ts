@@ -471,10 +471,19 @@ export async function syncAvailableRealMatches(supabase: any) {
     .select("*");
 
   const safeMatches = (matches ?? []) as Match[];
-  const payload = buildAvailableRealMatches(safeMatches);
+  const payload = Array.from(
+    new Map(
+      buildAvailableRealMatches(safeMatches).map((match) => [
+        match.match_number ?? `${match.phase}|${match.team_a}|${match.team_b}|${match.kickoff_at}`,
+        match,
+      ])
+    ).values()
+  );
 
   if (payload.length > 0) {
-    const { error } = await supabase.from("matches").insert(payload);
+    const { error } = await supabase.from("matches").upsert(payload, {
+      onConflict: "match_number",
+    });
     if (error) {
       throw new Error(error.message);
     }

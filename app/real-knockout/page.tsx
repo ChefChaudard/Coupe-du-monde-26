@@ -585,10 +585,19 @@ async function syncAvailableRealMatches(supabase: Awaited<ReturnType<typeof crea
     .order("kickoff_at", { ascending: true });
 
   const safeMatches = (matches ?? []) as Match[];
-  const payload = buildAvailableRealMatches(safeMatches);
+  const payload = Array.from(
+    new Map(
+      buildAvailableRealMatches(safeMatches).map((match) => [
+        match.match_number ?? `${match.phase}|${match.team_a}|${match.team_b}|${match.kickoff_at}`,
+        match,
+      ])
+    ).values()
+  );
 
   if (payload.length > 0) {
-    await supabase.from("matches").insert(payload);
+    await supabase.from("matches").upsert(payload, {
+      onConflict: "match_number",
+    });
   }
 
   const existingLaterMatches = getRealLaterPhaseMatches(safeMatches);

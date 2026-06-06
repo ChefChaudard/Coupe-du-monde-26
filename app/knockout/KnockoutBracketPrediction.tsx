@@ -289,6 +289,36 @@ function getStatusClass(status: MatchStatus) {
   return "rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600";
 }
 
+function formatTheoreticalTeamLabel(label: string) {
+  const trimmed = label.trim();
+
+  if (/^1er\s+du\s+groupe\s+/i.test(trimmed)) {
+    return trimmed.replace(/^1er\s+du\s+groupe\s+/i, "Vainqueur du groupe ");
+  }
+
+  return trimmed;
+}
+
+function getTheoreticalMatchLabel(match: BracketMatch) {
+  if (match.phase === "16e de finale") {
+    const placeholder = round32Placeholders[match.id - 1] ?? [match.teamA, match.teamB];
+
+    return `${formatTheoreticalTeamLabel(placeholder[0])} contre ${formatTheoreticalTeamLabel(placeholder[1])}`;
+  }
+
+  const previousPhase = getPreviousPhaseName(match.phase);
+
+  if (!previousPhase || !match.leftMatchId || !match.rightMatchId) {
+    return `Vainqueur ${match.teamA} contre ${match.teamB}`;
+  }
+
+  return `Vainqueur ${previousPhase} ${match.leftMatchId} contre Vainqueur ${previousPhase} ${match.rightMatchId}`;
+}
+
+function getMatchTooltipLabel(match: BracketMatch) {
+  return `En théorie: ${getTheoreticalMatchLabel(match)}`;
+}
+
 export default function KnockoutBracketPrediction({
   userId,
   round32Teams,
@@ -682,9 +712,16 @@ if (error) {
               >
                 <div className="absolute left-4 right-4 top-3 flex flex-col items-start gap-1 text-left">
                   <div className="flex w-full flex-wrap items-center justify-start gap-x-2 gap-y-1 rounded-md bg-slate-200 px-3 py-2 text-[11px] font-semibold leading-tight text-slate-600">
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                      Match {match.id}
-                    </span>
+                    <div className="group relative shrink-0">
+                      <span className="inline-flex cursor-help rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-950">
+                        Match {match.id}
+                      </span>
+
+                      <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-[min(420px,calc(100vw-3rem))] translate-y-1 rounded-xl border border-slate-200 bg-white p-3 text-xs font-normal text-slate-700 opacity-0 shadow-[0_12px_30px_rgba(15,23,42,0.12)] transition duration-150 group-hover:translate-y-0 group-hover:opacity-100">
+                        {getMatchTooltipLabel(match)}
+                      </div>
+                    </div>
+
                     <span className="whitespace-nowrap">
                       {getMatchCity(displayVenue, displayCity, matchInfo?.teamA, matchInfo?.teamB)}
                     </span>

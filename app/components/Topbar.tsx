@@ -62,6 +62,7 @@ export default function Topbar() {
   const [timeZoneError, setTimeZoneError] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
   const [simulatedDateError, setSimulatedDateError] = useState("");
+  const [savingGroups, setSavingGroups] = useState(false);
 
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -262,6 +263,7 @@ export default function Topbar() {
     if (pathname.startsWith("/account/")) return "account";
     if (pathname === "/knockout") return "knockout";
     if (pathname === "/real-knockout") return "realKnockout";
+    if (pathname.startsWith("/admin/groups")) return "adminGroups";
 
     if (pathname === "/dashboard") {
       const tab = searchParams.get("tab");
@@ -277,6 +279,7 @@ export default function Topbar() {
       home: ["groupes", "knockout", "realKnockout"],
       account: ["home", "groupes", "knockout", "realKnockout"],
       groupes: ["home", "knockout", "realKnockout"],
+      adminGroups: ["home", "groupes", "knockout", "realKnockout"],
       tours: ["home", "knockout", "realKnockout"],
       knockout: ["home", "groupes", "realKnockout"],
       realKnockout: ["home", "groupes", "knockout"],
@@ -287,6 +290,20 @@ export default function Topbar() {
       "groupes",
     ];
   }, [currentKey]);
+
+  const showSaveGroupsButton = currentKey === "groupes";
+
+  async function handleSaveGroups() {
+    if (savingGroups) return;
+
+    setSavingGroups(true);
+
+    try {
+      window.dispatchEvent(new CustomEvent("save-all-group-predictions"));
+    } finally {
+      setSavingGroups(false);
+    }
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
@@ -324,6 +341,17 @@ export default function Topbar() {
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center justify-end gap-2.5">
+          {showSaveGroupsButton ? (
+            <button
+              type="button"
+              onClick={() => void handleSaveGroups()}
+              disabled={savingGroups}
+              className="whitespace-nowrap rounded-full bg-[#7a1f2c] px-2.5 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#5f1822] disabled:cursor-not-allowed disabled:opacity-60 sm:px-3 sm:text-sm"
+            >
+              {savingGroups ? "Sauvegarde..." : "Sauvegarder"}
+            </button>
+          ) : null}
+
           <GroupSelector />
 
           {isSuperAdmin && simulatedNow && (

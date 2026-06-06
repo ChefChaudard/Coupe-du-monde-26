@@ -56,6 +56,11 @@ type MatchOdds = {
 
 type FormValues = Record<number, { a: string; b: string }>;
 
+type PredictionDraft = {
+  values: FormValues;
+  realScores: FormValues;
+};
+
 type TabKey = "groupes" | "tours";
 
 function isGroupPhase(phase: string) {
@@ -332,6 +337,48 @@ function buildPlaceholderKnockoutGroups() {
   return groups;
 }
 
+function getDraftStorageKey(userId: string) {
+  return `dashboard-prediction-draft:${userId}`;
+}
+
+function readPredictionDraft(userId: string): PredictionDraft | null {
+  if (typeof window === "undefined") return null;
+
+  const raw = window.localStorage.getItem(getDraftStorageKey(userId));
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as PredictionDraft;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePredictionDraft(userId: string, draft: PredictionDraft) {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.setItem(getDraftStorageKey(userId), JSON.stringify(draft));
+}
+
+function mergeFormValues(base: FormValues, draft?: FormValues) {
+  if (!draft) return base;
+
+  const merged: FormValues = { ...base };
+
+  for (const [matchIdString, entry] of Object.entries(draft)) {
+    const matchId = Number(matchIdString);
+    if (!Number.isFinite(matchId)) continue;
+
+    merged[matchId] = {
+      a: entry.a ?? merged[matchId]?.a ?? "",
+      b: entry.b ?? merged[matchId]?.b ?? "",
+    };
+  }
+
+  return merged;
+}
+
 export default function PredictionForm({
   matches,
   existingPredictions,
@@ -421,12 +468,24 @@ export default function PredictionForm({
   const timeZone = useUserTimeZone();
 
   useEffect(() => {
+    const draft = readPredictionDraft(userId);
+
+    if (draft) {
+      setValues(mergeFormValues(initialValues, draft.values));
+      setRealScores(mergeFormValues(initialRealScores, draft.realScores));
+      return;
+    }
+
     setValues(initialValues);
-  }, [initialValues]);
+    setRealScores(initialRealScores);
+  }, [initialValues, initialRealScores, userId]);
 
   useEffect(() => {
-    setRealScores(initialRealScores);
-  }, [initialRealScores]);
+    writePredictionDraft(userId, {
+      values,
+      realScores,
+    });
+  }, [realScores, userId, values]);
 
   useEffect(() => {
     function handleSimulatedDateUpdated(event: Event) {
@@ -572,6 +631,30 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
   setSavingGroup(null);
 }
   }
+
+  async function saveAllGroupPredictions() {
+    if (selectedTab !== "groupes") return;
+
+    const groupPhases = filteredMatches.filter(([phase]) => isGroupPhase(phase));
+
+    if (groupPhases.length === 0) {
+      setMessage("Aucun groupe à sauvegarder pour le moment.");
+      return;
+    }
+
+    for (const [phase, phaseMatches] of groupPhases) {
+      await saveGroup(phaseMatches, phase);
+    }
+  }
+
+  useEffect(() => {
+    const handler = () => {
+      void saveAllGroupPredictions();
+    };
+
+    window.addEventListener("save-all-group-predictions", handler);
+    return () => window.removeEventListener("save-all-group-predictions", handler);
+  }, [filteredMatches, selectedTab, values, realScores, appNowTime, isAdmin, userId]);
 
   return (
     <section className="space-y-5 text-slate-900">

@@ -116,141 +116,29 @@ function normalizeTeamSelection(value?: string | null) {
   return value;
 }
 
-function getSelectedOrPossibleTeams(
+function getAvailableTeamsForMatch(
   match: BracketMatch,
   matchesById: Record<number, BracketMatch>,
-  selectedTeams: SelectedMatchTeams
-): string[] {
-  const selected = selectedTeams[match.id];
-  const selectedTeamsList = [selected?.a, selected?.b]
-    .map((team) => normalizeTeamSelection(team))
-    .filter(Boolean);
-
-  if (selectedTeamsList.length > 0) {
-    return dedupe(selectedTeamsList);
-  }
-
-  if (!match.leftMatchId || !match.rightMatchId) {
-    return [match.teamA, match.teamB];
-  }
-
-  const leftMatch = matchesById[match.leftMatchId];
-  const rightMatch = matchesById[match.rightMatchId];
-
-  const leftTeams = leftMatch
-    ? getSelectedOrPossibleTeams(leftMatch, matchesById, selectedTeams)
-    : [];
-  const rightTeams = rightMatch
-    ? getSelectedOrPossibleTeams(rightMatch, matchesById, selectedTeams)
-    : [];
-
-  return dedupe([...leftTeams, ...rightTeams]);
-}
-
-function getPossibleTeams(
-  match: BracketMatch,
-  matchesById: Record<number, BracketMatch>,
-  selectedTeams: SelectedMatchTeams,
-  freeChoiceTeams?: string[]
-): string[] {
-  if (freeChoiceTeams?.length) {
-    return freeChoiceTeams;
-  }
-
-  if (!match.leftMatchId || !match.rightMatchId) {
-    return [match.teamA, match.teamB];
-  }
-
-  const leftMatch = matchesById[match.leftMatchId];
-  const rightMatch = matchesById[match.rightMatchId];
-
-  const leftTeams = leftMatch
-    ? getSelectedOrPossibleTeams(leftMatch, matchesById, selectedTeams)
-    : [];
-  const rightTeams = rightMatch
-    ? getSelectedOrPossibleTeams(rightMatch, matchesById, selectedTeams)
-    : [];
-
-  return dedupe([...leftTeams, ...rightTeams]);
-}
-
-function getPossibleWinnerTeams(
-  match: BracketMatch,
-  matchIndex: number,
-  matchesById: Record<number, BracketMatch>,
-  groupTeamsByLetter?: Record<string, string[]>
-): string[] {
-  if (!match.leftMatchId || !match.rightMatchId) {
-    const firstRoundLeftGroup = getRound32GroupLetter(matchIndex, "a");
-    const firstRoundRightGroup = getRound32GroupLetter(matchIndex, "b");
-
-    return dedupe([
-      ...(firstRoundLeftGroup ? groupTeamsByLetter?.[firstRoundLeftGroup] ?? [] : []),
-      ...(firstRoundRightGroup ? groupTeamsByLetter?.[firstRoundRightGroup] ?? [] : []),
-    ]);
-  }
-
-  const leftMatch = matchesById[match.leftMatchId];
-  const rightMatch = matchesById[match.rightMatchId];
-
-  const leftTeams = leftMatch
-    ? getPossibleWinnerTeams(leftMatch, leftMatch.id - 1, matchesById, groupTeamsByLetter)
-    : [];
-  const rightTeams = rightMatch
-    ? getPossibleWinnerTeams(rightMatch, rightMatch.id - 1, matchesById, groupTeamsByLetter)
-    : [];
-
-  return dedupe([...leftTeams, ...rightTeams]);
-}
-
-function getPossibleTeamsForSide(
-  match: BracketMatch,
-  side: "a" | "b",
-  matchIndex: number,
-  matchesById: Record<number, BracketMatch>,
-  selectedTeams: SelectedMatchTeams,
-  groupTeamsByLetter?: Record<string, string[]>
+  phaseSourceTeams: string[],
+  firstRoundTeams: string[]
 ) {
   if (!match.leftMatchId || !match.rightMatchId) {
-    const placeholder = round32Placeholders[matchIndex]?.[side === "a" ? 0 : 1];
-    const groupMatch = placeholder?.match(/groupe\s*([A-H])/i);
-    const groupLetter = groupMatch?.[1]?.toUpperCase();
-
-    if (groupLetter && groupTeamsByLetter?.[groupLetter]?.length) {
-      return groupTeamsByLetter[groupLetter];
-    }
-
-    return side === "a" ? [match.teamA] : [match.teamB];
+    return firstRoundTeams;
   }
 
-  const parentMatchId = side === "a" ? match.leftMatchId : match.rightMatchId;
-  const parentMatch = matchesById[parentMatchId];
-
-  if (!parentMatch) {
-    return side === "a" ? [match.teamA] : [match.teamB];
-  }
-
-  if (parentMatch.phase === "16e de finale") {
-    return getPossibleWinnerTeams(
-      parentMatch,
-      parentMatch.id - 1,
-      matchesById,
-      groupTeamsByLetter
-    );
-  }
-
-  return getPossibleWinnerTeams(
-    parentMatch,
-    parentMatch.id - 1,
-    matchesById,
-    groupTeamsByLetter
-  );
+  return phaseSourceTeams;
 }
 
-function getRound32GroupLetter(matchIndex: number, side: "a" | "b") {
-  const placeholder = round32Placeholders[matchIndex]?.[side === "a" ? 0 : 1];
-  const groupMatch = placeholder?.match(/groupe\s*([A-H])/i);
-  return groupMatch?.[1]?.toUpperCase() ?? null;
+function filterTeamsForPhase(
+  options: string[],
+  phaseSelectedTeams: string[],
+  currentSelection: string
+) {
+  const blockedTeams = new Set(
+    phaseSelectedTeams.filter((team) => team !== currentSelection)
+  );
+
+  return options.filter((team) => !blockedTeams.has(team));
 }
 
 function getTeamsSelectedInPhase(
@@ -266,6 +154,21 @@ function getTeamsSelectedInPhase(
       ].filter(Boolean);
     })
   );
+}
+
+function getPreviousPhaseName(phase: string) {
+  switch (phase) {
+    case "8e de finale":
+      return "16e de finale";
+    case "Quarts de finale":
+      return "8e de finale";
+    case "Demi-finales":
+      return "Quarts de finale";
+    case "Finale":
+      return "Demi-finales";
+    default:
+      return null;
+  }
 }
 
 function getChildMatchIds(matches: BracketMatch[]) {
@@ -386,23 +289,6 @@ function getStatusClass(status: MatchStatus) {
   return "rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600";
 }
 
-function formatFirstRoundPrinciple(matchId: number) {
-  const [teamA, teamB] = round32Placeholders[matchId - 1] ?? [];
-
-  const principleTeam = (value?: string) =>
-    value?.replace(/^1er\s+du\s+groupe\s+/i, "Vainqueur du groupe ") ?? "";
-
-  return `${principleTeam(teamA)} contre ${principleTeam(teamB)}`;
-}
-
-function formatMatchPrinciple(match: BracketMatch, isFirstRound: boolean) {
-  if (isFirstRound) {
-    return formatFirstRoundPrinciple(match.id);
-  }
-
-  return `${match.teamA} contre ${match.teamB}`;
-}
-
 export default function KnockoutBracketPrediction({
   userId,
   round32Teams,
@@ -412,7 +298,7 @@ export default function KnockoutBracketPrediction({
   tournamentStartAt = null,
   storageKey = "knockoutBracketPredictions",
   title = "Pronostics Tours Eliminatoires",
-  description = "Les equipes du tableau des 32 sont deduites des resultats de groupes. Pour les tours suivants, selectionnez le vainqueur de chaque match en respectant la logique des tours precedents.",
+  description = "Les 16e se jouent avec les 48 pays qualifies. Pour les tours suivants, les listes proposent uniquement les equipes du tour precedent, sans doublon possible dans un meme tour. Chaque equipe correctement pronostiquee rapporte 2 points multiplies par sa cote. La cote d'une issue correspond au total des joueurs ayant pronostiqué ce match divisé par le nombre de joueurs ayant joué cette issue.",
 }: {
   userId: string;
   round32Teams?: Round32Teams;
@@ -430,8 +316,6 @@ export default function KnockoutBracketPrediction({
     [bracket]
   );
   const childMap = useMemo(() => getChildMatchIds(bracket), [bracket]);
-
-const [isFreeChoiceMode, setIsFreeChoiceMode] = useState(false);
 const [selectedWinners, setSelectedWinners] = useState<SelectedWinners>({});
 const [selectedTeams, setSelectedTeams] = useState<SelectedMatchTeams>({});
 const [hasLoadedStorage, setHasLoadedStorage] = useState(false);
@@ -443,21 +327,6 @@ const timeZone = useUserTimeZone();
 const appNowTime = simulatedNow ? new Date(simulatedNow).getTime() : Date.now();
 const isTournamentLocked =
   tournamentStartAt !== null && Number.isFinite(tournamentStartAt) && appNowTime >= tournamentStartAt;
-
-useEffect(() => {
-  if (typeof window === "undefined") return;
-
-  setIsFreeChoiceMode(window.localStorage.getItem("knockoutFreeChoiceTeams") === "true");
-}, []);
-
-useEffect(() => {
-  if (typeof window === "undefined") return;
-
-  window.localStorage.setItem(
-    "knockoutFreeChoiceTeams",
-    isFreeChoiceMode ? "true" : "false"
-  );
-}, [isFreeChoiceMode]);
 
 useEffect(() => {
   async function loadKnockoutPredictions() {
@@ -566,6 +435,7 @@ function handleTeamChange(
   setSelectedTeams((prev) => {
     const next = { ...prev };
     const phaseMatches = bracket.filter((match) => match.phase === phase);
+    const descendantIds = collectDescendants(matchId, childMap);
 
     if (value) {
       for (const phaseMatch of phaseMatches) {
@@ -615,6 +485,17 @@ function handleTeamChange(
     return next;
   });
 
+  setSelectedWinners((prev) => {
+    const next = { ...prev };
+    const descendantIds = collectDescendants(matchId, childMap);
+
+    for (const descendantId of descendantIds) {
+      delete next[descendantId];
+    }
+
+    return next;
+  });
+
   setMessage(null);
   setSaveMessage(null);
 }
@@ -629,14 +510,8 @@ async function handleSaveKnockout() {
     user_id: userId,
     match_key: String(match.id),
     round: match.phase,
-    team_a:
-      normalizeTeamSelection(
-        isFreeChoiceMode ? selectedTeams[match.id]?.a ?? match.teamA : match.teamA
-      ) || null,
-    team_b:
-      normalizeTeamSelection(
-        isFreeChoiceMode ? selectedTeams[match.id]?.b ?? match.teamB : match.teamB
-      ) || null,
+    team_a: normalizeTeamSelection(selectedTeams[match.id]?.a ?? match.teamA) || null,
+    team_b: normalizeTeamSelection(selectedTeams[match.id]?.b ?? match.teamB) || null,
     winner: selectedWinners[match.id] ?? null,
     updated_at: new Date().toISOString(),
   }));
@@ -679,6 +554,7 @@ if (error) {
 
   function resetBracket() {
     setSelectedWinners({});
+    setSelectedTeams({});
     setMessage("Tableau reinitialise.");
   }
 
@@ -718,12 +594,24 @@ if (error) {
     "Demi-finales",
     "Finale",
   ];
+  const allRound32Teams = useMemo(
+    () => dedupe(Object.values(groupTeamsByLetter).flat()).sort((left, right) => left.localeCompare(right)),
+    [groupTeamsByLetter]
+  );
 
   function renderPhaseCard(phase: string, matches: BracketMatch[]) {
     const laterPhase = laterPhases.includes(phase as RealLaterPhase)
       ? (phase as RealLaterPhase)
       : null;
     const phaseSelectedTeams = getTeamsSelectedInPhase(matches, selectedTeams);
+    const previousPhase = getPreviousPhaseName(phase);
+    const previousPhaseTeams = previousPhase
+      ? phaseGroups[previousPhase]
+        ? getTeamsSelectedInPhase(phaseGroups[previousPhase], selectedTeams)
+        : []
+      : phase === firstRoundPhase
+        ? allRound32Teams
+        : [];
 
     function formatTeamOption(team: string, matchId: number) {
       const odds = teamOddsByMatchId[matchId]?.[team] ?? 1;
@@ -733,52 +621,35 @@ if (error) {
     return (
       <div
         key={phase}
-        className="rounded-lg border border-slate-200 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.07)]"
+        className="overflow-hidden rounded-2xl border border-slate-900/12 bg-white shadow-[0_14px_36px_rgba(15,23,42,0.08)]"
       >
-        <h2 className="mb-4 text-xl font-bold text-slate-950">{phase}</h2>
-        <div className="space-y-4">
+        <div className="flex items-center justify-between gap-4 rounded-t-2xl border-b border-slate-900/10 bg-slate-900 px-4 py-3 text-white">
+          <h2 className="text-base font-bold tracking-wide">{phase}</h2>
+        </div>
+
+        <div className="space-y-4 p-5">
           {matches.map((match) => {
             const matchIndex = matches.indexOf(match);
-            const possibleTeams = getPossibleTeams(
-              match,
-              matchesById,
-              selectedTeams,
-              undefined
-            );
             const selected = selectedWinners[match.id] ?? "";
-            const selectedTeamA = normalizeTeamSelection(
-              selectedTeams[match.id]?.a ?? match.teamA
-            );
-            const selectedTeamB = normalizeTeamSelection(
-              selectedTeams[match.id]?.b ?? match.teamB
-            );
+            const selectedTeamA = normalizeTeamSelection(selectedTeams[match.id]?.a);
+            const selectedTeamB = normalizeTeamSelection(selectedTeams[match.id]?.b);
             const isFirstRound = phase === firstRoundPhase;
-            const teamAOptions = getPossibleTeamsForSide(
+            const teamOptions = getAvailableTeamsForMatch(
               match,
-              "a",
-              matchIndex,
               matchesById,
-              selectedTeams,
-              groupTeamsByLetter
+              previousPhaseTeams,
+              allRound32Teams
             );
-            const teamBOptions = getPossibleTeamsForSide(
-              match,
-              "b",
-              matchIndex,
-              matchesById,
-              selectedTeams,
-              groupTeamsByLetter
+            const teamAOptions = filterTeamsForPhase(
+              teamOptions,
+              phaseSelectedTeams,
+              selectedTeamA
             );
-            const firstRoundGroupA = getRound32GroupLetter(matchIndex, "a");
-            const firstRoundGroupB = getRound32GroupLetter(matchIndex, "b");
-            const firstRoundTeamAOptions =
-              isFirstRound && isFreeChoiceMode && firstRoundGroupA
-                ? (groupTeamsByLetter[firstRoundGroupA] ?? [])
-                : teamAOptions;
-            const firstRoundTeamBOptions =
-              isFirstRound && isFreeChoiceMode && firstRoundGroupB
-                ? (groupTeamsByLetter[firstRoundGroupB] ?? [])
-                : teamBOptions;
+            const teamBOptions = filterTeamsForPhase(
+              teamOptions,
+              phaseSelectedTeams,
+              selectedTeamB
+            );
             const matchInfo = matchInfoById[match.id];
             const status = getMatchStatus(matchInfo, appNowTime);
             const points = getPointsForWinnerPrediction(
@@ -796,161 +667,83 @@ if (error) {
             const displayVenue = matchInfo?.venue ?? phaseFixture?.venue ?? null;
             const displayCity = matchInfo?.city ?? phaseFixture?.city ?? null;
             const isFinal = phase === "Finale";
-            const winnerOptions = isFinal
-              ? isFreeChoiceMode
-                ? possibleTeams
-                : dedupe([selectedTeamA, selectedTeamB].filter(Boolean))
-              : [];
-            const selectedValueA = firstRoundTeamAOptions.includes(selectedTeamA)
-              ? selectedTeamA
-              : teamAOptions.includes(selectedTeamA)
+            const winnerOptions = dedupe([selectedTeamA, selectedTeamB].filter(Boolean));
+            const selectedValueA = teamAOptions.includes(selectedTeamA)
               ? selectedTeamA
               : "";
-            const selectedValueB = firstRoundTeamBOptions.includes(selectedTeamB)
-              ? selectedTeamB
-              : teamBOptions.includes(selectedTeamB)
-              ? selectedTeamB
-              : "";
-            const firstRoundSelectedValueA = firstRoundTeamAOptions.includes(selectedTeamA)
-              ? selectedTeamA
-              : "";
-            const firstRoundSelectedValueB = firstRoundTeamBOptions.includes(selectedTeamB)
+            const selectedValueB = teamBOptions.includes(selectedTeamB)
               ? selectedTeamB
               : "";
 
             return (
               <div
                 key={match.id}
-                className="relative rounded-lg border border-slate-200 bg-slate-50/80 p-4 pt-20 transition hover:border-emerald-200 hover:bg-emerald-50/55"
+                className="relative rounded-lg border border-slate-200 bg-slate-50/80 p-4 pt-16 transition hover:border-emerald-200 hover:bg-emerald-50/55"
               >
-                <div className="absolute left-4 top-3 flex max-w-[74%] flex-col items-start gap-1 text-left">
-                  <div className="flex flex-wrap items-center justify-start gap-x-2 gap-y-1 text-[11px] font-semibold leading-tight text-slate-500">
+                <div className="absolute left-4 right-4 top-3 flex flex-col items-start gap-1 text-left">
+                  <div className="flex w-full flex-wrap items-center justify-start gap-x-2 gap-y-1 rounded-md bg-slate-200 px-3 py-2 text-[11px] font-semibold leading-tight text-slate-600">
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
                       Match {match.id}
                     </span>
-                    <span>
-                      Ville: {getMatchCity(displayVenue, displayCity, matchInfo?.teamA, matchInfo?.teamB)}
+                    <span className="whitespace-nowrap">
+                      {getMatchCity(displayVenue, displayCity, matchInfo?.teamA, matchInfo?.teamB)}
                     </span>
                     <span>
-                      Date: {" "}
                       {kickoffDate
                         ? formatMatchDate(kickoffDate, timeZone)
                         : "-"}
                     </span>
                     <span>
-                      Heure: {" "}
                       {kickoffDate
                         ? formatMatchTime(kickoffDate, timeZone)
                         : "-"}
                     </span>
                     <span className="whitespace-nowrap">Pts: {points ?? "-"}</span>
-                    <span className={`${getStatusClass(status)} whitespace-nowrap`}>
+                    <span className={`${getStatusClass(status)} ml-auto whitespace-nowrap text-right`}>
                       {status === "Termine" ? "Termine" : status}
                     </span>
                   </div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    {formatMatchPrinciple(match, isFirstRound)}
-                  </div>
                 </div>
 
-                {isFirstRound ? (
-                  isFreeChoiceMode ? (
-                    <div className="mb-3 grid gap-3 rounded-md border border-slate-200 bg-white p-3 pt-4 shadow-sm sm:grid-cols-2">
-                      <label className="space-y-1 text-sm font-medium text-slate-600">
-                        <span>Equipe A</span>
-                        <select
-                          value={isFirstRound && isFreeChoiceMode ? firstRoundSelectedValueA : selectedValueA}
-                          onChange={(event) =>
-                            handleTeamChange(match.id, phase, "a", event.target.value)
-                          }
-                          disabled={isTournamentLocked}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
-                        >
-                          <option value="">Selectionner</option>
-                          {(isFirstRound && isFreeChoiceMode ? firstRoundTeamAOptions : teamAOptions).map((team) => (
-                            <option key={`a-${team}`} value={team}>
-                              {formatTeamOption(team, match.id)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                <div className="mb-3 grid gap-3 rounded-md border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2">
+                  <label className="space-y-1 text-sm font-medium text-slate-600">
+                    <span>Equipe A</span>
+                    <select
+                      value={selectedValueA}
+                      onChange={(event) =>
+                        handleTeamChange(match.id, phase, "a", event.target.value)
+                      }
+                      disabled={isTournamentLocked}
+                      className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                    >
+                      <option value="">Selectionner</option>
+                      {teamAOptions.map((team) => (
+                        <option key={`a-${team}`} value={team}>
+                          {formatTeamOption(team, match.id)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-                      <label className="space-y-1 text-sm font-medium text-slate-600">
-                        <span>Equipe B</span>
-                        <select
-                          value={isFirstRound && isFreeChoiceMode ? firstRoundSelectedValueB : selectedValueB}
-                          onChange={(event) =>
-                            handleTeamChange(match.id, phase, "b", event.target.value)
-                          }
-                          disabled={isTournamentLocked}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
-                        >
-                          <option value="">Selectionner</option>
-                          {(isFirstRound && isFreeChoiceMode ? firstRoundTeamBOptions : teamBOptions).map((team) => (
-                            <option key={`b-${team}`} value={team}>
-                              {formatTeamOption(team, match.id)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  ) : (
-                    <div className="mb-3 space-y-1 rounded-md border border-slate-200 bg-white px-3 pb-2 pt-4 text-sm text-slate-900 shadow-sm">
-                      <div className="flex items-start justify-between gap-3">
-                        <span className="font-medium text-slate-500">Equipe A</span>
-                        <span className="min-w-0 flex-1 text-right font-semibold break-words">
-                          {match.teamA}
-                        </span>
-                      </div>
-                      <div className="flex items-start justify-between gap-3 border-t border-slate-100 pt-1.5">
-                        <span className="font-medium text-slate-500">Equipe B</span>
-                        <span className="min-w-0 flex-1 text-right font-semibold break-words">
-                          {match.teamB}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                ) : (
-                  <div className="mb-3 grid gap-3 rounded-md border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2">
-                    <label className="space-y-1 text-sm font-medium text-slate-600">
-                      <span>Equipe A</span>
-                      <select
-                        value={selectedValueA}
-                        onChange={(event) =>
-                          handleTeamChange(match.id, phase, "a", event.target.value)
-                        }
-                        disabled={isTournamentLocked}
-                        className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
-                      >
-                        <option value="">Selectionner</option>
-                        {teamAOptions.map((team) => (
-                          <option key={`a-${team}`} value={team}>
-                            {formatTeamOption(team, match.id)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="space-y-1 text-sm font-medium text-slate-600">
-                      <span>Equipe B</span>
-                      <select
-                        value={selectedValueB}
-                        onChange={(event) =>
-                          handleTeamChange(match.id, phase, "b", event.target.value)
-                        }
-                        disabled={isTournamentLocked}
-                        className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
-                      >
-                        <option value="">Selectionner</option>
-                        {teamBOptions.map((team) => (
-                          <option key={`b-${team}`} value={team}>
-                            {formatTeamOption(team, match.id)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                )}
+                  <label className="space-y-1 text-sm font-medium text-slate-600">
+                    <span>Equipe B</span>
+                    <select
+                      value={selectedValueB}
+                      onChange={(event) =>
+                        handleTeamChange(match.id, phase, "b", event.target.value)
+                      }
+                      disabled={isTournamentLocked}
+                      className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                    >
+                      <option value="">Selectionner</option>
+                      {teamBOptions.map((team) => (
+                        <option key={`b-${team}`} value={team}>
+                          {formatTeamOption(team, match.id)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
 
                 {isFinal ? (
                   <label className="space-y-1 text-sm font-medium text-slate-600">
@@ -983,17 +776,6 @@ if (error) {
   return (
     <section className="space-y-6 text-slate-900">
       <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
-          <input
-            type="checkbox"
-            checked={isFreeChoiceMode}
-            onChange={(event) => setIsFreeChoiceMode(event.target.checked)}
-            disabled={isTournamentLocked}
-            className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-500"
-          />
-          Choix libre des équipes: les listes proposent les 48 pays et ne suivent plus les résultats des groupes.
-        </label>
-
         <div className="flex flex-wrap gap-3">
           <button
             type="button"

@@ -177,6 +177,29 @@ async function deleteGroup(formData: FormData) {
   revalidatePath("/admin/groups");
 }
 
+async function saveAllGroups() {
+  "use server";
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("roles, role, is_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile || !isAdmin(profile)) {
+    throw new Error("Accès administration refusé.");
+  }
+
+  revalidatePath("/admin/groups");
+}
+
 export default async function AdminGroupsPage() {
   const supabase = await createClient();
   const {

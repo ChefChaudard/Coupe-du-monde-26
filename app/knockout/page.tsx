@@ -406,7 +406,7 @@ export default async function KnockoutPage() {
             teamOddsByMatchId={teamOddsByMatchId}
             tournamentStartAt={tournamentStartAt}
             title="2e tours"
-            description="Cette page permet de construire vos pronostics des tours à élimination directe. Les 16e proposent uniquement les équipes du groupe correspondant à chaque case. Si vous cochez l'option de choix libre, les tours suivants restent contraints par la logique du tableau mais les 16e restent limités aux groupes possibles."
+            description="Cette page permet de construire vos pronostics des tours à élimination directe. Les 16e proposent les 48 équipes qualifiées. Pour les tours suivants, les listes se basent automatiquement sur les équipes du tour précédent, avec une seule occurrence possible par tour. Chaque équipe correctement pronostiquée rapporte 2 points multipliés par sa cote. La cote d'une issue correspond au total des joueurs ayant pronostiqué ce match divisé par le nombre de joueurs ayant joué cette issue."
           />
         </section>
 

@@ -60,6 +60,7 @@ export default function Topbar() {
   const [userName, setUserName] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isReglementOpen, setIsReglementOpen] = useState(false);
   const [timeZone, setTimeZone] = useState(DEFAULT_TIME_ZONE);
   const [timeZoneError, setTimeZoneError] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
@@ -172,6 +173,7 @@ export default function Topbar() {
     setSimulatedInput("");
     setSimulatedDateError("");
     localStorage.removeItem("rememberMe");
+    setIsReglementOpen(false);
     window.location.replace(loginUrl);
   }
 
@@ -350,6 +352,7 @@ export default function Topbar() {
   }
 
   return (
+    <>
     <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-[1600px] flex-nowrap items-center gap-2 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
         <Link href="/" className="flex shrink-0 items-center gap-2.5">
@@ -479,9 +482,180 @@ export default function Topbar() {
               </Link>
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={() => setIsReglementOpen(true)}
+            className="rounded-full border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 sm:px-4 sm:py-2 sm:text-sm"
+          >
+            Reglement
+          </button>
         </div>
       </div>
+
     </header>
+
+      {isReglementOpen ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-slate-950/55 p-4 pt-10 backdrop-blur-sm"
+          onClick={() => setIsReglementOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="relative w-full max-w-5xl rounded-3xl border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)]"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reglement-title"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Règlement
+                </p>
+                <h2 id="reglement-title" className="mt-1 text-2xl font-bold text-slate-950">
+                  Comment gagner ?
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsReglementOpen(false)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+              >
+                Fermer
+              </button>
+            </div>
+
+            <div className="max-h-[calc(100vh-7rem)] overflow-y-auto px-6 py-6 text-slate-800">
+              <div className="space-y-6 text-sm leading-7">
+                <p className="text-base text-slate-900">
+                  L&apos;objectif est simple : cumuler le plus de points possible tout au long de la Coupe du Monde.
+                </p>
+
+                <p>
+                  Les points peuvent être gagnés de <strong>4 façons différentes</strong> :
+                </p>
+
+                <ol className="list-decimal space-y-3 pl-5">
+                  <li>En pronostiquant les résultats des matchs de groupe.</li>
+                  <li>En pronostiquant le classement final des groupes.</li>
+                  <li>En construisant votre tableau de la Coupe du Monde.</li>
+                  <li>En pronostiquant les matchs réels de la phase finale.</li>
+                </ol>
+
+                <p>
+                  Chaque bon pronostic rapporte des points selon la formule :
+                </p>
+
+                <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
+                  Points gagnés = Points de base × Cote
+                </blockquote>
+
+                <p>
+                  La cote dépend du nombre de joueurs ayant effectué le même pronostic.
+                </p>
+
+                <section className="space-y-3">
+                  <h3 className="text-lg font-bold text-slate-950">1. Pronostics des matchs de groupe</h3>
+                  <p>
+                    Avant chaque match de groupe, vous devez pronostiquer son résultat : victoire de l&apos;équipe A,
+                    match nul ou victoire de l&apos;équipe B.
+                  </p>
+                  <p>
+                    Vous marquez des points lorsque vous trouvez le bon résultat (1N2).
+                  </p>
+                  <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
+                    1 point de base × Cote
+                  </blockquote>
+                </section>
+
+                <section className="space-y-3">
+                  <h3 className="text-lg font-bold text-slate-950">2. Classement des groupes</h3>
+                  <p>
+                    Avant le début de la compétition, vous devez pronostiquer le classement final de chaque groupe.
+                  </p>
+                  <p>
+                    Pour chaque groupe, vous indiquez quelles équipes termineront 1ère, 2ème, 3ème et 4ème.
+                  </p>
+                  <p>
+                    Des points sont attribués pour chaque équipe correctement placée à sa position finale.
+                  </p>
+                  <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
+                    2 points de base × Cote
+                  </blockquote>
+                </section>
+
+                <section className="space-y-3">
+                  <h3 className="text-lg font-bold text-slate-950">3. Votre tableau de la Coupe du Monde</h3>
+                  <p>
+                    Avant le début du tournoi, vous construisez votre propre scénario de Coupe du Monde en indiquant
+                    quelles équipes atteindront les 16es de finale, les 8es de finale, les quarts de finale, les
+                    demi-finales, la finale et le titre de Champion du Monde.
+                  </p>
+                  <p>
+                    Lorsque la compétition avance, des points sont attribués pour chaque équipe qui atteint effectivement
+                    le tour que vous aviez pronostiqué.
+                  </p>
+                  <div className="space-y-2">
+                    <p className="font-semibold text-slate-950">16es, 8es et quarts de finale :</p>
+                    <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
+                      2 points de base × Cote
+                    </blockquote>
+                    <p className="font-semibold text-slate-950">Demi-finales et finale :</p>
+                    <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
+                      3 points de base × Cote
+                    </blockquote>
+                    <p className="font-semibold text-slate-950">Vainqueur :</p>
+                    <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
+                      4 points de base × Cote
+                    </blockquote>
+                  </div>
+                </section>
+
+                <section className="space-y-3">
+                  <h3 className="text-lg font-bold text-slate-950">4. Pronostics des matchs à élimination directe</h3>
+                  <p>
+                    À partir des 16es de finale, les affiches réelles sont connues.
+                  </p>
+                  <p>
+                    Avant chaque rencontre, vous devez pronostiquer l&apos;équipe qui se qualifiera pour le tour suivant.
+                  </p>
+                  <p>
+                    Le score n&apos;a pas d&apos;importance : seul le qualifié compte.
+                  </p>
+                  <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
+                    2 points de base × Cote
+                  </blockquote>
+                </section>
+
+                <section className="space-y-3 border-t border-slate-200 pt-4">
+                  <h3 className="text-lg font-bold text-slate-950">Le système de cote</h3>
+                  <p>
+                    La cote est calculée automatiquement en fonction du nombre de joueurs ayant effectué le même choix.
+                  </p>
+                  <ul className="list-disc space-y-2 pl-5">
+                    <li>Plus un pronostic est populaire, plus sa cote est faible.</li>
+                    <li>Plus un pronostic est rare, plus sa cote est élevée.</li>
+                  </ul>
+                  <p>
+                    Ainsi, un pronostic audacieux mais correct peut rapporter davantage de points qu&apos;un pronostic évident.
+                  </p>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="font-semibold text-slate-950">Exemple</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5">
+                      <li>80 % des joueurs pronostiquent une victoire de la France → cote faible.</li>
+                      <li>5 % des joueurs pronostiquent une victoire du Sénégal → cote élevée.</li>
+                    </ul>
+                    <p className="mt-2">Si le Sénégal gagne, les joueurs ayant osé ce pronostic marqueront davantage de points.</p>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 

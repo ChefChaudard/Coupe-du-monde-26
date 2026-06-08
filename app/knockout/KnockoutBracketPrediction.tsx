@@ -611,8 +611,8 @@ async function handleSaveKnockout() {
     user_id: userId,
     match_key: String(match.id),
     round: match.phase,
-    team_a: normalizeTeamSelection(selectedTeams[match.id]?.a ?? match.teamA) || null,
-    team_b: normalizeTeamSelection(selectedTeams[match.id]?.b ?? match.teamB) || null,
+    team_a: normalizeTeamSelection(selectedTeams[match.id]?.a) || null,
+    team_b: normalizeTeamSelection(selectedTeams[match.id]?.b) || null,
     winner: selectedWinners[match.id] ?? null,
     updated_at: new Date().toISOString(),
   }));

@@ -809,31 +809,31 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                     const stats = matchStats[match.id];
                     const myPoints = stats?.myPoints ?? null;
                     const averagePoints = stats?.averagePoints ?? null;
-                      const currentEntry = values[match.id];
-                      const predictionCounts = {
-                        ...(matchPredictionCounts[match.id] ?? {
-                          one: 0,
-                          draw: 0,
-                          two: 0,
-                        }),
-                      };
+                    const currentEntry = values[match.id];
+                    const predictionCounts = {
+                      ...(matchPredictionCounts[match.id] ?? {
+                        one: 0,
+                        draw: 0,
+                        two: 0,
+                      }),
+                    };
 
-                      if (currentEntry?.a !== "" && currentEntry?.b !== "") {
-                        const predictedA = Number(currentEntry.a);
-                        const predictedB = Number(currentEntry.b);
+                    if (currentEntry && currentEntry.a !== "" && currentEntry.b !== "") {
+                      const predictedA = Number(currentEntry.a);
+                      const predictedB = Number(currentEntry.b);
 
-                        if (!Number.isNaN(predictedA) && !Number.isNaN(predictedB)) {
-                          if (predictedA > predictedB) {
-                            predictionCounts.one += 1;
-                          } else if (predictedA < predictedB) {
-                            predictionCounts.two += 1;
-                          } else {
-                            predictionCounts.draw += 1;
-                          }
+                      if (!Number.isNaN(predictedA) && !Number.isNaN(predictedB)) {
+                        if (predictedA > predictedB) {
+                          predictionCounts.one += 1;
+                        } else if (predictedA < predictedB) {
+                          predictionCounts.two += 1;
+                        } else {
+                          predictionCounts.draw += 1;
                         }
                       }
+                    }
 
-                      const odds = computeOddsFromCounts(predictionCounts);
+                    const odds = computeOddsFromCounts(predictionCounts);
 
                     return (
                       <tr

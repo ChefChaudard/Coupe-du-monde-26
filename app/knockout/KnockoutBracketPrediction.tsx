@@ -2,19 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
-import {
-  formatMatchDate,
-  formatMatchTime,
-} from "@/app/lib/time-zone";
 import { formatOneDecimal } from "@/app/dashboard/format";
-import { getMatchCity } from "@/app/lib/fifa-cities";
-import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
 import { round32Placeholders, type Round32Teams } from "./bracket-data";
-import {
-  getRealLaterFixture,
-  getRealRound32Fixture,
-  type RealLaterPhase,
-} from "../real-knockout/real-knockout-fixtures";
+import { type RealLaterPhase } from "../real-knockout/real-knockout-fixtures";
 
 const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
 
@@ -428,7 +418,6 @@ const [saving, setSaving] = useState(false);
 const [saveMessage, setSaveMessage] = useState<string | null>(null);
 const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
 const [serverNowTime] = useState(() => Date.now());
-const timeZone = useUserTimeZone();
 const appNowTime = simulatedNow ? new Date(simulatedNow).getTime() : serverNowTime;
 const isTournamentLocked =
   tournamentStartAt !== null && Number.isFinite(tournamentStartAt) && appNowTime >= tournamentStartAt;
@@ -734,9 +723,6 @@ if (error) {
   }
 
   function renderPhaseCard(phase: string, matches: BracketMatch[]) {
-    const laterPhase = laterPhases.includes(phase as RealLaterPhase)
-      ? (phase as RealLaterPhase)
-      : null;
     const phaseSelectedTeams = getTeamsSelectedInPhase(matches, selectedTeams);
     const previousPhase = getPreviousPhaseName(phase);
     const previousPhaseTeams = previousPhase
@@ -763,11 +749,9 @@ if (error) {
 
         <div className="space-y-4 p-5">
           {matches.map((match) => {
-            const matchIndex = matches.indexOf(match);
             const selected = selectedWinners[match.id] ?? "";
             const selectedTeamA = normalizeTeamSelection(selectedTeams[match.id]?.a);
             const selectedTeamB = normalizeTeamSelection(selectedTeams[match.id]?.b);
-            const isFirstRound = phase === firstRoundPhase;
             const teamOptions = getAvailableTeamsForMatch(
               match,
               matchesById,
@@ -791,44 +775,6 @@ if (error) {
               [matchInfo?.teamA, matchInfo?.teamB].filter(
                 (team): team is string => Boolean(team)
               );
-            const teamAPoints = getPlacementPointsForTeam(
-              selectedTeamA,
-              actualTeams,
-              match.phase,
-              getLiveTeamOdds(phase, selectedTeamA)
-            );
-            const teamBPoints = getPlacementPointsForTeam(
-              selectedTeamB,
-              actualTeams,
-              match.phase,
-              getLiveTeamOdds(phase, selectedTeamB)
-            );
-            const placementPoints =
-              teamAPoints !== null || teamBPoints !== null
-                ? (teamAPoints ?? 0) + (teamBPoints ?? 0)
-                : null;
-            const winnerPredictionPoints = getPointsForWinnerPrediction(
-              selected,
-              matchInfo,
-              match.phase
-            );
-            const pointsLabel =
-              match.phase === firstRoundPhase
-                ? `Pts A: ${formatDisplayedPoints(teamAPoints)} / Pts B: ${formatDisplayedPoints(teamBPoints)}`
-                : `Pts: ${formatDisplayedPoints(placementPoints ?? winnerPredictionPoints)}`;
-            const tooltipText =
-              match.phase === firstRoundPhase
-                ? `${getMatchTooltipLabel(match)}\n${pointsLabel}\nChaque équipe rapporte sa propre valeur si elle apparaît bien dans le tour à 32.`
-                : getMatchTooltipLabel(match);
-            const phaseFixture = isFirstRound
-              ? getRealRound32Fixture(matchIndex)
-              : laterPhase
-                ? getRealLaterFixture(laterPhase, matchIndex)
-                : null;
-            const kickoffAt = matchInfo?.kickoffAt ?? phaseFixture?.kickoff_at ?? null;
-            const kickoffDate = kickoffAt ? new Date(kickoffAt) : null;
-            const displayVenue = matchInfo?.venue ?? phaseFixture?.venue ?? null;
-            const displayCity = matchInfo?.city ?? phaseFixture?.city ?? null;
             const isFinal = phase === "Finale";
             const winnerOptions = dedupe([selectedTeamA, selectedTeamB].filter(Boolean));
             const selectedValueA = teamAOptions.includes(selectedTeamA)
@@ -854,26 +800,10 @@ if (error) {
                       </span>
 
                       <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-[min(420px,calc(100vw-3rem))] translate-y-1 rounded-xl border border-slate-200 bg-white p-3 text-xs font-normal text-slate-700 opacity-0 shadow-[0_12px_30px_rgba(15,23,42,0.12)] transition duration-150 group-hover:translate-y-0 group-hover:opacity-100 whitespace-pre-line">
-                        {tooltipText}
+                        {getMatchTooltipLabel(match)}
                       </div>
                     </div>
 
-                    <span className="whitespace-nowrap">
-                      {getMatchCity(displayVenue, displayCity, matchInfo?.teamA, matchInfo?.teamB)}
-                    </span>
-                    <span>
-                      {kickoffDate
-                        ? formatMatchDate(kickoffDate, timeZone)
-                        : "-"}
-                    </span>
-                    <span>
-                      {kickoffDate
-                        ? formatMatchTime(kickoffDate, timeZone)
-                        : "-"}
-                    </span>
-                    <span className="whitespace-nowrap">
-                      {pointsLabel}
-                    </span>
                     <span className={`${getStatusClass(status)} ml-auto whitespace-nowrap text-right`}>
                       {status === "Termine" ? "Termine" : status}
                     </span>

@@ -175,6 +175,12 @@ export default function Home() {
               >
                 Créer / gérer groupes
               </Link>
+              <Link
+                href="/admin/real-knockout"
+                className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                Saisie 16e réel
+              </Link>
             </>
           )}
           </div>

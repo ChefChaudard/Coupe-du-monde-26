@@ -344,6 +344,9 @@ export default function RealKnockoutScoreForm({
                   const displayVenue = match.venue || phaseFixture?.venue || null;
                   const displayCity = match.city || phaseFixture?.city || null;
                   const kickoffDate = kickoffAt ? new Date(kickoffAt) : null;
+                  const compactMatchInfo = kickoffDate
+                    ? `${formatMatchDate(kickoffDate, timeZone)} · ${formatMatchTime(kickoffDate, timeZone)}${displayCity ? ` · ${displayCity}` : ""}`
+                    : displayCity ?? "";
                   const hasStarted = kickoffDate
                     ? kickoffDate.getTime() <= appNowTime
                     : false;
@@ -370,6 +373,9 @@ export default function RealKnockoutScoreForm({
 
                       <td className="py-2 pr-1 font-medium truncate text-slate-900">
                         {match.team_a}
+                        <div className="mt-1 block text-[11px] font-normal leading-tight text-slate-500 sm:hidden">
+                          {compactMatchInfo}
+                        </div>
                       </td>
 
                       <td className="px-1 py-2">

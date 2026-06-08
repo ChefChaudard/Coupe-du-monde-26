@@ -82,6 +82,7 @@ type RoundOf32Fixture = {
 };
 
 const realPhasePrefix = "Reel - ";
+const round32AssignmentsSettingKey = "real_round32_assignments";
 const realPhaseOrder = [
   "16e de finale",
   "8e de finale",
@@ -223,6 +224,57 @@ function normalizeGroupName(phase: string) {
   const match =
     phase.match(/groupe\s*([A-L])/i) || phase.match(/group\s*([A-L])/i);
   return match ? match[1].toUpperCase() : null;
+}
+
+function parseRound32Assignments(value?: string | null) {
+  if (!value) return new Map<number, { teamA: string; teamB: string }>();
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return new Map<number, { teamA: string; teamB: string }>();
+
+    const assignments = new Map<number, { teamA: string; teamB: string }>();
+
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+
+      const candidate = item as { matchNumber?: unknown; teamA?: unknown; teamB?: unknown };
+      if (
+        typeof candidate.matchNumber !== "number" ||
+        typeof candidate.teamA !== "string" ||
+        typeof candidate.teamB !== "string"
+      ) {
+        continue;
+      }
+
+      assignments.set(candidate.matchNumber, {
+        teamA: candidate.teamA,
+        teamB: candidate.teamB,
+      });
+    }
+
+    return assignments;
+  } catch {
+    return new Map<number, { teamA: string; teamB: string }>();
+  }
+}
+
+function applyRound32Assignments(matches: Match[], assignments: Map<number, { teamA: string; teamB: string }>) {
+  return matches.map((match) => {
+    if (match.phase !== toRealPhase("16e de finale")) return match;
+
+    const matchNumber = typeof match.match_number === "number" ? match.match_number : null;
+    if (!matchNumber) return match;
+
+    const assignment = assignments.get(matchNumber);
+    if (!assignment) return match;
+
+    return {
+      ...match,
+      team_a: assignment.teamA,
+      team_b: assignment.teamB,
+    };
+  });
 }
 
 function buildGroupInfo(matches: Match[]) {
@@ -700,7 +752,16 @@ export default async function RealKnockoutPage() {
     .from("predictions")
     .select("user_id, match_id, predicted_a, predicted_b");
 
-  const safeMatches = (matches ?? []) as Match[];
+  const { data: round32Settings } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", round32AssignmentsSettingKey)
+    .maybeSingle();
+
+  const safeMatches = applyRound32Assignments(
+    (matches ?? []) as Match[],
+    parseRound32Assignments(round32Settings?.value ?? null)
+  );
   const firstRoundComplete = isFirstRoundComplete(safeMatches);
   const firstRoundMissingScores = countMissingFirstRoundScores(safeMatches);
   const tournamentStartAt = getTournamentStartAt(safeMatches);

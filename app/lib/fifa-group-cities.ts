@@ -90,6 +90,10 @@ const groupPairToCity = new Map(
   groupPairToCityEntries.map(([[teamA, teamB], city]) => [pairKey(teamA, teamB), city])
 );
 
+export const FIFA_TEAMS = Array.from(
+  new Set(groupPairToCityEntries.flatMap(([[teamA, teamB]]) => [teamA, teamB]))
+).sort((left, right) => left.localeCompare(right));
+
 export function getGroupMatchCity(teamA?: string, teamB?: string) {
   if (!teamA || !teamB) return null;
   return groupPairToCity.get(pairKey(teamA, teamB)) ?? null;

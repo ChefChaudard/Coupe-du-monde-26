@@ -396,9 +396,18 @@ function buildAvailableRealMatches(matches: Match[]) {
   const groupInfo = buildGroupInfo(matches);
   const thirdAssignments = assignThirdPlaces(groupInfo);
   const existingRound16 = getPhaseMatches(matches, "16e de finale");
+  const existingRound16MatchNumbers = new Set(
+    existingRound16
+      .map((match) => match.match_number)
+      .filter((matchNumber): matchNumber is number => typeof matchNumber === "number")
+  );
   let thirdSeedIndex = 0;
 
   for (const fixture of roundOf32Fixtures) {
+    if (existingRound16MatchNumbers.has(fixture.matchNumber)) {
+      continue;
+    }
+
     const resolveFixtureSeed = (seed: RoundOf32Seed) => {
       const seedIndex = seed.type === "third" ? thirdSeedIndex : -1;
       if (seed.type === "third") thirdSeedIndex += 1;
@@ -409,7 +418,6 @@ function buildAvailableRealMatches(matches: Match[]) {
     const teamB = resolveFixtureSeed(fixture.teamB);
 
     if (!teamA || !teamB) continue;
-    if (hasPairing(existingRound16, teamA, teamB)) continue;
 
     payload.push({
       match_number: fixture.matchNumber,
@@ -465,7 +473,9 @@ function buildAvailableRealMatches(matches: Match[]) {
   return payload;
 }
 
-export async function syncAvailableRealMatches(supabase: any) {
+export async function syncAvailableRealMatches(
+  supabase: ReturnType<typeof createAdminClient>
+) {
   const { data: matches } = await supabase
     .from("matches")
     .select("*");

@@ -122,10 +122,15 @@ export default function Topbar() {
 
   useEffect(() => {
     if (!isSuperAdmin) {
-      setSimulatedNow(null);
-      setSimulatedInput("");
-      setSimulatedDateError("");
-      return;
+      const resetTimer = window.setTimeout(() => {
+        setSimulatedNow(null);
+        setSimulatedInput("");
+        setSimulatedDateError("");
+      }, 0);
+
+      return () => {
+        window.clearTimeout(resetTimer);
+      };
     }
 
     async function loadSimulatedDate() {
@@ -632,23 +637,68 @@ export default function Topbar() {
                 <section className="space-y-3 border-t border-slate-200 pt-4">
                   <h3 className="text-lg font-bold text-slate-950">Le système de cote</h3>
                   <p>
-                    La cote est calculée automatiquement en fonction du nombre de joueurs ayant effectué le même choix.
+                    La cote est calculée automatiquement à partir du nombre total de joueurs et du nombre de joueurs ayant choisi la même issue.
                   </p>
                   <ul className="list-disc space-y-2 pl-5">
                     <li>Plus un pronostic est populaire, plus sa cote est faible.</li>
                     <li>Plus un pronostic est rare, plus sa cote est élevée.</li>
+                    <li>La cote ne descend jamais sous 1.</li>
                   </ul>
+                  <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
+                    cote = max(1, arrondi(total_joueurs / nb_joueurs_ayant_pronostiqué cette issue, 2))
+                  </blockquote>
                   <p>
-                    Ainsi, un pronostic audacieux mais correct peut rapporter davantage de points qu&apos;un pronostic évident.
+                    Exemple: avec 19 joueurs, une issue choisie par 6 joueurs affiche une cote de 3,17. Si une issue n&apos;a été choisie que par 1 joueur, sa cote monte à 19,0.
                   </p>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="font-semibold text-slate-950">Exemple</p>
-                    <ul className="mt-2 list-disc space-y-1 pl-5">
-                      <li>80 % des joueurs pronostiquent une victoire de la France → cote faible.</li>
-                      <li>5 % des joueurs pronostiquent une victoire du Sénégal → cote élevée.</li>
-                    </ul>
-                    <p className="mt-2">Si le Sénégal gagne, les joueurs ayant osé ce pronostic marqueront davantage de points.</p>
+                </section>
+
+                <section className="space-y-3 border-t border-slate-200 pt-4">
+                  <h3 className="text-lg font-bold text-slate-950">Bonus par tour</h3>
+                  <p>
+                    Pour valoriser les tours avancés, la cote de rareté est multipliée par un coefficient propre au tour.
+                  </p>
+                  <div className="overflow-hidden rounded-2xl border border-slate-200">
+                    <table className="w-full border-collapse text-left text-sm">
+                      <thead className="bg-slate-100 text-slate-700">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold">Tour atteint</th>
+                          <th className="px-4 py-3 font-semibold">Coeff.</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 bg-white">
+                        <tr>
+                          <td className="px-4 py-3">16e</td>
+                          <td className="px-4 py-3 font-semibold">1</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-3">8e</td>
+                          <td className="px-4 py-3 font-semibold">1,5</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-3">Quart</td>
+                          <td className="px-4 py-3 font-semibold">2</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-3">Demi</td>
+                          <td className="px-4 py-3 font-semibold">3</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-3">Finale</td>
+                          <td className="px-4 py-3 font-semibold">5</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-3">Vainqueur</td>
+                          <td className="px-4 py-3 font-semibold">8</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
+                  <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
+                    cote finale = max(1, arrondi((total_joueurs / nb_votes) × coefficient_du_tour, 2))
+                  </blockquote>
+                  <p>
+                    Les points gagnés suivent cette cote finale: plus le tour est avancé, plus un bon pronostic peut rapporter de points.
+                  </p>
                 </section>
               </div>
             </div>

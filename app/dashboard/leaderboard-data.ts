@@ -285,6 +285,7 @@ function buildActualTeamsByPhase(matches: MatchRow[]) {
 function buildKnockoutTeamOddsByPhase(predictions: KnockoutPredictionRow[]) {
   const participantsByPhase = new Map<string, Set<string>>();
   const teamParticipantsByPhase = new Map<string, Map<string, Set<string>>>();
+  const totalPlayersCount = new Set(predictions.map((prediction) => prediction.user_id)).size;
 
   for (const prediction of predictions) {
     if (!prediction.round) continue;
@@ -318,17 +319,34 @@ function buildKnockoutTeamOddsByPhase(predictions: KnockoutPredictionRow[]) {
   const oddsByPhase: Record<string, Record<string, number>> = {};
 
   for (const [phase, teamParticipants] of teamParticipantsByPhase.entries()) {
-    const total = participantsByPhase.get(phase)?.size ?? 0;
+    const coefficient = getKnockoutOddsCoefficient(phase);
 
     oddsByPhase[phase] = Object.fromEntries(
       Array.from(teamParticipants.entries()).map(([team, participants]) => [
         team,
-        total === 0 ? 1 : Math.max(1, Math.round((total / Math.max(participants.size, 1)) * 100) / 100),
+        totalPlayersCount === 0
+          ? 1
+          : Math.max(
+              1,
+              Math.round((totalPlayersCount / Math.max(participants.size, 1)) * coefficient * 100) / 100
+            ),
       ])
     );
   }
 
   return oddsByPhase;
+}
+
+function getKnockoutOddsCoefficient(phase: string) {
+  const normalizedPhase = phase.toLowerCase();
+
+  if (normalizedPhase.includes("16e")) return 1;
+  if (normalizedPhase.includes("8e")) return 1.5;
+  if (normalizedPhase.includes("quart")) return 2;
+  if (normalizedPhase.includes("demi")) return 3;
+  if (normalizedPhase.includes("finale")) return 5;
+
+  return 1;
 }
 
 function buildKnockoutPhaseParticipationCounts(predictions: KnockoutPredictionRow[]) {
@@ -370,7 +388,6 @@ function buildKnockoutPhaseParticipationCounts(predictions: KnockoutPredictionRo
 function getPlacementPointsForTeam(
   selectedTeam: string,
   actualTeams: Array<string | undefined>,
-  phase: string,
   odds: number
 ) {
   if (!selectedTeam) return null;
@@ -378,7 +395,7 @@ function getPlacementPointsForTeam(
   const selectedKey = normalizeKnockoutTeamKey(selectedTeam);
 
   return actualTeams.some((team) => normalizeKnockoutTeamKey(team) === selectedKey)
-    ? Math.max(1, Math.round(getPhasePointBase(phase) * odds * 100) / 100)
+    ? Math.max(1, Math.round(odds * 100) / 100)
     : 0;
 }
 
@@ -740,13 +757,11 @@ export function computeLeaderboardData(
     const teamAPoints = getPlacementPointsForTeam(
       selectedTeamA,
       actualTeams,
-      phase,
       knockoutTeamOddsByPhase[phase]?.[selectedTeamA] ?? 1
     );
     const teamBPoints = getPlacementPointsForTeam(
       selectedTeamB,
       actualTeams,
-      phase,
       knockoutTeamOddsByPhase[phase]?.[selectedTeamB] ?? 1
     );
 

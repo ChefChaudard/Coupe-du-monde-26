@@ -724,6 +724,7 @@ async function autoSyncRealMatches() {
 
 export default async function RealKnockoutPage() {
   const supabase = await createClient();
+  const adminSupabase = createAdminClient();
   const {
     data: { user },
     error,
@@ -743,12 +744,12 @@ export default async function RealKnockoutPage() {
     await autoSyncRealMatches();
   }
 
-  const { data: matches } = await supabase
+  const { data: matches } = await adminSupabase
     .from("matches")
     .select("*")
     .order("kickoff_at", { ascending: true });
 
-  const { data: predictions } = await supabase
+  const { data: predictions } = await adminSupabase
     .from("predictions")
     .select("user_id, match_id, predicted_a, predicted_b");
 

@@ -40,6 +40,8 @@ type SelectedMatchTeams = Record<number, { a: string; b: string }>;
 
 type TeamOddsByPhase = Record<string, Record<string, number>>;
 
+type TeamOddsCountByPhase = Record<string, Record<string, number>>;
+
 export type BracketMatchInfo = {
   teamA: string;
   teamB: string;
@@ -287,7 +289,7 @@ function getPlacementPointsForTeam(
   const selectedKey = normalizeTeamKey(selectedTeam);
 
   return actualTeams.some((team) => normalizeTeamKey(team) === selectedKey)
-    ? Math.max(1, Math.round(getWinnerPointsBase(phase) * odds * 100) / 100)
+    ? Math.max(1, Math.round(odds * 100) / 100)
     : 0;
 }
 
@@ -364,6 +366,27 @@ function formatDisplayedPoints(value: number | null) {
   return value === null ? "-" : formatOneDecimal(value);
 }
 
+function getKnockoutOddsCoefficient(phase: string) {
+  const normalizedPhase = phase.toLowerCase();
+
+  if (normalizedPhase.includes("16e")) return 1;
+  if (normalizedPhase.includes("8e")) return 1.5;
+  if (normalizedPhase.includes("quart")) return 2;
+  if (normalizedPhase.includes("demi")) return 3;
+  if (normalizedPhase.includes("finale")) return 5;
+
+  return 1;
+}
+
+function computeOddsFromCounts(totalPlayersCount: number, teamCount: number, phase: string) {
+  const coefficient = getKnockoutOddsCoefficient(phase);
+
+  return Math.max(
+    1,
+    Math.round((totalPlayersCount / Math.max(teamCount, 1)) * coefficient * 100) / 100
+  );
+}
+
 export default function KnockoutBracketPrediction({
   userId,
   round32Teams,
@@ -371,6 +394,8 @@ export default function KnockoutBracketPrediction({
   matchInfoById = {},
   actualTeamsByPhase = {},
   teamOddsByPhase = {},
+  teamOddsCountsByPhase = {},
+  totalPlayersCount = 0,
   tournamentStartAt = null,
   storageKey = "knockoutBracketPredictions",
   title = "Pronostics Tours Eliminatoires",
@@ -382,6 +407,8 @@ export default function KnockoutBracketPrediction({
   matchInfoById?: Record<number, BracketMatchInfo>;
   actualTeamsByPhase?: Record<string, string[]>;
   teamOddsByPhase?: TeamOddsByPhase;
+  teamOddsCountsByPhase?: TeamOddsCountByPhase;
+  totalPlayersCount?: number;
   tournamentStartAt?: number | null;
   storageKey?: string;
   title?: string;
@@ -400,8 +427,9 @@ const [message, setMessage] = useState<string | null>(null);
 const [saving, setSaving] = useState(false);
 const [saveMessage, setSaveMessage] = useState<string | null>(null);
 const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
+const [serverNowTime] = useState(() => Date.now());
 const timeZone = useUserTimeZone();
-const appNowTime = simulatedNow ? new Date(simulatedNow).getTime() : Date.now();
+const appNowTime = simulatedNow ? new Date(simulatedNow).getTime() : serverNowTime;
 const isTournamentLocked =
   tournamentStartAt !== null && Number.isFinite(tournamentStartAt) && appNowTime >= tournamentStartAt;
 
@@ -684,6 +712,27 @@ if (error) {
     [groupTeamsByLetter]
   );
 
+  function getLiveTeamOdds(phase: string, team: string) {
+    const phaseMatches = phaseGroups[phase] ?? [];
+    const baseTeamCount = teamOddsCountsByPhase[phase]?.[team] ?? 0;
+    let teamCount = baseTeamCount;
+
+    for (const match of phaseMatches) {
+      const selectedTeamA = normalizeTeamSelection(selectedTeams[match.id]?.a);
+      const selectedTeamB = normalizeTeamSelection(selectedTeams[match.id]?.b);
+
+      if (selectedTeamA === team) {
+        teamCount += 1;
+      }
+
+      if (selectedTeamB === team) {
+        teamCount += 1;
+      }
+    }
+
+    return computeOddsFromCounts(totalPlayersCount, teamCount, phase);
+  }
+
   function renderPhaseCard(phase: string, matches: BracketMatch[]) {
     const laterPhase = laterPhases.includes(phase as RealLaterPhase)
       ? (phase as RealLaterPhase)
@@ -699,7 +748,7 @@ if (error) {
         : [];
 
     function formatTeamOption(team: string) {
-      const odds = teamOddsByPhase[phase]?.[team] ?? 1;
+      const odds = getLiveTeamOdds(phase, team);
       return `${team} (${formatOneDecimal(odds)})`;
     }
 
@@ -746,13 +795,13 @@ if (error) {
               selectedTeamA,
               actualTeams,
               match.phase,
-              teamOddsByPhase[phase]?.[selectedTeamA] ?? 1
+              getLiveTeamOdds(phase, selectedTeamA)
             );
             const teamBPoints = getPlacementPointsForTeam(
               selectedTeamB,
               actualTeams,
               match.phase,
-              teamOddsByPhase[phase]?.[selectedTeamB] ?? 1
+              getLiveTeamOdds(phase, selectedTeamB)
             );
             const placementPoints =
               teamAPoints !== null || teamBPoints !== null

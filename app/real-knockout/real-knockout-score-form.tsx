@@ -10,6 +10,7 @@ import {
 } from "@/app/lib/time-zone";
 import { getMatchCity } from "@/app/lib/fifa-cities";
 import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
+import { useRouter } from "next/navigation";
 import { getRealLaterFixture, type RealLaterPhase } from "./real-knockout-fixtures";
 
 const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
@@ -125,6 +126,7 @@ export default function RealKnockoutScoreForm({
   const [message, setMessage] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const router = useRouter();
   const timeZone = useUserTimeZone();
   const effectiveNow = simulatedNow ?? new Date().toISOString();
   const appNowTime = new Date(effectiveNow).getTime();
@@ -234,6 +236,8 @@ export default function RealKnockoutScoreForm({
       return;
     }
 
+    window.dispatchEvent(new Event(LEADERBOARD_REFRESH_EVENT));
+    router.refresh();
     setMessage(`Pronostics sauvegardés pour ${phase}.`);
   }
 

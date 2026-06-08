@@ -57,6 +57,25 @@ type MatchOdds = {
   two: number;
 };
 
+function computeOddsFromCounts(counts: MatchOdds) {
+  const total = counts.one + counts.draw + counts.two;
+
+  if (total === 0) {
+    return { one: 1, draw: 1, two: 1 };
+  }
+
+  const toOdds = (count: number) => {
+    const raw = total / Math.max(count, 1);
+    return Math.max(1, Math.round(raw * 100) / 100);
+  };
+
+  return {
+    one: toOdds(counts.one),
+    draw: toOdds(counts.draw),
+    two: toOdds(counts.two),
+  };
+}
+
 type FormValues = Record<number, { a: string; b: string }>;
 
 type PredictionDraft = {
@@ -395,7 +414,7 @@ export default function PredictionForm({
   existingPredictions,
   userId,
   matchStats,
-  matchOdds,
+  matchPredictionCounts,
   isAdmin,
   createKnockoutMatches,
   syncRealKnockoutMatches,
@@ -405,7 +424,7 @@ export default function PredictionForm({
   existingPredictions: Prediction[];
   userId: string;
   matchStats: Record<number, MatchStats>;
-  matchOdds: Record<number, MatchOdds>;
+  matchPredictionCounts: Record<number, MatchOdds>;
   isAdmin: boolean;
   createKnockoutMatches: (formData: FormData) => Promise<void>;
   syncRealKnockoutMatches: (formData: FormData) => Promise<void>;
@@ -473,25 +492,18 @@ export default function PredictionForm({
     return matches;
   }, [groupedMatches, selectedTab]);
 
-  const [values, setValues] = useState<FormValues>(initialValues);
-  const [realScores, setRealScores] = useState<FormValues>(initialRealScores);
+  const [values, setValues] = useState<FormValues>(() => {
+    const draft = readPredictionDraft(userId);
+    return draft ? mergeFormValues(initialValues, draft.values) : initialValues;
+  });
+  const [realScores, setRealScores] = useState<FormValues>(() => {
+    const draft = readPredictionDraft(userId);
+    return draft ? mergeFormValues(initialRealScores, draft.realScores) : initialRealScores;
+  });
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
   const timeZone = useUserTimeZone();
-
-  useEffect(() => {
-    const draft = readPredictionDraft(userId);
-
-    if (draft) {
-      setValues(mergeFormValues(initialValues, draft.values));
-      setRealScores(mergeFormValues(initialRealScores, draft.realScores));
-      return;
-    }
-
-    setValues(initialValues);
-    setRealScores(initialRealScores);
-  }, [initialValues, initialRealScores, userId]);
 
   useEffect(() => {
     writePredictionDraft(userId, {
@@ -797,11 +809,31 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                     const stats = matchStats[match.id];
                     const myPoints = stats?.myPoints ?? null;
                     const averagePoints = stats?.averagePoints ?? null;
-                    const odds = matchOdds[match.id] ?? {
-                      one: 1,
-                      draw: 1,
-                      two: 1,
-                    };
+                      const currentEntry = values[match.id];
+                      const predictionCounts = {
+                        ...(matchPredictionCounts[match.id] ?? {
+                          one: 0,
+                          draw: 0,
+                          two: 0,
+                        }),
+                      };
+
+                      if (currentEntry?.a !== "" && currentEntry?.b !== "") {
+                        const predictedA = Number(currentEntry.a);
+                        const predictedB = Number(currentEntry.b);
+
+                        if (!Number.isNaN(predictedA) && !Number.isNaN(predictedB)) {
+                          if (predictedA > predictedB) {
+                            predictionCounts.one += 1;
+                          } else if (predictedA < predictedB) {
+                            predictionCounts.two += 1;
+                          } else {
+                            predictionCounts.draw += 1;
+                          }
+                        }
+                      }
+
+                      const odds = computeOddsFromCounts(predictionCounts);
 
                     return (
                       <tr

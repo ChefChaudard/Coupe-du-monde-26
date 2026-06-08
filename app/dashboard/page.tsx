@@ -21,13 +21,6 @@ type MatchStats = {
   averagePoints: number | null;
 };
 
-type Prediction = {
-  user_id: string;
-  match_id: number;
-  predicted_a: number;
-  predicted_b: number;
-};
-
 type GroupStandingRow = {
   team: string;
   played: number;
@@ -267,9 +260,34 @@ export default async function DashboardPage({
 
   const matchStats: Record<number, MatchStats> = {};
   const matchOdds: Record<number, MatchOdds> = {};
+  const matchPredictionCounts: Record<number, MatchOdds> = {};
   const groupStandings = buildGroupStandings(matches ?? []);
 
   for (const match of matches ?? []) {
+    const matchPredictions = (predictions ?? []).filter(
+      (p) => p.match_id === match.id
+    );
+
+    const predictionCounts = matchPredictions.reduce<MatchOdds>(
+      (acc, prediction) => {
+        if (prediction.predicted_a > prediction.predicted_b) {
+          acc.one += 1;
+        } else if (prediction.predicted_a < prediction.predicted_b) {
+          acc.two += 1;
+        } else {
+          acc.draw += 1;
+        }
+
+        return acc;
+      },
+      { one: 0, draw: 0, two: 0 }
+    );
+
+    matchPredictionCounts[match.id] = predictionCounts;
+
+    const matchOddsForMatch = computeMatchOdds(matchPredictions);
+    matchOdds[match.id] = matchOddsForMatch;
+
     if (!match.is_finished || match.score_a === null || match.score_b === null) {
       matchStats[match.id] = {
         myPoints: null,
@@ -277,13 +295,6 @@ export default async function DashboardPage({
       };
       continue;
     }
-
-    const matchPredictions = (predictions ?? []).filter(
-      (p) => p.match_id === match.id
-    );
-
-    const matchOddsForMatch = computeMatchOdds(matchPredictions);
-    matchOdds[match.id] = matchOddsForMatch;
 
     const allPoints = matchPredictions.map((prediction) =>
       getPredictionPoints(
@@ -386,7 +397,7 @@ export default async function DashboardPage({
             existingPredictions={myPredictions}
             userId={user.id}
             matchStats={matchStats}
-            matchOdds={matchOdds}
+            matchPredictionCounts={matchPredictionCounts}
             isAdmin={isAdmin}
             createKnockoutMatches={createKnockoutMatches}
             syncRealKnockoutMatches={syncRealKnockoutMatches}

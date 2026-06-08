@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import Leaderboard from "@/app/dashboard/leaderboard";
 import KnockoutBracketPrediction, {
   type BracketMatchInfo,
@@ -42,6 +43,12 @@ type KnockoutPredictionRow = {
 
 type TeamOddsByMatchId = Record<number, Record<string, number>>;
 type TeamOddsByPhase = Record<string, Record<string, number>>;
+type TeamOddsCountByPhase = Record<string, Record<string, number>>;
+type ProfileRow = {
+  id: string;
+};
+
+const round32Phase = "16e de finale";
 
 type GroupRanking = Record<string, string[]>;
 
@@ -355,10 +362,55 @@ function buildTeamOddsByMatchId(
   return oddsByMatchId;
 }
 
+function getKnockoutOddsCoefficient(phase: string) {
+  const normalizedPhase = phase.toLowerCase();
+
+  if (normalizedPhase.includes("16e")) return 1;
+  if (normalizedPhase.includes("8e")) return 1.5;
+  if (normalizedPhase.includes("quart")) return 2;
+  if (normalizedPhase.includes("demi")) return 3;
+  if (normalizedPhase.includes("finale")) return 5;
+
+  return 1;
+}
+
 function buildTeamOddsByPhase(
+  predictions: KnockoutPredictionRow[],
+  totalPlayersCount: number
+): {
+  oddsByPhase: TeamOddsByPhase;
+  countsByPhase: TeamOddsCountByPhase;
+} {
+  const summaryByPhase = buildTeamOddsSummaryByPhase(predictions);
+  const oddsByPhase: TeamOddsByPhase = {};
+
+  for (const [phase, counts] of Object.entries(summaryByPhase.countsByPhase)) {
+    const coefficient = getKnockoutOddsCoefficient(phase);
+
+    oddsByPhase[phase] = Object.fromEntries(
+      Object.entries(counts).map(([team, count]) => [
+        team,
+        totalPlayersCount === 0
+          ? 1
+          : Math.max(
+              1,
+              Math.round((totalPlayersCount / Math.max(count, 1)) * coefficient * 100) / 100
+            ),
+      ])
+    );
+  }
+
+  return {
+    oddsByPhase,
+    countsByPhase: summaryByPhase.countsByPhase,
+  };
+}
+
+function buildTeamOddsSummaryByPhase(
   predictions: KnockoutPredictionRow[]
-): TeamOddsByPhase {
-  const participantsByPhase = new Map<string, Set<string>>();
+): {
+  countsByPhase: TeamOddsCountByPhase;
+} {
   const teamParticipantsByPhase = new Map<string, Map<string, Set<string>>>();
 
   for (const prediction of predictions) {
@@ -374,10 +426,6 @@ function buildTeamOddsByPhase(
 
     if (teams.length === 0) continue;
 
-    const phaseParticipants = participantsByPhase.get(phase) ?? new Set<string>();
-    phaseParticipants.add(prediction.user_id);
-    participantsByPhase.set(phase, phaseParticipants);
-
     const currentTeamParticipants = teamParticipantsByPhase.get(phase) ?? new Map<string, Set<string>>();
 
     for (const team of teams) {
@@ -389,23 +437,24 @@ function buildTeamOddsByPhase(
     teamParticipantsByPhase.set(phase, currentTeamParticipants);
   }
 
-  const oddsByPhase: TeamOddsByPhase = {};
-
-  for (const [phase, teamParticipants] of teamParticipantsByPhase.entries()) {
-    const total = participantsByPhase.get(phase)?.size ?? 0;
-    oddsByPhase[phase] = Object.fromEntries(
-      Array.from(teamParticipants.entries()).map(([team, participants]) => [
-        team,
-        total === 0 ? 1 : Math.max(1, Math.round((total / Math.max(participants.size, 1)) * 100) / 100),
+  return {
+    countsByPhase: Object.fromEntries(
+      Array.from(teamParticipantsByPhase.entries()).map(([phase, teamParticipants]) => [
+        phase,
+        Object.fromEntries(
+          Array.from(teamParticipants.entries()).map(([team, participants]) => [
+            team,
+            participants.size,
+          ])
+        ),
       ])
-    );
-  }
-
-  return oddsByPhase;
+    ),
+  };
 }
 
 export default async function KnockoutPage() {
   const supabase = await createClient();
+  const adminSupabase = createAdminClient();
   const {
     data: { user },
     error,
@@ -425,9 +474,13 @@ export default async function KnockoutPage() {
     .select("match_id, predicted_a, predicted_b")
     .eq("user_id", user.id);
 
-  const { data: knockoutOddsRows } = await supabase
+  const { data: knockoutOddsRows } = await adminSupabase
     .from("knockout_predictions")
-    .select("match_key, team_a, team_b, round");
+    .select("user_id, match_key, team_a, team_b, round");
+
+  const { data: profileRows } = await adminSupabase
+    .from("profiles")
+    .select("id");
 
   const groupRankings = buildPredictedGroupRankings(
     matches ?? [],
@@ -463,9 +516,14 @@ export default async function KnockoutPage() {
   const allTeams = collectAllGroupTeams(matches ?? []);
   const matchInfoById = buildBracketMatchInfo(matches ?? []);
   const actualTeamsByPhase = buildActualTeamsByPhase(matches ?? []);
-  const teamOddsByPhase = buildTeamOddsByPhase(
-    (knockoutOddsRows ?? []) as KnockoutPredictionRow[]
+  const teamOddsBaseRows = ((knockoutOddsRows ?? []) as KnockoutPredictionRow[]).filter(
+    (row) => row.user_id !== user.id
   );
+  const totalPlayersCount = new Set((profileRows ?? []).map((row: ProfileRow) => row.id)).size;
+
+  const teamOddsData = buildTeamOddsByPhase(teamOddsBaseRows, totalPlayersCount);
+  const teamOddsByPhase = teamOddsData.oddsByPhase;
+  const teamOddsCountsByPhase = teamOddsData.countsByPhase;
   const tournamentStartAt = getTournamentStartAt(matches ?? []);
 
   return (
@@ -479,9 +537,11 @@ export default async function KnockoutPage() {
             matchInfoById={matchInfoById}
             actualTeamsByPhase={actualTeamsByPhase}
             teamOddsByPhase={teamOddsByPhase}
+            teamOddsCountsByPhase={teamOddsCountsByPhase}
+            totalPlayersCount={totalPlayersCount}
             tournamentStartAt={tournamentStartAt}
             title="2e tours"
-            description="Cette page permet de construire vos pronostics des tours à élimination directe. Les 16e proposent les 48 équipes qualifiées. Pour les tours suivants, les listes se basent automatiquement sur les équipes du tour précédent, avec une seule occurrence possible par tour. Chaque équipe correctement pronostiquée rapporte 2 points multipliés par sa cote. La cote d'une issue correspond au total des joueurs ayant pronostiqué ce match divisé par le nombre de joueurs ayant joué cette issue."
+            description="Cette page permet de construire vos pronostics des tours à élimination directe. Les 16e proposent les 48 équipes qualifiées. Pour les tours suivants, les listes se basent automatiquement sur les équipes du tour précédent, avec une seule occurrence possible par tour. Chaque équipe correctement pronostiquée rapporte des points égaux à sa cote. La cote d'une issue correspond au nombre total de joueurs divisé par le nombre de joueurs ayant choisi cette issue, multiplié par le coefficient du tour."
           />
         </section>
 

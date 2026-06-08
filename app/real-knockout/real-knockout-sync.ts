@@ -1,4 +1,5 @@
 import { getMatchCity } from "@/app/lib/fifa-cities";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getRealLaterFixture, getRealLaterPhaseMatches } from "./real-knockout-fixtures";
 
 export type Match = {

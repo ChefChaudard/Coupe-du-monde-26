@@ -290,7 +290,7 @@ async function saveRound32Assignments(formData: FormData) {
 export default async function AdminRealKnockoutPage({
   searchParams,
 }: {
-  searchParams?: { error?: string };
+  searchParams?: Promise<{ error?: string }>;
 }) {
   const supabase = await createClient();
   const adminSupabase = createAdminClient();
@@ -332,7 +332,8 @@ export default async function AdminRealKnockoutPage({
     (existingRows ?? []) as MatchRow[],
     parseRound32Assignments(settingsRow?.value ?? null)
   );
-  const errorMessage = searchParams?.error ?? null;
+  const resolvedSearchParams = await searchParams;
+  const errorMessage = resolvedSearchParams?.error ?? null;
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(122,31,44,0.12),_transparent_38%),linear-gradient(180deg,_#f8fafc_0%,_#f1f5f9_100%)] px-4 py-6 sm:px-6 lg:px-8">

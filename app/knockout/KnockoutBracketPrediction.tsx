@@ -7,6 +7,7 @@ import { round32Placeholders, type Round32Teams } from "./bracket-data";
 import { type RealLaterPhase } from "../real-knockout/real-knockout-fixtures";
 
 const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
+const FIFA_TABLEAU_URL = "https://www.footmercato.net/international/coupe-du-monde/tableau-matchs";
 
 type BracketMatch = {
   id: number;
@@ -899,6 +900,15 @@ if (error) {
           >
             Reinitialiser le tableau
           </button>
+
+          <a
+            href={FIFA_TABLEAU_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          >
+            Tableau FIFA
+          </a>
         </div>
       </div>
 

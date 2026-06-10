@@ -28,6 +28,23 @@ Le bonus n'est applique que lorsque tous les matchs du groupe sont termines.
 - Demi-finales et finale: $3$
 - Vainqueur: $4$
 
+## Cotes des tours eliminatoires
+Pour les pronostics des tours eliminatoires, la cote de base du site reste :
+
+$$
+Cote_{site} = \frac{Nombre\ total\ de\ joueurs}{Nombre\ de\ joueurs\ ayant\ pronostique\ l\'equipe\ dans\ la\ phase}
+$$
+
+On applique ensuite un coefficient de phase a cette cote de base.
+
+- 16e de finale: $2$
+- 8e de finale: $2$
+- Quarts de finale: $3$
+- Demi-finales: $3$
+- Finale: $3$
+
+Le pronostic du vainqueur est conserve dans le bracket, mais il n'entre pas dans le calcul des points.
+
 ## Cote de l'issue
 La cote est calculee a partir de la repartition des pronostics sur un match donne.
 
@@ -46,6 +63,14 @@ Plus une issue est peu pronostiquee, plus sa cote est elevee.
 $$
 Score = \max(1, \text{arrondi}(Base_{phase} \times Cote_{issue}, 2))
 $$
+
+Pour les tours eliminatoires, on utilise donc :
+
+$$
+Cote_{issue} = Cote_{site} \times Coef_{phase}
+$$
+
+avec $Coef_{phase} = 2$ pour les 16e et les 8e, puis $Coef_{phase} = 3$ pour les quarts, les demis et la finale.
 
 ## Principe de classement
 Le classement live est la somme des points de tous les pronostics valides d'un utilisateur.

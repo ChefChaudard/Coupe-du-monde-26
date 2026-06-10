@@ -1,4 +1,11 @@
-import { computeMatchOdds, getPhasePointBase, getPredictionPoints, type MatchOdds } from "./scoring";
+import {
+  computeMatchOdds,
+  getPhasePointBase,
+  getPredictionPoints,
+  getTopScorerPoints,
+  TOP_SCORER_POINTS,
+  type MatchOdds,
+} from "./scoring";
 
 type MatchRow = {
   id: number;
@@ -55,6 +62,7 @@ export type ScoreBreakdown = {
   group: number;
   groupPlacement: number;
   knockout: number;
+  topScorer: number;
   real: number;
 };
 
@@ -105,6 +113,18 @@ export type ScoreReportRow =
       slotLabel: string;
       participants: number;
       predictedCount: number;
+    }
+  | {
+      reportId: string;
+      kind: "topScorer";
+      phase: string;
+      label: string;
+      points: number;
+      base: number;
+      odds: number;
+      player: string;
+      participants: number;
+      predictedCount: number;
     };
 
 export type LeaderboardPayload = {
@@ -120,6 +140,9 @@ function getScoreBreakdownLabel(phase: string) {
   const normalizedPhase = phase.toLowerCase();
 
   if (normalizedPhase.includes("group")) return "Groupes";
+  if (normalizedPhase.includes("buteur") || normalizedPhase.includes("scorer")) {
+    return "Meilleur buteur";
+  }
   if (
     normalizedPhase.includes("reel") ||
     normalizedPhase.includes("réel") ||
@@ -132,7 +155,7 @@ function getScoreBreakdownLabel(phase: string) {
 }
 
 function createEmptyBreakdown(): ScoreBreakdown {
-  return { group: 0, groupPlacement: 0, knockout: 0, real: 0 };
+  return { group: 0, groupPlacement: 0, knockout: 0, topScorer: 0, real: 0 };
 }
 
 function getBreakdownForUser(rows: PhaseDetailRow[]) {
@@ -144,6 +167,8 @@ function getBreakdownForUser(rows: PhaseDetailRow[]) {
       if (row.phase.toLowerCase().includes("classement")) {
         acc.groupPlacement += row.points;
       }
+    } else if (label === "Meilleur buteur") {
+      acc.topScorer += row.points;
     } else if (label === "Tours éliminatoires") {
       acc.knockout += row.points;
     } else {
@@ -221,6 +246,48 @@ type StandingsMatch = {
 };
 
 type KnockoutMatchInfo = MatchRow & { id: number };
+
+const TOP_SCORER_MATCH_KEY = "top_scorer";
+const TOP_SCORER_PHASE = "Meilleur buteur";
+
+function normalizePlayerName(value?: string | null) {
+  if (!value) return "";
+
+  return value
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function buildActualTopScorer(matches: MatchRow[]) {
+  const topScorerMatch = matches.find((match) => {
+    const normalizedPhase = fromRealPhase(match.phase).toLowerCase();
+    return normalizedPhase.includes("buteur") || normalizedPhase.includes("scorer");
+  });
+
+  return normalizePlayerName(topScorerMatch?.team_a ?? topScorerMatch?.team_b);
+}
+
+function buildTopScorerParticipationCounts(predictions: KnockoutPredictionRow[]) {
+  const participants = new Set<string>();
+  const playerParticipants = new Map<string, Set<string>>();
+
+  for (const prediction of predictions) {
+    if (prediction.match_key !== TOP_SCORER_MATCH_KEY) continue;
+
+    const selectedPlayer = normalizePlayerName(prediction.team_a ?? prediction.winner);
+    if (!selectedPlayer) continue;
+
+    participants.add(prediction.user_id);
+
+    const currentParticipants = playerParticipants.get(selectedPlayer) ?? new Set<string>();
+    currentParticipants.add(prediction.user_id);
+    playerParticipants.set(selectedPlayer, currentParticipants);
+  }
+
+  return { participants, playerParticipants };
+}
 
 function buildKnockoutMatchInfo(matches: MatchRow[]) {
   const groupedMatches = matches.reduce<Record<string, MatchRow[]>>((acc, match) => {
@@ -340,11 +407,11 @@ function buildKnockoutTeamOddsByPhase(predictions: KnockoutPredictionRow[]) {
 function getKnockoutOddsCoefficient(phase: string) {
   const normalizedPhase = phase.toLowerCase();
 
-  if (normalizedPhase.includes("16e")) return 1;
-  if (normalizedPhase.includes("8e")) return 1.5;
-  if (normalizedPhase.includes("quart")) return 2;
+  if (normalizedPhase.includes("16e")) return 2;
+  if (normalizedPhase.includes("8e")) return 2;
+  if (normalizedPhase.includes("quart")) return 3;
   if (normalizedPhase.includes("demi")) return 3;
-  if (normalizedPhase.includes("finale")) return 5;
+  if (normalizedPhase.includes("finale")) return 3;
 
   return 1;
 }
@@ -638,6 +705,8 @@ export function computeLeaderboardData(
   const actualTeamsByPhase = buildActualTeamsByPhase(matches);
   const knockoutTeamOddsByPhase = buildKnockoutTeamOddsByPhase(knockoutPredictions);
   const knockoutParticipationCounts = buildKnockoutPhaseParticipationCounts(knockoutPredictions);
+  const actualTopScorer = buildActualTopScorer(matches);
+  const topScorerParticipationCounts = buildTopScorerParticipationCounts(knockoutPredictions);
 
   const allGroupMatchesByPhase = new Map<string, MatchRow[]>();
 
@@ -740,6 +809,10 @@ export function computeLeaderboardData(
   }
 
   for (const prediction of knockoutPredictions) {
+    if (prediction.match_key === TOP_SCORER_MATCH_KEY) {
+      continue;
+    }
+
     const matchId = Number(prediction.match_key);
     if (!Number.isFinite(matchId)) continue;
 
@@ -817,6 +890,41 @@ export function computeLeaderboardData(
     if (reportRows.length > 0) {
       scoreReportMap.set(prediction.user_id, reportRows);
     }
+  }
+
+  for (const prediction of knockoutPredictions) {
+    if (prediction.match_key !== TOP_SCORER_MATCH_KEY) continue;
+
+    const selectedPlayer = prediction.team_a ?? prediction.winner;
+    if (!selectedPlayer || !actualTopScorer) continue;
+
+    const points = getTopScorerPoints(selectedPlayer, actualTopScorer);
+    if (points <= 0) continue;
+
+    const normalizedPlayer = normalizePlayerName(selectedPlayer);
+    const participants = topScorerParticipationCounts.participants.size;
+    const predictedCount = topScorerParticipationCounts.playerParticipants.get(normalizedPlayer)?.size ?? 0;
+
+    scoreMap.set(prediction.user_id, (scoreMap.get(prediction.user_id) ?? 0) + points);
+
+    const userPhaseMap = phaseDetailsMap.get(prediction.user_id) ?? new Map<string, number>();
+    userPhaseMap.set(TOP_SCORER_PHASE, (userPhaseMap.get(TOP_SCORER_PHASE) ?? 0) + points);
+    phaseDetailsMap.set(prediction.user_id, userPhaseMap);
+
+    const reportRows = scoreReportMap.get(prediction.user_id) ?? [];
+    reportRows.push({
+      reportId: `topScorer-${prediction.user_id}`,
+      kind: "topScorer",
+      phase: TOP_SCORER_PHASE,
+      label: `${selectedPlayer} meilleur buteur`,
+      points,
+      base: 1,
+      odds: TOP_SCORER_POINTS,
+      player: selectedPlayer,
+      participants,
+      predictedCount,
+    });
+    scoreReportMap.set(prediction.user_id, reportRows);
   }
 
   for (const [userId, bonusPoints] of groupBonus.bonusByUser.entries()) {

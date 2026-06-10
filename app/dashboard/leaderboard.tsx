@@ -44,14 +44,28 @@ type ReportPhaseGroup = {
   items: ScoreReportRow[];
 };
 
+type TopScorerReportItem = ScoreReportRow & {
+  kind: "topScorer";
+  player: string;
+  participants: number;
+  predictedCount: number;
+};
+
 function formatOutcomeLabel(outcome: string) {
   if (outcome === "Victoire équipe A") return "victoire A";
   if (outcome === "Victoire équipe B") return "victoire B";
   return "nul";
 }
 
+function isTopScorerReportItem(item: ScoreReportRow): item is TopScorerReportItem {
+  return (item as { kind: string }).kind === "topScorer";
+}
+
 function getReportSectionKey(item: ScoreReportRow) {
-  if (item.kind === "groupPlacement") return "groupPlacement";
+  const kind = (item as { kind: string }).kind;
+
+  if (kind === "groupPlacement") return "groupPlacement";
+  if (kind === "topScorer") return "topScorer";
 
   const normalizedPhase = item.phase.toLowerCase();
 
@@ -84,6 +98,12 @@ function getReportSections(reportRows: ScoreReportRow[]): ReportSection[] {
       key: "knockoutQualification",
       title: "Qualifiés dans les tours",
       subtitle: "Points gagnés sur les tours à élimination directe.",
+      items: [],
+    },
+    {
+      key: "topScorer",
+      title: "Meilleur buteur",
+      subtitle: "Points gagnés sur la sélection du meilleur buteur.",
       items: [],
     },
     {
@@ -127,6 +147,9 @@ function getScoreBreakdownLabel(phase: string) {
   const normalizedPhase = phase.toLowerCase();
 
   if (normalizedPhase.includes("group")) return "Groupes";
+  if (normalizedPhase.includes("buteur") || normalizedPhase.includes("scorer")) {
+    return "Meilleur buteur";
+  }
   if (
     normalizedPhase.includes("reel") ||
     normalizedPhase.includes("réel") ||
@@ -139,7 +162,7 @@ function getScoreBreakdownLabel(phase: string) {
 }
 
 function createEmptyBreakdown(): ScoreBreakdown {
-  return { group: 0, groupPlacement: 0, knockout: 0, real: 0 };
+  return { group: 0, groupPlacement: 0, knockout: 0, topScorer: 0, real: 0 };
 }
 
 function getBreakdownForUser(rows: PhaseDetailRow[]) {
@@ -151,6 +174,8 @@ function getBreakdownForUser(rows: PhaseDetailRow[]) {
       if (row.phase.toLowerCase().includes("classement")) {
         acc.groupPlacement += row.points;
       }
+    } else if (label === "Meilleur buteur") {
+      acc.topScorer += row.points;
     } else if (label === "Tours éliminatoires") {
       acc.knockout += row.points;
     } else {
@@ -255,7 +280,9 @@ function LeaderboardRowItem({
 
         <span
           ref={anchorRef}
-          className="truncate text-sm font-medium text-slate-900 min-w-0 cursor-help"
+          className={`truncate text-sm font-medium min-w-0 cursor-help ${
+            row.nickname === "Mme Claude" ? "text-red-600" : "text-slate-900"
+          }`}
         >
           {row.nickname}
         </span>
@@ -285,6 +312,10 @@ function LeaderboardRowItem({
                 <div className="flex items-baseline justify-between gap-4 border-b border-slate-100 pb-2">
                   <span className="text-slate-600">Tours éliminatoires</span>
                   <strong className="text-sm text-slate-900">{formatOneDecimal(details.knockout)} pts</strong>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 border-b border-slate-100 pb-2">
+                  <span className="text-slate-600">Meilleur buteur</span>
+                  <strong className="text-sm text-slate-900">{formatOneDecimal(details.topScorer)} pts</strong>
                 </div>
                 <div className="flex items-baseline justify-between gap-4">
                   <span className="text-slate-600">Pronostics réel</span>
@@ -572,6 +603,16 @@ export default function Leaderboard() {
                                                   {item.predictedCount}/{item.participants} pronostics sur ce rang
                                                 </p>
                                               </div>
+                                            ) : isTopScorerReportItem(item) ? (
+                                              <div className="text-xs text-slate-600">
+                                                <p>{item.player} - meilleur buteur</p>
+                                                <p className="mt-0.5 text-slate-500">
+                                                  sélection du meilleur buteur de la Coupe du monde
+                                                </p>
+                                                <p className="mt-0.5 text-slate-500">
+                                                  {item.predictedCount}/{item.participants} joueurs sur ce choix
+                                                </p>
+                                              </div>
                                             ) : item.kind === "knockoutPlacement" ? (
                                               <div className="text-xs text-slate-600">
                                                 <p>
@@ -633,6 +674,22 @@ export default function Leaderboard() {
                                       </p>
                                       <p className="mt-0.5 text-slate-500">
                                         {groupItem.predictedCount}/{groupItem.participants} pronostics sur ce rang
+                                      </p>
+                                    </div>
+                                      );
+                                    })()
+                                  ) : isTopScorerReportItem(item) ? (
+                                    (() => {
+                                      const topScorerItem = item;
+
+                                      return (
+                                    <div className="text-xs text-slate-600">
+                                      <p>{topScorerItem.player} - meilleur buteur</p>
+                                      <p className="mt-0.5 text-slate-500">
+                                        sélection du meilleur buteur de la Coupe du monde
+                                      </p>
+                                      <p className="mt-0.5 text-slate-500">
+                                        {topScorerItem.predictedCount}/{topScorerItem.participants} joueurs sur ce choix
                                       </p>
                                     </div>
                                       );

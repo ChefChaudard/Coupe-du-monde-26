@@ -5,7 +5,7 @@ dotenv.config({ path: ".env.local" });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const targetEmails = ["fabtrash49@gmail.com", "sfberal@gmail.com"];
+const targetEmails = ["fabtrash49@gmail.com"];
 
 if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("Variables Supabase manquantes dans .env.local");
@@ -45,6 +45,13 @@ async function deleteUserByEmail(user) {
     .eq("user_id", userId);
 
   if (scoresError) throw scoresError;
+
+  const { error: knockoutPredictionsError } = await supabase
+    .from("knockout_predictions")
+    .delete()
+    .eq("user_id", userId);
+
+  if (knockoutPredictionsError) throw knockoutPredictionsError;
 
   const { error: profileError } = await supabase
     .from("profiles")

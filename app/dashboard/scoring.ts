@@ -9,6 +9,24 @@ export type PredictionMatch = {
   predicted_b: number;
 };
 
+function normalizeSelection(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+export const TOP_SCORER_POINTS = 20;
+
+export function getTopScorerPoints(predictedPlayer: string | null, actualPlayer: string | null) {
+  if (!predictedPlayer || !actualPlayer) return 0;
+
+  return normalizeSelection(predictedPlayer) === normalizeSelection(actualPlayer)
+    ? TOP_SCORER_POINTS
+    : 0;
+}
+
 export function getPhasePointBase(phase: string) {
   const normalizedPhase = phase.toLowerCase();
 

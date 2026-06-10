@@ -366,11 +366,11 @@ function formatDisplayedPoints(value: number | null) {
 function getKnockoutOddsCoefficient(phase: string) {
   const normalizedPhase = phase.toLowerCase();
 
-  if (normalizedPhase.includes("16e")) return 1;
-  if (normalizedPhase.includes("8e")) return 1.5;
-  if (normalizedPhase.includes("quart")) return 2;
+  if (normalizedPhase.includes("16e")) return 2;
+  if (normalizedPhase.includes("8e")) return 2;
+  if (normalizedPhase.includes("quart")) return 3;
   if (normalizedPhase.includes("demi")) return 3;
-  if (normalizedPhase.includes("finale")) return 5;
+  if (normalizedPhase.includes("finale")) return 3;
 
   return 1;
 }

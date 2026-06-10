@@ -600,21 +600,22 @@ export default function Topbar() {
                   </p>
                   <p>
                     Lorsque la compétition avance, des points sont attribués pour chaque équipe qui atteint effectivement
-                    le tour que vous aviez pronostiqué.
+                    le tour que vous aviez pronostiqué. Le champion est conservé dans le tableau, mais le score du
+                    tour s&apos;arrête à la finale.
                   </p>
                   <div className="space-y-2">
-                    <p className="font-semibold text-slate-950">16es, 8es et quarts de finale :</p>
+                    <p className="font-semibold text-slate-950">16es et 8es de finale :</p>
                     <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
                       2 points de base × Cote
                     </blockquote>
-                    <p className="font-semibold text-slate-950">Demi-finales et finale :</p>
+                    <p className="font-semibold text-slate-950">Quarts, demi-finales et finale :</p>
                     <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
                       3 points de base × Cote
                     </blockquote>
-                    <p className="font-semibold text-slate-950">Vainqueur :</p>
-                    <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
-                      4 points de base × Cote
-                    </blockquote>
+                    <p className="text-sm text-slate-600">
+                      Le vainqueur est bien enregistré dans le tableau, mais il ne correspond pas à un palier de points
+                      distinct.
+                    </p>
                   </div>
                 </section>
 
@@ -626,9 +627,7 @@ export default function Topbar() {
                   <p>
                     Avant chaque rencontre, vous devez pronostiquer l&apos;équipe qui se qualifiera pour le tour suivant.
                   </p>
-                  <p>
-                    Le score n&apos;a pas d&apos;importance : seul le qualifié compte.
-                  </p>
+                  <p>Le score exact n&apos;a pas d&apos;importance : seule l&apos;équipe qualifiée compte.</p>
                   <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
                     2 points de base × Cote
                   </blockquote>
@@ -668,15 +667,15 @@ export default function Topbar() {
                       <tbody className="divide-y divide-slate-200 bg-white">
                         <tr>
                           <td className="px-4 py-3">16e</td>
-                          <td className="px-4 py-3 font-semibold">1</td>
+                          <td className="px-4 py-3 font-semibold">2</td>
                         </tr>
                         <tr>
                           <td className="px-4 py-3">8e</td>
-                          <td className="px-4 py-3 font-semibold">1,5</td>
+                          <td className="px-4 py-3 font-semibold">2</td>
                         </tr>
                         <tr>
                           <td className="px-4 py-3">Quart</td>
-                          <td className="px-4 py-3 font-semibold">2</td>
+                          <td className="px-4 py-3 font-semibold">3</td>
                         </tr>
                         <tr>
                           <td className="px-4 py-3">Demi</td>
@@ -684,11 +683,7 @@ export default function Topbar() {
                         </tr>
                         <tr>
                           <td className="px-4 py-3">Finale</td>
-                          <td className="px-4 py-3 font-semibold">5</td>
-                        </tr>
-                        <tr>
-                          <td className="px-4 py-3">Vainqueur</td>
-                          <td className="px-4 py-3 font-semibold">8</td>
+                          <td className="px-4 py-3 font-semibold">3</td>
                         </tr>
                       </tbody>
                     </table>

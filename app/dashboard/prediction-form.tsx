@@ -79,6 +79,7 @@ function computeOddsFromCounts(counts: MatchOdds) {
 type FormValues = Record<number, { a: string; b: string }>;
 
 type PredictionDraft = {
+  sourceSignature: string;
   values: FormValues;
   realScores: FormValues;
 };
@@ -371,7 +372,15 @@ function getDraftStorageKey(userId: string) {
   return `dashboard-prediction-draft:${userId}`;
 }
 
-function readPredictionDraft(userId: string): PredictionDraft | null {
+function getPredictionSourceSignature(predictions: Prediction[]) {
+  return predictions
+    .slice()
+    .sort((left, right) => left.match_id - right.match_id)
+    .map((prediction) => `${prediction.match_id}:${prediction.predicted_a}-${prediction.predicted_b}`)
+    .join("|");
+}
+
+function readPredictionDraft(userId: string, expectedSignature: string): PredictionDraft | null {
   if (typeof window === "undefined") return null;
 
   const raw = window.localStorage.getItem(getDraftStorageKey(userId));
@@ -379,7 +388,9 @@ function readPredictionDraft(userId: string): PredictionDraft | null {
 
   try {
     const parsed = JSON.parse(raw) as PredictionDraft;
-    return parsed && typeof parsed === "object" ? parsed : null;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (parsed.sourceSignature !== expectedSignature) return null;
+    return parsed;
   } catch {
     return null;
   }
@@ -443,6 +454,11 @@ export default function PredictionForm({
     return values;
   }, [existingPredictions]);
 
+  const predictionSourceSignature = useMemo(
+    () => getPredictionSourceSignature(existingPredictions),
+    [existingPredictions]
+  );
+
   const router = useRouter();
 
   const initialRealScores = useMemo(() => {
@@ -493,11 +509,11 @@ export default function PredictionForm({
   }, [groupedMatches, selectedTab]);
 
   const [values, setValues] = useState<FormValues>(() => {
-    const draft = readPredictionDraft(userId);
+    const draft = readPredictionDraft(userId, predictionSourceSignature);
     return draft ? mergeFormValues(initialValues, draft.values) : initialValues;
   });
   const [realScores, setRealScores] = useState<FormValues>(() => {
-    const draft = readPredictionDraft(userId);
+    const draft = readPredictionDraft(userId, predictionSourceSignature);
     return draft ? mergeFormValues(initialRealScores, draft.realScores) : initialRealScores;
   });
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
@@ -508,10 +524,11 @@ export default function PredictionForm({
 
   useEffect(() => {
     writePredictionDraft(userId, {
+      sourceSignature: predictionSourceSignature,
       values,
       realScores,
     });
-  }, [realScores, userId, values]);
+  }, [predictionSourceSignature, realScores, userId, values]);
 
   useEffect(() => {
     function handleSimulatedDateUpdated(event: Event) {

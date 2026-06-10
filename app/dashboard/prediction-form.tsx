@@ -503,6 +503,7 @@ export default function PredictionForm({
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
+  const [serverNowTime] = useState(() => Date.now());
   const timeZone = useUserTimeZone();
 
   useEffect(() => {
@@ -555,9 +556,9 @@ export default function PredictionForm({
     };
   }, []);
 
- const effectiveNow = simulatedNow ?? new Date().toISOString();
-
-const appNowTime = new Date(effectiveNow).getTime();
+  const appNowTime = simulatedNow
+    ? new Date(simulatedNow).getTime()
+    : serverNowTime;
 
   const predictedGroupStandings = useMemo(() => {
     if (!appNowTime) return {};

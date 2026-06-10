@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { formatOneDecimal } from "@/app/dashboard/format";
 import { round32Placeholders, type Round32Teams } from "./bracket-data";
+import {
+  getTopScorerProbability,
+  topScorerCandidates,
+} from "./top-scorer-candidates";
 import { type RealLaterPhase } from "../real-knockout/real-knockout-fixtures";
 
 const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
@@ -47,6 +51,8 @@ export type BracketMatchInfo = {
 type MatchStatus = "Ouvert" | "Bloque" | "Termine";
 
 const SIMULATED_DATE_STORAGE_KEY = "simulated-date";
+const TOP_SCORER_MATCH_KEY = "top_scorer";
+const TOP_SCORER_LABEL = "Meilleur buteur";
 
 function readStoredSimulatedDate() {
   if (typeof window === "undefined") return null;
@@ -413,6 +419,7 @@ export default function KnockoutBracketPrediction({
   const childMap = useMemo(() => getChildMatchIds(bracket), [bracket]);
 const [selectedWinners, setSelectedWinners] = useState<SelectedWinners>({});
 const [selectedTeams, setSelectedTeams] = useState<SelectedMatchTeams>({});
+const [selectedTopScorer, setSelectedTopScorer] = useState("");
 const [hasLoadedStorage, setHasLoadedStorage] = useState(false);
 const [message, setMessage] = useState<string | null>(null);
 const [saving, setSaving] = useState(false);
@@ -441,9 +448,15 @@ useEffect(() => {
 
     const next: SelectedWinners = {};
     const nextTeams: SelectedMatchTeams = {};
+    let nextTopScorer = "";
 
     for (const row of (data ?? []) as KnockoutPredictionRow[]) {
       const matchKey = Number(row.match_key);
+      if (row.match_key === TOP_SCORER_MATCH_KEY) {
+        nextTopScorer = row.team_a ?? row.winner ?? "";
+        continue;
+      }
+
       if (row.winner && Number.isFinite(matchKey)) {
         next[matchKey] = row.winner;
       }
@@ -461,6 +474,7 @@ useEffect(() => {
 
     setSelectedWinners(next);
     setSelectedTeams(nextTeams);
+    setSelectedTopScorer(nextTopScorer);
     setHasLoadedStorage(true);
   }
 
@@ -522,6 +536,14 @@ function handleWinnerChange(matchId: number, value: string) {
     return next;
   });
 
+  setMessage(null);
+  setSaveMessage(null);
+}
+
+function handleTopScorerChange(value: string) {
+  if (isTournamentLocked) return;
+
+  setSelectedTopScorer(value);
   setMessage(null);
   setSaveMessage(null);
 }
@@ -633,6 +655,18 @@ async function handleSaveKnockout() {
     });
   }
 
+  if (selectedTopScorer) {
+    rows.push({
+      user_id: userId,
+      match_key: TOP_SCORER_MATCH_KEY,
+      round: TOP_SCORER_LABEL,
+      team_a: selectedTopScorer,
+      team_b: null,
+      winner: selectedTopScorer,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
   const { error } = await supabase
     .from("knockout_predictions")
     .upsert(rows, {
@@ -658,6 +692,7 @@ if (error) {
   function resetBracket() {
     setSelectedWinners({});
     setSelectedTeams({});
+    setSelectedTopScorer("");
     setMessage("Tableau reinitialise.");
   }
 
@@ -874,6 +909,7 @@ if (error) {
               </div>
             );
           })}
+
         </div>
       </div>
     );
@@ -935,6 +971,43 @@ if (error) {
             phaseGroups[phase] ? renderPhaseCard(phase, phaseGroups[phase]) : null
           )}
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-5 shadow-[0_14px_36px_rgba(15,23,42,0.08)]">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold tracking-tight text-slate-950">
+              Meilleur buteur
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Faites votre choix avant le coup d'envoi du premier match.
+            </p>
+          </div>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+            {isTournamentLocked ? "Verrouille" : "Ouvert"}
+          </span>
+        </div>
+
+        <label className="block space-y-2 text-sm font-medium text-slate-700">
+          <span>Selectionner le meilleur buteur de la Coupe du monde</span>
+          <select
+            value={selectedTopScorer}
+            onChange={(event) => handleTopScorerChange(event.target.value)}
+            disabled={isTournamentLocked}
+            className="w-full rounded-xl border border-amber-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 disabled:bg-slate-100"
+          >
+            <option value="">Selectionner le meilleur buteur</option>
+            {topScorerCandidates.map((player, index) => {
+              const probability = getTopScorerProbability(index);
+
+              return (
+                <option key={player} value={player}>
+                  {player} ({formatOneDecimal(probability)}%)
+                </option>
+              );
+            })}
+          </select>
+        </label>
       </div>
 
       {message && <p className="text-sm">{message}</p>}

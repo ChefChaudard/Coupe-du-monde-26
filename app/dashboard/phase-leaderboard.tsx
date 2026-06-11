@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import {
   computeMatchOdds,
   getPredictionPoints,
@@ -42,20 +43,24 @@ export default function PhaseLeaderboard() {
 
   const loadRows = useCallback(async function loadRows() {
     const [{ data: predictions, error: predictionsError }, { data: profiles, error: profilesError }] = await Promise.all([
-      supabase
-        .from("predictions")
-        .select(`
-          user_id,
-          match_id,
-          predicted_a,
-          predicted_b,
-          matches (
-            phase,
-            score_a,
-            score_b,
-            is_finished
-          )
-        `),
+      fetchAllRows<PredictionRow>(() =>
+        supabase
+          .from("predictions")
+          .select(`
+            user_id,
+            match_id,
+            predicted_a,
+            predicted_b,
+            matches (
+              phase,
+              score_a,
+              score_b,
+              is_finished
+            )
+          `)
+          .order("match_id", { ascending: true })
+          .order("user_id", { ascending: true })
+      ),
       supabase
         .from("profiles")
         .select("id, nickname"),

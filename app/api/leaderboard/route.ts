@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { computeLeaderboardData } from "@/app/dashboard/leaderboard-data";
 
 export async function GET(request: Request) {
@@ -45,21 +46,41 @@ export async function GET(request: Request) {
     }
 
     const [{ data: predictions, error: predictionsError }, { data: profiles, error: profilesError }, { data: matches, error: matchesError }, { data: knockoutPredictions, error: knockoutPredictionsError }] = await Promise.all([
-      client
-        .from("predictions")
-        .select(`
-          user_id,
-          match_id,
-          predicted_a,
-          predicted_b
-        `),
+      fetchAllRows<{
+        user_id: string;
+        match_id: number;
+        predicted_a: number;
+        predicted_b: number;
+      }>(() =>
+        client
+          .from("predictions")
+          .select(`
+            user_id,
+            match_id,
+            predicted_a,
+            predicted_b
+          `)
+          .order("match_id", { ascending: true })
+          .order("user_id", { ascending: true })
+      ),
       client.from("profiles").select("id, nickname"),
       client
         .from("matches")
         .select("id, phase, team_a, team_b, kickoff_at, venue, city, score_a, score_b, is_finished"),
-      client
-        .from("knockout_predictions")
-        .select("user_id, match_key, team_a, team_b, winner, round"),
+      fetchAllRows<{
+        user_id: string;
+        match_key: string;
+        team_a: string | null;
+        team_b: string | null;
+        winner: string | null;
+        round: string | null;
+      }>(() =>
+        client
+          .from("knockout_predictions")
+          .select("user_id, match_key, team_a, team_b, winner, round")
+          .order("match_key", { ascending: true })
+          .order("user_id", { ascending: true })
+      ),
     ]);
 
     return { predictions, profiles, matches, knockoutPredictions, predictionsError, profilesError, matchesError, knockoutPredictionsError };

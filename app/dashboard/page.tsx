@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { ensureRoles } from "@/lib/roles";
 import PredictionForm from "./prediction-form";
 import Leaderboard from "./leaderboard";
@@ -250,12 +251,31 @@ export default async function DashboardPage({
     .select("*")
     .order("kickoff_at", { ascending: true });
 
-  const { data: predictions } = await supabase
+  // The current user's own predictions, fetched directly so they are never
+  // affected by PostgREST's default 1000-row cap on the global query below.
+  const { data: myPredictionsData } = await supabase
     .from("predictions")
-    .select("user_id, match_id, predicted_a, predicted_b");
+    .select("user_id, match_id, predicted_a, predicted_b")
+    .eq("user_id", user.id);
 
-  const myPredictions = (predictions ?? []).filter(
-    (p) => p.user_id === user.id
+  const myPredictions = myPredictionsData ?? [];
+
+  // All predictions (every user) are needed for per-match odds/averages.
+  // Supabase/PostgREST caps each request at 1000 rows by default, so we
+  // paginate explicitly to avoid silently truncating the dataset.
+  type PredictionRow = {
+    user_id: string;
+    match_id: number;
+    predicted_a: number;
+    predicted_b: number;
+  };
+
+  const { data: predictions } = await fetchAllRows<PredictionRow>(() =>
+    supabase
+      .from("predictions")
+      .select("user_id, match_id, predicted_a, predicted_b")
+      .order("match_id", { ascending: true })
+      .order("user_id", { ascending: true })
   );
 
   const matchStats: Record<number, MatchStats> = {};

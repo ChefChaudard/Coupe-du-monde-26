@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import Leaderboard from "@/app/dashboard/leaderboard";
 import KnockoutBracketPrediction, {
   type BracketMatchInfo,
@@ -474,9 +475,19 @@ export default async function KnockoutPage() {
     .select("match_id, predicted_a, predicted_b")
     .eq("user_id", user.id);
 
-  const { data: knockoutOddsRows } = await adminSupabase
-    .from("knockout_predictions")
-    .select("user_id, match_key, team_a, team_b, round");
+  const { data: knockoutOddsRows } = await fetchAllRows<{
+    user_id: string;
+    match_key: string;
+    team_a: string | null;
+    team_b: string | null;
+    round: string | null;
+  }>(() =>
+    adminSupabase
+      .from("knockout_predictions")
+      .select("user_id, match_key, team_a, team_b, round")
+      .order("match_key", { ascending: true })
+      .order("user_id", { ascending: true })
+  );
 
   const { data: profileRows } = await adminSupabase
     .from("profiles")

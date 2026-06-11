@@ -6,6 +6,7 @@ import Leaderboard from "@/app/dashboard/leaderboard";
 import { getMatchCity } from "@/app/lib/fifa-cities";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import RealKnockoutScoreForm from "./real-knockout-score-form";
 import { getRealLaterFixture, getRealLaterPhaseMatches } from "./real-knockout-fixtures";
 
@@ -749,9 +750,18 @@ export default async function RealKnockoutPage() {
     .select("*")
     .order("kickoff_at", { ascending: true });
 
-  const { data: predictions } = await adminSupabase
-    .from("predictions")
-    .select("user_id, match_id, predicted_a, predicted_b");
+  const { data: predictions } = await fetchAllRows<{
+    user_id: string;
+    match_id: number;
+    predicted_a: number;
+    predicted_b: number;
+  }>(() =>
+    adminSupabase
+      .from("predictions")
+      .select("user_id, match_id, predicted_a, predicted_b")
+      .order("match_id", { ascending: true })
+      .order("user_id", { ascending: true })
+  );
 
   const { data: round32Settings } = await supabase
     .from("app_settings")

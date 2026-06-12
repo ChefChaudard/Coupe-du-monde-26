@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -97,6 +98,8 @@ function readStoredSimulatedDate() {
 function isGroupPhase(phase: string) {
   return phase.toLowerCase().includes("group");
 }
+
+const CHRONO_BLOCK_LABEL = "Premier tour - ordre chronologique";
 
 function buildLiveGroupStandings(matches: Match[], appNowTime: number) {
   const standings: Record<string, GroupStandingRow[]> = {};
@@ -430,6 +433,7 @@ export default function PredictionForm({
   createKnockoutMatches,
   syncRealKnockoutMatches,
   initialTab,
+  chronological = false,
 }: {
   matches: Match[];
   existingPredictions: Prediction[];
@@ -440,6 +444,7 @@ export default function PredictionForm({
   createKnockoutMatches: (formData: FormData) => Promise<void>;
   syncRealKnockoutMatches: (formData: FormData) => Promise<void>;
   initialTab?: TabKey;
+  chronological?: boolean;
 }) {
   const initialValues = useMemo(() => {
     const values: FormValues = {};
@@ -497,16 +502,29 @@ export default function PredictionForm({
   const selectedTab = initialTab ?? "groupes";
 
   const filteredMatches = useMemo<[string, Match[]][]>(() => {
-    const matches = groupedMatches.filter(([phase]) =>
+    const grouped = groupedMatches.filter(([phase]) =>
       selectedTab === "groupes" ? isGroupPhase(phase) : !isGroupPhase(phase)
     );
 
-    if (selectedTab === "tours" && matches.length === 0) {
+    if (chronological) {
+      const allMatches = grouped
+        .flatMap(([, phaseMatches]) => phaseMatches)
+        .slice()
+        .sort(
+          (a, b) =>
+            new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime() ||
+            a.id - b.id
+        );
+
+      return allMatches.length > 0 ? [[CHRONO_BLOCK_LABEL, allMatches]] : [];
+    }
+
+    if (selectedTab === "tours" && grouped.length === 0) {
       return buildPlaceholderKnockoutGroups();
     }
 
-    return matches;
-  }, [groupedMatches, selectedTab]);
+    return grouped;
+  }, [groupedMatches, selectedTab, chronological]);
 
   const [values, setValues] = useState<FormValues>(() => {
     const draft = readPredictionDraft(userId, predictionSourceSignature);
@@ -514,7 +532,23 @@ export default function PredictionForm({
   });
   const [realScores, setRealScores] = useState<FormValues>(() => {
     const draft = readPredictionDraft(userId, predictionSourceSignature);
-    return draft ? mergeFormValues(initialRealScores, draft.realScores) : initialRealScores;
+    const merged = draft
+      ? mergeFormValues(initialRealScores, draft.realScores)
+      : initialRealScores;
+
+    // The database is the source of truth for matches that already have an
+    // official score. A stale local draft must never hide a confirmed result.
+    const result: FormValues = { ...merged };
+    for (const match of matches) {
+      if (match.score_a !== null && match.score_b !== null) {
+        result[match.id] = {
+          a: String(match.score_a),
+          b: String(match.score_b),
+        };
+      }
+    }
+
+    return result;
   });
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -699,7 +733,9 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
   async function saveAllGroupPredictions() {
     if (selectedTab !== "groupes") return;
 
-    const groupPhases = filteredMatches.filter(([phase]) => isGroupPhase(phase));
+    const groupPhases = chronological
+      ? filteredMatches
+      : filteredMatches.filter(([phase]) => isGroupPhase(phase));
 
     if (groupPhases.length === 0) {
       setMessage("Aucun groupe à sauvegarder pour le moment.");
@@ -722,10 +758,22 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
 
   return (
     <section className="space-y-5 text-slate-900">
-      <div className="grid gap-4 lg:flex lg:items-center lg:justify-between">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-950">
-          Pronostics Groupes
-        </h1>
+      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-950">
+            Pronostics Groupes
+          </h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Consulte les pronostics de groupe ou passe à la vue chronologique.
+          </p>
+        </div>
+
+        <Link
+          href={chronological ? "/dashboard?tab=groupes" : "/groupes/matchs"}
+          className="inline-flex items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+        >
+          {chronological ? "Matchs par groupe" : "Ordre chronologique"}
+        </Link>
       </div>
 
       <h2 className="text-lg font-semibold text-slate-950">Mes pronostics</h2>
@@ -762,7 +810,7 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
           >
             <div className="flex items-center justify-between gap-4 rounded-t-2xl border-b border-slate-900/10 bg-slate-900 px-4 py-3 text-white">
               <div className="text-base font-bold">
-                {selectedTab === "groupes" ? (
+                {selectedTab === "groupes" && !chronological ? (
                   <GroupStandingsTooltip
                     groupName={phase}
                     predictedStandings={predictedGroupStandings[phase] ?? []}
@@ -812,12 +860,12 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                     const kickoffDate = new Date(match.kickoff_at);
                     const hasStarted = kickoffDate.getTime() <= appNowTime;
                     const canPredict = !hasStarted;
-                    const canEnterRealScore = isAdmin && hasStarted;
-
                     const hasOfficialScore =
                       match.is_finished &&
                       match.score_a !== null &&
                       match.score_b !== null;
+                    const canEnterRealScore = isAdmin && hasStarted;
+
                     const statusLabel = !hasStarted
                       ? "Ouvert"
                       : hasOfficialScore

@@ -7,8 +7,12 @@ import { getMatchCity } from "@/app/lib/fifa-cities";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
+import { isAdmin } from "@/lib/roles";
 import RealKnockoutScoreForm from "./real-knockout-score-form";
 import { getRealLaterFixture, getRealLaterPhaseMatches } from "./real-knockout-fixtures";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export const metadata: Metadata = {
   title: "2e tours Réels",
@@ -615,11 +619,11 @@ async function syncRealMatches() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin")
+    .select("roles, role, is_admin")
     .eq("id", user.id)
     .single();
 
-  if (!profile?.is_admin) {
+  if (!isAdmin(profile ?? undefined)) {
     throw new Error("Accès admin refusé");
   }
 
@@ -691,11 +695,11 @@ async function updateMatchResult(formData: FormData) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin")
+    .select("roles, role, is_admin")
     .eq("id", user.id)
     .single();
 
-  if (!profile?.is_admin) {
+  if (!isAdmin(profile ?? undefined)) {
     throw new Error("Accès admin refusé");
   }
 
@@ -735,13 +739,13 @@ export default async function RealKnockoutPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin")
+    .select("roles, role, is_admin")
     .eq("id", user.id)
     .single();
 
-  const isAdmin = profile?.is_admin === true;
+  const isAdminUser = isAdmin(profile ?? undefined);
 
-  if (isAdmin) {
+  if (isAdminUser) {
     await autoSyncRealMatches();
   }
 
@@ -867,7 +871,7 @@ export default async function RealKnockoutPage() {
             userId={user.id}
             matchStats={matchStats}
             matchOdds={matchOdds}
-            isAdmin={isAdmin}
+            isAdmin={isAdminUser}
             firstRoundComplete={firstRoundComplete}
             firstRoundMissingScores={firstRoundMissingScores}
             tournamentStartAt={tournamentStartAt}

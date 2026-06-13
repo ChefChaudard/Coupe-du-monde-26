@@ -92,6 +92,11 @@ export default async function GroupMatchesPage() {
   const matchStats: Record<number, MatchStats> = {};
   const matchPredictionCounts: Record<number, MatchOdds> = {};
 
+  // Total number of players in the competition (everyone who has made at least
+  // one prediction). Used so the per-match average spreads points over all
+  // players, not only those who predicted that specific match.
+  const totalPlayers = new Set((predictions ?? []).map((p) => p.user_id)).size;
+
   for (const match of matches) {
     const matchPredictions = (predictions ?? []).filter(
       (p) => p.match_id === match.id
@@ -138,7 +143,7 @@ export default async function GroupMatchesPage() {
 
     const averagePoints =
       allPoints.reduce<number>((sum, pts) => sum + pts, 0) /
-      (allPoints.length || 1);
+      (totalPlayers || 1);
 
     const myPrediction = matchPredictions.find((p) => p.user_id === user.id);
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEFAULT_TIME_ZONE, getSafeTimeZone, isValidTimeZone } from "@/app/lib/time-zone";
+import { getRoleLabels } from "@/lib/roles";
 
 type GroupRow = {
   id: string;
@@ -33,7 +34,7 @@ export async function GET() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("nickname, time_zone, role, is_admin")
+    .select("nickname, time_zone, role, roles, is_admin")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -79,12 +80,7 @@ export async function GET() {
         null,
       timeZone: getSafeTimeZone(profile?.time_zone),
       groups,
-      roles:
-        profile?.role
-          ? [profile.role]
-          : profile?.is_admin
-          ? ["player", "admin"]
-          : ["player"],
+      roles: getRoleLabels(profile ?? undefined),
     },
   });
 }

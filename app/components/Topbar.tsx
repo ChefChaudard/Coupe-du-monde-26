@@ -327,7 +327,7 @@ export default function Topbar() {
 
   const visibleNavKeys = useMemo(() => {
     const mapping: Record<string, string[]> = {
-      home: ["groupes", "knockout", "realKnockout"],
+      home: ["home", "groupes", "knockout", "realKnockout"],
       account: ["home", "groupes", "knockout", "realKnockout"],
       groupes: ["home", "knockout", "realKnockout"],
       adminGroups: ["home", "groupes", "knockout", "realKnockout"],
@@ -339,6 +339,8 @@ export default function Topbar() {
     return mapping[currentKey ?? "home"] ?? [
       "home",
       "groupes",
+      "knockout",
+      "realKnockout",
     ];
   }, [currentKey]);
 

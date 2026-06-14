@@ -19,6 +19,8 @@ import {
 const navItems = [
   { key: "home", label: "Accueil", href: "/" },
   { key: "groupes", label: "Groupes", href: "/dashboard?tab=groupes" },
+  { key: "mobileT1", label: "Mobile T1", href: "/groupes/mobile" },
+  { key: "mobileClassement", label: "Mobile Classement", href: "/classement/mobile" },
   { key: "knockout", label: "2e tours", href: "/knockout" },
   { key: "realKnockout", label: "2e tours Réels", href: "/real-knockout" },
   { key: "tours", label: "Tours suivants", href: "/dashboard?tab=tours" },
@@ -315,6 +317,8 @@ export default function Topbar() {
     if (pathname === "/knockout") return "knockout";
     if (pathname === "/real-knockout") return "realKnockout";
     if (pathname.startsWith("/admin/groups")) return "adminGroups";
+    if (pathname === "/groupes/mobile") return "mobileT1";
+    if (pathname === "/classement/mobile") return "mobileClassement";
 
     if (pathname === "/dashboard") {
       const tab = searchParams.get("tab");
@@ -327,18 +331,22 @@ export default function Topbar() {
 
   const visibleNavKeys = useMemo(() => {
     const mapping: Record<string, string[]> = {
-      home: ["home", "groupes", "knockout", "realKnockout"],
-      account: ["home", "groupes", "knockout", "realKnockout"],
-      groupes: ["home", "knockout", "realKnockout"],
-      adminGroups: ["home", "groupes", "knockout", "realKnockout"],
-      tours: ["home", "knockout", "realKnockout"],
-      knockout: ["home", "groupes", "realKnockout"],
-      realKnockout: ["home", "groupes", "knockout"],
+      home: ["home", "groupes", "mobileT1", "mobileClassement", "knockout", "realKnockout"],
+      account: ["home", "groupes", "mobileT1", "mobileClassement", "knockout", "realKnockout"],
+      groupes: ["home", "mobileT1", "mobileClassement", "knockout", "realKnockout"],
+      mobileT1: ["home", "groupes", "mobileClassement", "knockout", "realKnockout"],
+      mobileClassement: ["home", "groupes", "mobileT1", "knockout", "realKnockout"],
+      adminGroups: ["home", "groupes", "mobileT1", "mobileClassement", "knockout", "realKnockout"],
+      tours: ["home", "mobileT1", "mobileClassement", "knockout", "realKnockout"],
+      knockout: ["home", "groupes", "mobileT1", "mobileClassement", "realKnockout"],
+      realKnockout: ["home", "groupes", "mobileT1", "mobileClassement", "knockout"],
     };
 
     return mapping[currentKey ?? "home"] ?? [
       "home",
       "groupes",
+      "mobileT1",
+      "mobileClassement",
       "knockout",
       "realKnockout",
     ];

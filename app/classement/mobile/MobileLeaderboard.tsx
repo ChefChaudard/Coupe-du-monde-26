@@ -1,0 +1,233 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
+import type {
+  LeaderboardPayload,
+  ScoreBreakdown,
+} from "@/app/dashboard/leaderboard-data";
+import { formatOneDecimal } from "@/app/dashboard/format";
+
+const STORAGE_KEY = "activeGroupId";
+const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
+
+type LeaderboardRow = LeaderboardPayload["rows"][number];
+
+function rankBadgeClasses(index: number) {
+  if (index === 0) return "bg-amber-400 text-amber-950";
+  if (index === 1) return "bg-slate-300 text-slate-800";
+  if (index === 2) return "bg-orange-300 text-orange-950";
+  return "bg-slate-100 text-slate-600";
+}
+
+export default function MobileLeaderboard() {
+  const router = useRouter();
+  const [rows, setRows] = useState<LeaderboardRow[]>([]);
+  const [detailsByUser, setDetailsByUser] = useState<
+    Record<string, ScoreBreakdown>
+  >({});
+  const [groupPlacementPointsByUser, setGroupPlacementPointsByUser] = useState<
+    Record<string, number>
+  >({});
+  const [message, setMessage] = useState("Chargement...");
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(STORAGE_KEY);
+  });
+
+  useEffect(() => {
+    const handleActiveGroupUpdated = () => {
+      setActiveGroupId(window.localStorage.getItem(STORAGE_KEY));
+    };
+
+    window.addEventListener("active-group-updated", handleActiveGroupUpdated);
+    return () =>
+      window.removeEventListener(
+        "active-group-updated",
+        handleActiveGroupUpdated
+      );
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLeaderboard() {
+      try {
+        setMessage("Chargement...");
+
+        const response = await fetch(
+          `/api/leaderboard${
+            activeGroupId
+              ? `?groupId=${encodeURIComponent(activeGroupId)}`
+              : ""
+          }`,
+          { cache: "no-store" }
+        );
+
+        if (cancelled) return;
+
+        const payload = (await response.json()) as LeaderboardPayload & {
+          error?: string;
+        };
+
+        if (!response.ok) {
+          setMessage(payload.error ?? "Erreur chargement classement.");
+          return;
+        }
+
+        setRows(payload.rows);
+        setDetailsByUser(payload.detailsByUser);
+        setGroupPlacementPointsByUser(
+          payload.groupPlacementPointsByUser ?? {}
+        );
+        setMessage(payload.message);
+      } catch (error) {
+        console.error("Erreur leaderboard mobile:", error);
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Erreur chargement classement."
+        );
+      }
+    }
+
+    void loadLeaderboard();
+
+    const handleLeaderboardRefresh = () => {
+      void loadLeaderboard();
+    };
+
+    const channel = supabase
+      .channel("leaderboard-mobile-live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "predictions" },
+        () => {
+          void loadLeaderboard();
+          router.refresh();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "matches" },
+        () => {
+          void loadLeaderboard();
+          router.refresh();
+        }
+      )
+      .subscribe();
+
+    window.addEventListener(
+      LEADERBOARD_REFRESH_EVENT,
+      handleLeaderboardRefresh
+    );
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+      window.removeEventListener(
+        LEADERBOARD_REFRESH_EVENT,
+        handleLeaderboardRefresh
+      );
+    };
+  }, [activeGroupId, router]);
+
+  const sortedRows = useMemo(
+    () => rows.slice().sort((a, b) => b.points - a.points),
+    [rows]
+  );
+
+  if (sortedRows.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-center text-sm text-slate-500 shadow-sm">
+        {message}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {sortedRows.map((row, index) => {
+        const breakdown = detailsByUser[row.user_id];
+        const groupPlacementPoints =
+          groupPlacementPointsByUser[row.user_id] ?? 0;
+        const isExpanded = expandedUserId === row.user_id;
+
+        return (
+          <article
+            key={row.user_id}
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setExpandedUserId(isExpanded ? null : row.user_id)
+              }
+              className="flex w-full items-center gap-3 px-3 py-3 text-left"
+            >
+              <span
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black ${rankBadgeClasses(
+                  index
+                )}`}
+              >
+                {index + 1}
+              </span>
+
+              <span className="flex-1 truncate text-sm font-semibold text-slate-900">
+                {row.nickname || "Joueur"}
+              </span>
+
+              <span className="shrink-0 rounded-full bg-slate-900 px-3 py-1 text-sm font-black text-white">
+                {formatOneDecimal(row.points)}
+              </span>
+
+              <svg
+                className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${
+                  isExpanded ? "rotate-180" : ""
+                }`}
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+
+            {isExpanded && breakdown ? (
+              <div className="grid grid-cols-2 gap-2 border-t border-slate-100 bg-slate-50 px-3 py-3 text-xs">
+                <DetailItem label="Matchs groupe" value={breakdown.group} />
+                <DetailItem
+                  label="Classement groupe"
+                  value={breakdown.groupPlacement || groupPlacementPoints}
+                />
+                <DetailItem label="Tours élim." value={breakdown.knockout} />
+                <DetailItem label="2e tours réels" value={breakdown.real} />
+                <DetailItem
+                  label="Meilleur buteur"
+                  value={breakdown.topScorer}
+                />
+              </div>
+            ) : null}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function DetailItem({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg bg-white px-2.5 py-1.5 shadow-sm">
+      <span className="text-slate-500">{label}</span>
+      <span className="font-semibold text-slate-900">
+        {formatOneDecimal(value)}
+      </span>
+    </div>
+  );
+}

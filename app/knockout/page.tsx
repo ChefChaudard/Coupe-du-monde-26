@@ -557,7 +557,7 @@ export default async function KnockoutPage() {
         </section>
 
         <section>
-          <div className="xl:sticky xl:top-24">
+          <div className="xl:sticky xl:top-24 xl:h-[calc(100vh-7rem)] xl:overflow-y-auto xl:overscroll-contain xl:pr-1">
             <Leaderboard />
           </div>
         </section>

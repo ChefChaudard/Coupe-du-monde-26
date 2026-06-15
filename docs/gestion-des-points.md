@@ -15,8 +15,10 @@ Si l'issue du pronostic ne correspond pas au resultat reel, le score est nul.
 Pour les phases de groupes, un bonus supplementaire est ajoute lorsque le classement final d'une equipe correspond au rang predit.
 
 $$
-Bonus_{classement} = Base_{groupe} 	imes Cote_{rang}
+Bonus_{classement} = 1{,}5 \times Cote_{rang}
 $$
+
+Le coefficient de base du bonus de classement de groupe est de $1{,}5$.
 
 La cote du rang correspond au nombre total de participants au groupe divise par le nombre de participants ayant predit cette equipe a ce rang.
 
@@ -48,8 +50,9 @@ On applique ensuite un coefficient de phase a cette cote de base.
 - Quarts de finale: $3$
 - Demi-finales: $3$
 - Finale: $3$
+- Vainqueur (Champion du Monde): $3$
 
-Le pronostic du vainqueur est conserve dans le bracket, mais il n'entre pas dans le calcul des points.
+Le titre de Champion du Monde est pris en compte avec un coefficient de $3$, identique a celui de la finale.
 
 ## Cote de l'issue
 La cote est calculee a partir de la repartition des pronostics sur un match donne.

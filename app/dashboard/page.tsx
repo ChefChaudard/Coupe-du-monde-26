@@ -430,8 +430,8 @@ export default async function DashboardPage({
           />
         </section>
 
-        <section className="xl:pt-[7.5rem]">
-          <div className="xl:sticky xl:top-24">
+        <section>
+          <div className="xl:sticky xl:top-24 xl:h-[calc(100vh-7rem)] xl:overflow-y-auto xl:overscroll-contain xl:pr-1">
             <Leaderboard />
           </div>
         </section>

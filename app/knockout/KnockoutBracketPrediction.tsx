@@ -272,7 +272,7 @@ function getChampionBonusPoints(
   const actualWinner =
     actualWinnerSide === "A" ? matchInfo.teamA : matchInfo.teamB;
 
-  return selectedWinner === actualWinner ? 4 : 0;
+  return selectedWinner === actualWinner ? 3 : 0;
 }
 
 function getPlacementPointsForTeam(

@@ -7,6 +7,9 @@ import {
   type MatchOdds,
 } from "./scoring";
 
+// Coefficient de base appliqué au bonus de classement de groupe.
+const GROUP_PLACEMENT_BASE_POINTS = 1.5;
+
 type MatchRow = {
   id: number;
   phase: string;
@@ -250,6 +253,10 @@ type KnockoutMatchInfo = MatchRow & { id: number };
 const TOP_SCORER_MATCH_KEY = "top_scorer";
 const TOP_SCORER_PHASE = "Meilleur buteur";
 
+const CHAMPION_MATCH_KEY = "champion";
+const CHAMPION_PHASE = "Vainqueur";
+const CHAMPION_COEFFICIENT = 3;
+
 function normalizePlayerName(value?: string | null) {
   if (!value) return "";
 
@@ -287,6 +294,47 @@ function buildTopScorerParticipationCounts(predictions: KnockoutPredictionRow[])
   }
 
   return { participants, playerParticipants };
+}
+
+function buildActualChampion(matches: MatchRow[]) {
+  const finalMatch = matches.find((match) => {
+    if (!match.phase.startsWith(realPhasePrefix)) return false;
+    const normalizedPhase = fromRealPhase(match.phase).toLowerCase();
+    return normalizedPhase.includes("finale") && !normalizedPhase.includes("demi");
+  });
+
+  if (
+    !finalMatch ||
+    !finalMatch.is_finished ||
+    finalMatch.score_a === null ||
+    finalMatch.score_b === null
+  ) {
+    return "";
+  }
+
+  if (finalMatch.score_a > finalMatch.score_b) return normalizeKnockoutTeam(finalMatch.team_a);
+  if (finalMatch.score_b > finalMatch.score_a) return normalizeKnockoutTeam(finalMatch.team_b);
+  return "";
+}
+
+function buildChampionParticipationCounts(predictions: KnockoutPredictionRow[]) {
+  const participants = new Set<string>();
+  const championParticipants = new Map<string, Set<string>>();
+
+  for (const prediction of predictions) {
+    if (prediction.match_key !== CHAMPION_MATCH_KEY) continue;
+
+    const selectedChampion = normalizeKnockoutTeam(prediction.winner ?? prediction.team_a);
+    if (!selectedChampion) continue;
+
+    participants.add(prediction.user_id);
+
+    const currentParticipants = championParticipants.get(selectedChampion) ?? new Set<string>();
+    currentParticipants.add(prediction.user_id);
+    championParticipants.set(selectedChampion, currentParticipants);
+  }
+
+  return { participants, championParticipants };
 }
 
 function buildKnockoutMatchInfo(matches: MatchRow[]) {
@@ -596,7 +644,7 @@ function computeGroupPlacementBonus(
   const bonusByUser = new Map<string, number>();
   const phaseBonusMap = new Map<string, Map<string, number>>();
   const reportByUser = new Map<string, ScoreReportRow[]>();
-  const basePoints = getPhasePointBase("group");
+  const basePoints = GROUP_PLACEMENT_BASE_POINTS;
 
   for (const [phase, actualRows] of Object.entries(actualStandingsByPhase)) {
     const participantUsers = participantUsersByPhase.get(phase);
@@ -707,6 +755,8 @@ export function computeLeaderboardData(
   const knockoutParticipationCounts = buildKnockoutPhaseParticipationCounts(knockoutPredictions);
   const actualTopScorer = buildActualTopScorer(matches);
   const topScorerParticipationCounts = buildTopScorerParticipationCounts(knockoutPredictions);
+  const actualChampion = buildActualChampion(matches);
+  const championParticipationCounts = buildChampionParticipationCounts(knockoutPredictions);
 
   const allGroupMatchesByPhase = new Map<string, MatchRow[]>();
 
@@ -946,6 +996,51 @@ export function computeLeaderboardData(
       odds: TOP_SCORER_POINTS,
       player: selectedPlayer,
       participants,
+      predictedCount,
+    });
+    scoreReportMap.set(prediction.user_id, reportRows);
+  }
+
+  for (const prediction of knockoutPredictions) {
+    if (prediction.match_key !== CHAMPION_MATCH_KEY) continue;
+
+    const selectedChampion = normalizeKnockoutTeam(prediction.winner ?? prediction.team_a);
+    if (!selectedChampion || !actualChampion) continue;
+    if (normalizeKnockoutTeamKey(selectedChampion) !== normalizeKnockoutTeamKey(actualChampion)) {
+      continue;
+    }
+
+    const totalPlayers = championParticipationCounts.participants.size;
+    const predictedCount =
+      championParticipationCounts.championParticipants.get(selectedChampion)?.size ?? 0;
+    const odds =
+      totalPlayers === 0
+        ? 1
+        : Math.max(
+            1,
+            Math.round((totalPlayers / Math.max(predictedCount, 1)) * CHAMPION_COEFFICIENT * 100) / 100
+          );
+    const points = odds;
+
+    scoreMap.set(prediction.user_id, (scoreMap.get(prediction.user_id) ?? 0) + points);
+
+    const userPhaseMap = phaseDetailsMap.get(prediction.user_id) ?? new Map<string, number>();
+    userPhaseMap.set(CHAMPION_PHASE, (userPhaseMap.get(CHAMPION_PHASE) ?? 0) + points);
+    phaseDetailsMap.set(prediction.user_id, userPhaseMap);
+
+    const reportRows = scoreReportMap.get(prediction.user_id) ?? [];
+    reportRows.push({
+      reportId: `champion-${prediction.user_id}`,
+      kind: "knockoutPlacement",
+      phase: CHAMPION_PHASE,
+      label: `${selectedChampion} sacré champion`,
+      points,
+      base: getPhasePointBase(CHAMPION_PHASE),
+      odds,
+      team: selectedChampion,
+      matchId: 0,
+      slotLabel: "Champion",
+      participants: totalPlayers,
       predictedCount,
     });
     scoreReportMap.set(prediction.user_id, reportRows);

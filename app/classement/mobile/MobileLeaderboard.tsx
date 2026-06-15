@@ -16,6 +16,39 @@ const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
 
 type LeaderboardRow = LeaderboardPayload["rows"][number];
 
+type RankingMetric = "total" | "group" | "groupPlacement" | "knockout" | "real";
+
+const RANKING_METRICS: { key: RankingMetric; label: string }[] = [
+  { key: "total", label: "Total" },
+  { key: "group", label: "Matchs 1T" },
+  { key: "groupPlacement", label: "Classement Grp" },
+  { key: "knockout", label: "2e tours" },
+  { key: "real", label: "2e tours réel" },
+];
+
+function getMetricValue(
+  metric: RankingMetric,
+  row: LeaderboardRow,
+  details?: ScoreBreakdown,
+  groupPlacementPoints = 0
+) {
+  if (metric === "total") return row.points;
+  if (!details) return 0;
+
+  switch (metric) {
+    case "group":
+      return details.group - groupPlacementPoints;
+    case "groupPlacement":
+      return groupPlacementPoints;
+    case "knockout":
+      return details.knockout;
+    case "real":
+      return details.real;
+    default:
+      return 0;
+  }
+}
+
 function rankBadgeClasses(index: number) {
   if (index === 0) return "bg-amber-400 text-amber-950";
   if (index === 1) return "bg-slate-300 text-slate-800";
@@ -38,6 +71,7 @@ export default function MobileLeaderboard() {
   const [message, setMessage] = useState("Chargement...");
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [reportUserId, setReportUserId] = useState<string | null>(null);
+  const [rankingMetric, setRankingMetric] = useState<RankingMetric>("total");
   const [activeGroupId, setActiveGroupId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return window.localStorage.getItem(STORAGE_KEY);
@@ -142,17 +176,29 @@ export default function MobileLeaderboard() {
   }, [activeGroupId, router]);
 
   const sortedRows = useMemo(
-    () => rows.slice().sort((a, b) => b.points - a.points),
-    [rows]
+    () =>
+      rows
+        .map((row) => ({
+          row,
+          value: getMetricValue(
+            rankingMetric,
+            row,
+            detailsByUser[row.user_id],
+            groupPlacementPointsByUser[row.user_id] ?? 0
+          ),
+        }))
+        .sort((a, b) => b.value - a.value || b.row.points - a.row.points),
+    [rows, rankingMetric, detailsByUser, groupPlacementPointsByUser]
   );
 
   const reportRow = useMemo(
-    () => sortedRows.find((row) => row.user_id === reportUserId) ?? null,
+    () =>
+      sortedRows.find((entry) => entry.row.user_id === reportUserId)?.row ?? null,
     [sortedRows, reportUserId]
   );
 
   useEffect(() => {
-    if (reportUserId && !sortedRows.some((row) => row.user_id === reportUserId)) {
+    if (reportUserId && !sortedRows.some((entry) => entry.row.user_id === reportUserId)) {
       setReportUserId(null);
     }
   }, [sortedRows, reportUserId]);
@@ -178,7 +224,61 @@ export default function MobileLeaderboard() {
 
   return (
     <div className="space-y-2">
-      {sortedRows.map((row, index) => {
+      <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        {(() => {
+          const totalMetric = RANKING_METRICS[0];
+          const isTotalActive = rankingMetric === totalMetric.key;
+
+          return (
+            <label
+              className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                isTotalActive
+                  ? "border-red-600 bg-red-600 text-white"
+                  : "border-red-200 bg-white text-red-600"
+              }`}
+            >
+              <input
+                type="radio"
+                name="ranking-metric-mobile"
+                value={totalMetric.key}
+                checked={isTotalActive}
+                onChange={() => setRankingMetric(totalMetric.key)}
+                className="sr-only"
+              />
+              {totalMetric.label}
+            </label>
+          );
+        })()}
+
+        <div className="grid grid-cols-2 gap-2">
+          {RANKING_METRICS.slice(1).map((metric) => {
+            const isActive = rankingMetric === metric.key;
+
+            return (
+              <label
+                key={metric.key}
+                className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                  isActive
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-600"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="ranking-metric-mobile"
+                  value={metric.key}
+                  checked={isActive}
+                  onChange={() => setRankingMetric(metric.key)}
+                  className="sr-only"
+                />
+                {metric.label}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      {sortedRows.map(({ row, value }, index) => {
         const breakdown = detailsByUser[row.user_id];
         const groupPlacementPoints =
           groupPlacementPointsByUser[row.user_id] ?? 0;
@@ -209,7 +309,7 @@ export default function MobileLeaderboard() {
               </span>
 
               <span className="shrink-0 rounded-full bg-slate-900 px-3 py-1 text-sm font-black text-white">
-                {formatOneDecimal(row.points)}
+                {formatOneDecimal(value)}
               </span>
 
               <svg

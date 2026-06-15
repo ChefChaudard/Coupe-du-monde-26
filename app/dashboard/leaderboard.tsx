@@ -30,8 +30,43 @@ type LeaderboardRowItemProps = {
   details?: ScoreBreakdown;
   groupPlacementPoints?: number;
   phaseDetails?: PhaseDetailRow[];
+  displayPoints?: number;
+  onShowReport?: (userId: string) => void;
   rowRef?: (element: HTMLDivElement | null) => void;
 };
+
+type RankingMetric = "total" | "group" | "groupPlacement" | "knockout" | "real";
+
+const RANKING_METRICS: { key: RankingMetric; label: string }[] = [
+  { key: "total", label: "Total" },
+  { key: "group", label: "Matchs 1T" },
+  { key: "groupPlacement", label: "Classement Grp" },
+  { key: "knockout", label: "2e tours" },
+  { key: "real", label: "2e tours réel" },
+];
+
+function getMetricValue(
+  metric: RankingMetric,
+  row: LeaderboardRow,
+  details?: ScoreBreakdown,
+  groupPlacementPoints = 0
+) {
+  if (metric === "total") return row.points;
+  if (!details) return 0;
+
+  switch (metric) {
+    case "group":
+      return details.group - groupPlacementPoints;
+    case "groupPlacement":
+      return groupPlacementPoints;
+    case "knockout":
+      return details.knockout;
+    case "real":
+      return details.real;
+    default:
+      return 0;
+  }
+}
 
 function getScoreBreakdownLabel(phase: string) {
   const normalizedPhase = phase.toLowerCase();
@@ -91,6 +126,8 @@ function LeaderboardRowItem({
   details,
   groupPlacementPoints,
   phaseDetails,
+  displayPoints,
+  onShowReport,
   rowRef,
 }: LeaderboardRowItemProps) {
   const [isHovered, setIsHovered] = useState(false);
@@ -189,9 +226,15 @@ function LeaderboardRowItem({
 
             {details ? (
               <div className="space-y-2">
+                <div className="flex items-baseline justify-between gap-4 border-b border-slate-200 pb-2">
+                  <span className="font-semibold text-slate-700">Total</span>
+                  <strong className="text-sm text-slate-900">{formatOneDecimal(row.points)} pts</strong>
+                </div>
                 <div className="flex items-baseline justify-between gap-4 border-b border-slate-100 pb-2">
-                  <span className="text-slate-600">Groupes</span>
-                  <strong className="text-sm text-slate-900">{formatOneDecimal(details.group)} pts</strong>
+                  <span className="text-slate-600">Matchs 1T</span>
+                  <strong className="text-sm text-slate-900">
+                    {formatOneDecimal(details.group - (groupPlacementPoints ?? 0))} pts
+                  </strong>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 border-b border-slate-100 pb-2">
                   <span className="text-slate-600">Classement de groupe</span>
@@ -211,6 +254,17 @@ function LeaderboardRowItem({
                   <span className="text-slate-600">Pronostics réel</span>
                   <strong className="text-sm text-slate-900">{formatOneDecimal(details.real)} pts</strong>
                 </div>
+
+                <button
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    onShowReport?.(row.user_id);
+                  }}
+                  className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                >
+                  Voir le report détaillé
+                </button>
               </div>
             ) : (
               <p className="text-slate-500">Aucun détail disponible.</p>
@@ -221,7 +275,7 @@ function LeaderboardRowItem({
       </span>
 
       <strong className="shrink-0 rounded-full bg-slate-900 px-3 py-1 text-sm text-white">
-        {formatOneDecimal(row.points)} pts
+        {formatOneDecimal(displayPoints ?? row.points)} pts
       </strong>
     </div>
   );
@@ -235,6 +289,7 @@ export default function Leaderboard() {
   const [scoreReportByUser, setScoreReportByUser] = useState<Record<string, ScoreReportRow[]>>({});
   const [message, setMessage] = useState("Chargement...");
   const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [rankingMetric, setRankingMetric] = useState<RankingMetric>("total");
   const [activeGroupId, setActiveGroupId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return window.localStorage.getItem(STORAGE_KEY);
@@ -246,6 +301,20 @@ export default function Leaderboard() {
     () => rows.find((row) => row.user_id === selectedUserId) ?? null,
     [rows, selectedUserId]
   );
+
+  const rankedRows = useMemo(() => {
+    return rows
+      .map((row) => ({
+        row,
+        value: getMetricValue(
+          rankingMetric,
+          row,
+          detailsByUser[row.user_id],
+          groupPlacementPointsByUser[row.user_id] ?? 0
+        ),
+      }))
+      .sort((a, b) => b.value - a.value || b.row.points - a.row.points);
+  }, [rows, rankingMetric, detailsByUser, groupPlacementPointsByUser]);
 
   const selectedReport = selectedUserId ? scoreReportByUser[selectedUserId] ?? [] : [];
 
@@ -417,41 +486,75 @@ export default function Leaderboard() {
       ) : (
         <div className="relative w-full overflow-visible rounded-lg border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.10)]">
           <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-slate-900">Classement live</p>
-                <p className="mt-1 text-xs text-slate-500">Sélectionne un joueur pour le retrouver dans la liste.</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Survole un joueur puis ouvre son report détaillé.
+                </p>
               </div>
-
-              <label className="flex w-full max-w-sm flex-col gap-1 text-xs font-medium text-slate-600">
-                Joueur
-                <select
-                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
-                  value={selectedUserId}
-                  onChange={(event) => setSelectedUserId(event.target.value)}
-                >
-                  <option value="">Tous les joueurs</option>
-                  {rows.map((row) => (
-                    <option key={row.user_id} value={row.user_id}>
-                      {row.nickname}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
-              <span>
-                {selectedRow ? `Joueur sélectionné: ${selectedRow.nickname}` : "Aucun joueur sélectionné"}
-              </span>
-              <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 font-semibold text-sky-900">
+              <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-900">
                 Live
               </span>
             </div>
           </div>
 
           <div className="overflow-visible divide-y divide-slate-100">
-            {rows.map((row, index) => (
+            <div className="flex flex-col gap-2 border-b border-slate-100 bg-white px-4 py-3">
+              {(() => {
+                const totalMetric = RANKING_METRICS[0];
+                const isTotalActive = rankingMetric === totalMetric.key;
+
+                return (
+                  <label
+                    className={`inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      isTotalActive
+                        ? "border-red-600 bg-red-600 text-white"
+                        : "border-red-200 bg-white text-red-600 hover:border-red-400"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="ranking-metric"
+                      value={totalMetric.key}
+                      checked={isTotalActive}
+                      onChange={() => setRankingMetric(totalMetric.key)}
+                      className="sr-only"
+                    />
+                    {totalMetric.label}
+                  </label>
+                );
+              })()}
+
+              <div className="grid grid-cols-2 gap-2">
+                {RANKING_METRICS.slice(1).map((metric) => {
+                  const isActive = rankingMetric === metric.key;
+
+                  return (
+                    <label
+                      key={metric.key}
+                      className={`inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                        isActive
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="ranking-metric"
+                        value={metric.key}
+                        checked={isActive}
+                        onChange={() => setRankingMetric(metric.key)}
+                        className="sr-only"
+                      />
+                      {metric.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {rankedRows.map(({ row, value }, index) => (
               <LeaderboardRowItem
                 key={row.user_id}
                 row={row}
@@ -460,6 +563,8 @@ export default function Leaderboard() {
                 details={detailsByUser[row.user_id]}
                 groupPlacementPoints={groupPlacementPointsByUser[row.user_id]}
                 phaseDetails={phaseDetailsByUser[row.user_id]}
+                displayPoints={value}
+                onShowReport={(userId) => setSelectedUserId(userId)}
                 rowRef={(element) => {
                   rowRefs.current[row.user_id] = element;
                 }}

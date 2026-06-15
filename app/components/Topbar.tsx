@@ -599,6 +599,12 @@ export default function Topbar() {
                   <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
                     2 points de base × Cote
                   </blockquote>
+                  <p>
+                    Le classement est calculé en continu, sans attendre la fin de la compétition. Un groupe n&apos;est
+                    toutefois pris en compte que lorsque <strong>ses quatre équipes ont disputé au moins un match</strong> et
+                    qu&apos;elles ont toutes joué <strong>le même nombre de rencontres</strong>. Le classement est recalculé à
+                    chaque mise à jour de score.
+                  </p>
                 </section>
 
                 <section className="space-y-3">

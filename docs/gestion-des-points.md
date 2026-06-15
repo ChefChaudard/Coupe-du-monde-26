@@ -19,7 +19,13 @@ Bonus_{classement} = Base_{groupe} 	imes Cote_{rang}
 $$
 
 La cote du rang correspond au nombre total de participants au groupe divise par le nombre de participants ayant predit cette equipe a ce rang.
-Le bonus n'est applique que lorsque tous les matchs du groupe sont termines.
+
+Le bonus de classement est calcule en continu (« live »), sans attendre la fin du groupe. Un groupe n'est toutefois pris en compte dans le calcul du classement que si **les deux conditions suivantes** sont remplies :
+
+1. Toutes les equipes du groupe ont dispute au moins un match termine.
+2. Toutes les equipes du groupe ont joue le **meme nombre de rencontres**.
+
+Tant qu'une seule equipe du groupe a un match de retard (ou d'avance), le groupe entier est ignore afin d'eviter un classement fausse. Le classement reel est etabli uniquement sur les matchs termines, et le bonus est recalcule a chaque mise a jour de score.
 
 ## Base par phase
 - Phase de groupes: $1$

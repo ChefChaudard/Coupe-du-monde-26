@@ -6,8 +6,10 @@ import { supabase } from "@/lib/supabase/client";
 import type {
   LeaderboardPayload,
   ScoreBreakdown,
+  ScoreReportRow,
 } from "@/app/dashboard/leaderboard-data";
 import { formatOneDecimal } from "@/app/dashboard/format";
+import ScoreReportDetails from "@/app/dashboard/score-report-details";
 
 const STORAGE_KEY = "activeGroupId";
 const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
@@ -30,8 +32,12 @@ export default function MobileLeaderboard() {
   const [groupPlacementPointsByUser, setGroupPlacementPointsByUser] = useState<
     Record<string, number>
   >({});
+  const [scoreReportByUser, setScoreReportByUser] = useState<
+    Record<string, ScoreReportRow[]>
+  >({});
   const [message, setMessage] = useState("Chargement...");
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [reportUserId, setReportUserId] = useState<string | null>(null);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return window.localStorage.getItem(STORAGE_KEY);
@@ -82,6 +88,7 @@ export default function MobileLeaderboard() {
         setGroupPlacementPointsByUser(
           payload.groupPlacementPointsByUser ?? {}
         );
+        setScoreReportByUser(payload.scoreReportByUser ?? {});
         setMessage(payload.message);
       } catch (error) {
         console.error("Erreur leaderboard mobile:", error);
@@ -138,6 +145,28 @@ export default function MobileLeaderboard() {
     () => rows.slice().sort((a, b) => b.points - a.points),
     [rows]
   );
+
+  const reportRow = useMemo(
+    () => sortedRows.find((row) => row.user_id === reportUserId) ?? null,
+    [sortedRows, reportUserId]
+  );
+
+  useEffect(() => {
+    if (reportUserId && !sortedRows.some((row) => row.user_id === reportUserId)) {
+      setReportUserId(null);
+    }
+  }, [sortedRows, reportUserId]);
+
+  useEffect(() => {
+    if (!reportRow || typeof document === "undefined") return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [reportRow]);
 
   if (sortedRows.length === 0) {
     return (
@@ -200,23 +229,74 @@ export default function MobileLeaderboard() {
             </button>
 
             {isExpanded && breakdown ? (
-              <div className="grid grid-cols-2 gap-2 border-t border-slate-100 bg-slate-50 px-3 py-3 text-xs">
-                <DetailItem label="Matchs groupe" value={breakdown.group} />
-                <DetailItem
-                  label="Classement groupe"
-                  value={breakdown.groupPlacement || groupPlacementPoints}
-                />
-                <DetailItem label="Tours élim." value={breakdown.knockout} />
-                <DetailItem label="2e tours réels" value={breakdown.real} />
-                <DetailItem
-                  label="Meilleur buteur"
-                  value={breakdown.topScorer}
-                />
+              <div className="border-t border-slate-100 bg-slate-50 px-3 py-3">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <DetailItem label="Matchs groupe" value={breakdown.group} />
+                  <DetailItem
+                    label="Classement groupe"
+                    value={breakdown.groupPlacement || groupPlacementPoints}
+                  />
+                  <DetailItem label="Tours élim." value={breakdown.knockout} />
+                  <DetailItem label="2e tours réels" value={breakdown.real} />
+                  <DetailItem
+                    label="Meilleur buteur"
+                    value={breakdown.topScorer}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setReportUserId(row.user_id)}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-sm transition active:scale-[0.99]"
+                >
+                  Voir le report détaillé
+                </button>
               </div>
             ) : null}
           </article>
         );
       })}
+
+      {reportRow ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-slate-950/55 p-3 pt-8 backdrop-blur-sm"
+          onClick={() => setReportUserId(null)}
+        >
+          <div
+            className="relative mt-2 max-h-[calc(100vh-3rem)] w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-4">
+              <button
+                type="button"
+                aria-label="Fermer le report"
+                className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+                onClick={() => setReportUserId(null)}
+              >
+                <span className="text-lg leading-none">×</span>
+              </button>
+
+              <div className="pr-12">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Report détaillé
+                </p>
+                <h3 className="mt-1 text-base font-semibold text-slate-900">
+                  {reportRow.nickname || "Joueur"}
+                </h3>
+                <div className="mt-2 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-900">
+                  {formatOneDecimal(reportRow.points)} pts
+                </div>
+              </div>
+            </div>
+
+            <div className="max-h-[calc(100vh-9rem)] overflow-y-auto p-4">
+              <ScoreReportDetails
+                reportRows={scoreReportByUser[reportRow.user_id] ?? []}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -726,11 +726,35 @@ export function computeLeaderboardData(
   const completedGroupMatches: StandingsMatch[] = [];
 
   for (const [phase, phaseMatches] of allGroupMatchesByPhase.entries()) {
-    if (phaseMatches.some((match) => !match.is_finished || match.score_a === null || match.score_b === null)) {
-      continue;
+    const teamsInPhase = new Set<string>();
+    for (const match of phaseMatches) {
+      if (match.team_a) teamsInPhase.add(match.team_a);
+      if (match.team_b) teamsInPhase.add(match.team_b);
     }
 
-    for (const match of phaseMatches) {
+    const finishedMatches = phaseMatches.filter(
+      (match) => match.is_finished && match.score_a !== null && match.score_b !== null
+    );
+
+    const playedCountByTeam = new Map<string, number>();
+    for (const match of finishedMatches) {
+      if (match.team_a) playedCountByTeam.set(match.team_a, (playedCountByTeam.get(match.team_a) ?? 0) + 1);
+      if (match.team_b) playedCountByTeam.set(match.team_b, (playedCountByTeam.get(match.team_b) ?? 0) + 1);
+    }
+
+    // Un groupe n'est pris en compte que si TOUTES ses equipes ont dispute au
+    // moins un match ET ont joue le meme nombre de rencontres.
+    const playedCounts = Array.from(teamsInPhase).map(
+      (team) => playedCountByTeam.get(team) ?? 0
+    );
+    const everyTeamPlayedSameCount =
+      teamsInPhase.size > 0 &&
+      playedCounts.every((count) => count >= 1) &&
+      playedCounts.every((count) => count === playedCounts[0]);
+
+    if (!everyTeamPlayedSameCount) continue;
+
+    for (const match of finishedMatches) {
       completedGroupMatches.push({
         phase,
         team_a: match.team_a as string,

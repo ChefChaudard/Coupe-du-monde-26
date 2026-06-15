@@ -331,7 +331,10 @@ export default function MobileLeaderboard() {
             {isExpanded && breakdown ? (
               <div className="border-t border-slate-100 bg-slate-50 px-3 py-3">
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <DetailItem label="Matchs groupe" value={breakdown.group} />
+                  <DetailItem
+                    label="Matchs 1T"
+                    value={breakdown.group - groupPlacementPoints}
+                  />
                   <DetailItem
                     label="Classement groupe"
                     value={breakdown.groupPlacement || groupPlacementPoints}

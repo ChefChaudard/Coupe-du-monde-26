@@ -77,6 +77,12 @@ function computeOddsFromCounts(counts: MatchOdds) {
   };
 }
 
+function getPredictionOutcome(predictedA: number, predictedB: number) {
+  if (predictedA > predictedB) return "one" as const;
+  if (predictedA < predictedB) return "two" as const;
+  return "draw" as const;
+}
+
 type FormValues = Record<number, { a: string; b: string }>;
 
 type PredictionDraft = {
@@ -884,18 +890,30 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                       }),
                     };
 
+                    const initialEntry = initialValues[match.id];
+                    if (initialEntry?.a !== undefined && initialEntry?.b !== undefined) {
+                      const initialA = Number(initialEntry.a);
+                      const initialB = Number(initialEntry.b);
+
+                      if (!Number.isNaN(initialA) && !Number.isNaN(initialB)) {
+                        const initialOutcome = getPredictionOutcome(initialA, initialB);
+                        predictionCounts[initialOutcome] = Math.max(
+                          0,
+                          predictionCounts[initialOutcome] - 1
+                        );
+                      }
+                    }
+
                     if (currentEntry && currentEntry.a !== "" && currentEntry.b !== "") {
                       const predictedA = Number(currentEntry.a);
                       const predictedB = Number(currentEntry.b);
 
                       if (!Number.isNaN(predictedA) && !Number.isNaN(predictedB)) {
-                        if (predictedA > predictedB) {
-                          predictionCounts.one += 1;
-                        } else if (predictedA < predictedB) {
-                          predictionCounts.two += 1;
-                        } else {
-                          predictionCounts.draw += 1;
-                        }
+                        const currentOutcome = getPredictionOutcome(
+                          predictedA,
+                          predictedB
+                        );
+                        predictionCounts[currentOutcome] += 1;
                       }
                     }
 

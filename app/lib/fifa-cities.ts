@@ -20,6 +20,21 @@ const venueCityMap: Record<string, string> = {
   "Miami Stadium": "Miami",
   "Kansas City Stadium": "Kansas City",
   "Atlanta Stadium": "Atlanta",
+  // Official knockout-stage venue names (round of 32 onwards)
+  "SoFi Stadium": "Los Angeles",
+  "Gillette Stadium": "Boston",
+  "Estadio BBVA": "Monterrey",
+  "NRG Stadium": "Houston",
+  "MetLife Stadium": "New Jersey",
+  "AT&T Stadium": "Dallas",
+  "Estadio Azteca": "Mexico City",
+  "Mercedes-Benz Stadium": "Atlanta",
+  "Levi's Stadium": "San Francisco",
+  "Lumen Field": "Seattle",
+  "BMO Field": "Toronto",
+  "BC Place": "Vancouver",
+  "Hard Rock Stadium": "Miami",
+  "Arrowhead Stadium": "Kansas City",
 };
 
 function normalizeVenue(venue: string) {

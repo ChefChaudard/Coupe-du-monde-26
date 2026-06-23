@@ -59,22 +59,38 @@ const fixtures: Record<RealLaterPhase, RealLaterFixture[]> = {
 };
 
 const roundOf32Fixtures: RealRound32Fixture[] = [
-  { kickoff_at: "2026-06-28T20:00:00.000Z", venue: "Los Angeles Stadium", city: "Los Angeles" },
-  { kickoff_at: "2026-06-29T20:00:00.000Z", venue: "Boston Stadium", city: "Boston" },
-  { kickoff_at: "2026-06-29T20:00:00.000Z", venue: "Estadio Monterrey", city: "Monterrey" },
-  { kickoff_at: "2026-06-29T20:00:00.000Z", venue: "Houston Stadium", city: "Houston" },
-  { kickoff_at: "2026-06-30T20:00:00.000Z", venue: "New York New Jersey Stadium", city: "New Jersey" },
-  { kickoff_at: "2026-06-30T20:00:00.000Z", venue: "Dallas Stadium", city: "Dallas" },
-  { kickoff_at: "2026-06-30T20:00:00.000Z", venue: "Mexico City Stadium", city: "Mexico City" },
-  { kickoff_at: "2026-07-01T20:00:00.000Z", venue: "Atlanta Stadium", city: "Atlanta" },
-  { kickoff_at: "2026-07-01T20:00:00.000Z", venue: "San Francisco Bay Area Stadium", city: "San Francisco" },
-  { kickoff_at: "2026-07-01T20:00:00.000Z", venue: "Seattle Stadium", city: "Seattle" },
-  { kickoff_at: "2026-07-02T20:00:00.000Z", venue: "Toronto Stadium", city: "Toronto" },
-  { kickoff_at: "2026-07-02T20:00:00.000Z", venue: "Los Angeles Stadium", city: "Los Angeles" },
-  { kickoff_at: "2026-07-02T20:00:00.000Z", venue: "BC Place Vancouver", city: "Vancouver" },
-  { kickoff_at: "2026-07-03T20:00:00.000Z", venue: "Miami Stadium", city: "Miami" },
-  { kickoff_at: "2026-07-03T20:00:00.000Z", venue: "Kansas City Stadium", city: "Kansas City" },
-  { kickoff_at: "2026-07-03T20:00:00.000Z", venue: "Dallas Stadium", city: "Dallas" },
+  // Match 73 - 2A vs 2B
+  { kickoff_at: "2026-06-28T19:00:00.000Z", venue: "SoFi Stadium", city: "Los Angeles" },
+  // Match 74 - 1E vs 3ABCDF
+  { kickoff_at: "2026-06-29T20:30:00.000Z", venue: "Gillette Stadium", city: "Boston" },
+  // Match 75 - 1F vs 2C
+  { kickoff_at: "2026-06-30T01:00:00.000Z", venue: "Estadio BBVA", city: "Monterrey" },
+  // Match 76 - 1C vs 2F
+  { kickoff_at: "2026-06-29T17:00:00.000Z", venue: "NRG Stadium", city: "Houston" },
+  // Match 77 - 1I vs 3CDFGH
+  { kickoff_at: "2026-06-30T21:00:00.000Z", venue: "MetLife Stadium", city: "New Jersey" },
+  // Match 78 - 2E vs 2I
+  { kickoff_at: "2026-06-30T17:00:00.000Z", venue: "AT&T Stadium", city: "Dallas" },
+  // Match 79 - 1A vs 3CEFHI
+  { kickoff_at: "2026-07-01T01:00:00.000Z", venue: "Estadio Azteca", city: "Mexico City" },
+  // Match 80 - 1L vs 3EHIJK
+  { kickoff_at: "2026-07-01T16:00:00.000Z", venue: "Mercedes-Benz Stadium", city: "Atlanta" },
+  // Match 81 - 1D vs 3BEFIJ
+  { kickoff_at: "2026-07-02T00:00:00.000Z", venue: "Levi's Stadium", city: "San Francisco" },
+  // Match 82 - 1G vs 3AEHIJ
+  { kickoff_at: "2026-07-01T20:00:00.000Z", venue: "Lumen Field", city: "Seattle" },
+  // Match 83 - 2K vs 2L
+  { kickoff_at: "2026-07-02T23:00:00.000Z", venue: "BMO Field", city: "Toronto" },
+  // Match 84 - 1H vs 2J
+  { kickoff_at: "2026-07-02T19:00:00.000Z", venue: "SoFi Stadium", city: "Los Angeles" },
+  // Match 85 - 1B vs 3EFGIJ
+  { kickoff_at: "2026-07-03T03:00:00.000Z", venue: "BC Place", city: "Vancouver" },
+  // Match 86 - 1J vs 2H
+  { kickoff_at: "2026-07-03T22:00:00.000Z", venue: "Hard Rock Stadium", city: "Miami" },
+  // Match 87 - 1K vs 3DEIJL
+  { kickoff_at: "2026-07-04T01:30:00.000Z", venue: "Arrowhead Stadium", city: "Kansas City" },
+  // Match 88 - 2D vs 2G
+  { kickoff_at: "2026-07-03T18:00:00.000Z", venue: "AT&T Stadium", city: "Dallas" },
 ];
 
 export function getRealLaterFixture(phase: RealLaterPhase, index: number) {

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { formatOneDecimal } from "@/app/dashboard/format";
 import {
-  formatDashboardDate,
   formatMatchDate,
   formatMatchTime,
 } from "@/app/lib/time-zone";
@@ -33,7 +32,6 @@ const SIMULATED_DATE_STORAGE_KEY = "simulated-date";
 
 function readStoredSimulatedDate() {
   if (typeof window === "undefined") return null;
-
   return window.localStorage.getItem(SIMULATED_DATE_STORAGE_KEY) || null;
 }
 
@@ -67,7 +65,6 @@ export default function RealKnockoutScoreForm({
   firstRoundMissingScores,
   tournamentStartAt = null,
   updateMatchResult,
-  syncRealMatches,
 }: {
   matches: Match[];
   existingPredictions: Prediction[];
@@ -79,7 +76,6 @@ export default function RealKnockoutScoreForm({
   firstRoundMissingScores: number;
   tournamentStartAt?: number | null;
   updateMatchResult: (formData: FormData) => Promise<void>;
-  syncRealMatches: (formData: FormData) => Promise<void>;
 }) {
   const laterPhases: RealLaterPhase[] = [
     "8e de finale",
@@ -90,25 +86,21 @@ export default function RealKnockoutScoreForm({
 
   const initialValues = useMemo(() => {
     const values: FormValues = {};
-
     for (const prediction of existingPredictions) {
       values[prediction.match_id] = {
         a: String(prediction.predicted_a),
         b: String(prediction.predicted_b),
       };
     }
-
     return values;
   }, [existingPredictions]);
 
   const groupedMatches = useMemo<[string, Match[]][]>(() => {
     const groups: Record<string, Match[]> = {};
-
     for (const match of matches) {
       if (!groups[match.phase]) groups[match.phase] = [];
       groups[match.phase].push(match);
     }
-
     return Object.entries(groups).map(
       ([phase, phaseMatches]): [string, Match[]] => [
         phase,
@@ -122,7 +114,7 @@ export default function RealKnockoutScoreForm({
   }, [matches]);
 
   const [values, setValues] = useState<FormValues>(initialValues);
-  const [savingGroup, setSavingGroup] = useState<string | null>(null);
+  const [savingMatch, setSavingMatch] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -131,7 +123,9 @@ export default function RealKnockoutScoreForm({
   const effectiveNow = simulatedNow ?? new Date().toISOString();
   const appNowTime = new Date(effectiveNow).getTime();
   const hasTournamentStarted =
-    tournamentStartAt !== null && Number.isFinite(tournamentStartAt) && appNowTime >= tournamentStartAt;
+    tournamentStartAt !== null &&
+    Number.isFinite(tournamentStartAt) &&
+    appNowTime >= tournamentStartAt;
 
   useEffect(() => {
     setIsMounted(true);
@@ -161,19 +155,13 @@ export default function RealKnockoutScoreForm({
       }
     }
 
-    window.addEventListener(
-      "simulated-date-updated",
-      handleSimulatedDateUpdated
-    );
+    window.addEventListener("simulated-date-updated", handleSimulatedDateUpdated);
     syncSimulatedDateFromStorage();
     const intervalId = window.setInterval(syncSimulatedDateFromStorage, 500);
     void loadSimulatedDate();
 
     return () => {
-      window.removeEventListener(
-        "simulated-date-updated",
-        handleSimulatedDateUpdated
-      );
+      window.removeEventListener("simulated-date-updated", handleSimulatedDateUpdated);
       window.clearInterval(intervalId);
     };
   }, []);
@@ -188,42 +176,43 @@ export default function RealKnockoutScoreForm({
     }));
   }
 
-  async function saveGroup(matchesInGroup: Match[], phase: string) {
-    setMessage("");
-    setSavingGroup(phase);
-
-    const rowsToSave = [];
-
-    for (const match of matchesInGroup) {
-      const entry = values[match.id];
-      if (!entry || entry.a === "" || entry.b === "") continue;
-
-      const predictedA = Number(entry.a);
-      const predictedB = Number(entry.b);
-
-      if (Number.isNaN(predictedA) || Number.isNaN(predictedB)) continue;
-      if (predictedA < 0 || predictedB < 0) continue;
-
-      rowsToSave.push({
-        user_id: userId,
-        match_id: match.id,
-        predicted_a: predictedA,
-        predicted_b: predictedB,
-        updated_at: new Date().toISOString(),
-      });
-    }
-
-    if (rowsToSave.length === 0) {
-      setSavingGroup(null);
-      setMessage(`Aucun pronostic à sauvegarder pour ${phase}.`);
+  async function saveMatch(match: Match) {
+    const entry = values[match.id];
+    if (!entry || entry.a === "" || entry.b === "") {
+      setMessage("Aucun pronostic à sauvegarder.");
       return;
     }
 
-    const { error } = await supabase.from("predictions").upsert(rowsToSave, {
-      onConflict: "user_id,match_id",
-    });
+    const predictedA = Number(entry.a);
+    const predictedB = Number(entry.b);
 
-    setSavingGroup(null);
+    if (
+      Number.isNaN(predictedA) ||
+      Number.isNaN(predictedB) ||
+      predictedA < 0 ||
+      predictedB < 0
+    ) {
+      setMessage("Pronostic invalide.");
+      return;
+    }
+
+    setMessage("");
+    setSavingMatch(match.id);
+
+    const { error } = await supabase.from("predictions").upsert(
+      [
+        {
+          user_id: userId,
+          match_id: match.id,
+          predicted_a: predictedA,
+          predicted_b: predictedB,
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      { onConflict: "user_id,match_id" }
+    );
+
+    setSavingMatch(null);
 
     if (error) {
       setMessage(`Erreur sauvegarde : ${error.message}`);
@@ -232,285 +221,290 @@ export default function RealKnockoutScoreForm({
 
     window.dispatchEvent(new Event(LEADERBOARD_REFRESH_EVENT));
     router.refresh();
-    setMessage(`Pronostics sauvegardés pour ${phase}.`);
+    setMessage("Pronostic sauvegardé.");
   }
 
-
   return (
-    <section className="space-y-5 text-slate-900">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-3">
-          <h1 className="text-3xl font-bold tracking-tight text-slate-950">
-            2e tours Réels au{" "}
-            {formatDashboardDate(effectiveNow, timeZone)}
-          </h1>
-          <h2 className="text-lg font-semibold text-slate-950">Mes pronostics</h2>
+    <div className="space-y-5">
+      {isMounted && hasTournamentStarted ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+          Le tournoi a commencé. Les matchs déjà joués sont fermés, les matchs
+          à venir restent modifiables.
         </div>
-
-        {isAdmin && isMounted ? (
-          <form action={syncRealMatches} suppressHydrationWarning>
-            <button
-              type="submit"
-              disabled={!firstRoundComplete}
-              className="rounded bg-slate-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              Synchroniser les matchs réels
-            </button>
-          </form>
-        ) : isAdmin ? (
-          <div className="h-10 w-[220px] rounded bg-transparent" aria-hidden="true" />
-        ) : null}
-      </div>
-
-      {hasTournamentStarted ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-900 shadow-sm">
-          <p>Le tournoi a commencé. Les matchs déjà joués sont fermés, mais les matchs à venir restent modifiables.</p>
-        </div>
-      ) : !firstRoundComplete ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
-          <p>Les pronostics du 2nd tour ouvriront quand le 1er tour sera terminé.</p>
+      ) : isMounted && !firstRoundComplete ? (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 p-4 text-center text-sm text-slate-500 shadow-sm">
+          <p>Les pronostics du 2e tour s&apos;afficheront quand le 1er tour sera terminé.</p>
           {firstRoundMissingScores > 0 && (
-            <p className="mt-2 text-sm">
-              Il reste {firstRoundMissingScores} score
-              {firstRoundMissingScores > 1 ? "s" : ""} réel
-              {firstRoundMissingScores > 1 ? "s" : ""} de groupes à renseigner.
+            <p className="mt-1">
+              {firstRoundMissingScores} score
+              {firstRoundMissingScores > 1 ? "s" : ""} de groupes restant
+              {firstRoundMissingScores > 1 ? "s" : ""} à saisir.
             </p>
           )}
         </div>
       ) : null}
 
-      {firstRoundComplete && groupedMatches.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 p-6 text-center text-slate-500 shadow-sm">
-          Aucun match réel du 2nd tour n&apos;est disponible pour le moment.
+      {groupedMatches.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 p-6 text-center text-sm text-slate-500 shadow-sm">
+          Aucun match réel du 2e tour n&apos;est disponible pour le moment.
         </div>
       ) : (
         groupedMatches.map(([phase, phaseMatches]) => {
-          const laterPhase = laterPhases.includes(phase as RealLaterPhase)
+          const laterPhaseKey = laterPhases.includes(phase as RealLaterPhase)
             ? (phase as RealLaterPhase)
             : null;
 
           return (
-            <div
-              key={phase}
-              className="overflow-visible rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.07)]"
-            >
-              <div className="flex items-center justify-between gap-4 rounded-t-2xl border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <div>
-                  <div className="text-base font-bold capitalize text-slate-950">{phase}</div>
-                  <div className="text-xs text-slate-500">
-                    Cotes, pronostics, scores réels et statistiques sur les mêmes cartes.
-                  </div>
-                </div>
+            <div key={phase} className="space-y-3">
+              <h2 className="px-1 text-sm font-bold uppercase tracking-[0.18em] text-slate-500">
+                {phase}
+              </h2>
 
-                <button
-                  onClick={() => saveGroup(phaseMatches, phase)}
-                  disabled={savingGroup === phase || !firstRoundComplete}
-                  className="rounded-full bg-[#7a1f2c] px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {savingGroup === phase ? "Sauvegarde..." : "Sauvegarder"}
-                </button>
-              </div>
+              {phaseMatches.map((match, matchIndex) => {
+                const phaseFixture = laterPhaseKey
+                  ? getRealLaterFixture(laterPhaseKey, matchIndex)
+                  : null;
+                const kickoffAt =
+                  match.kickoff_at || phaseFixture?.kickoff_at || null;
+                const displayVenue =
+                  match.venue || phaseFixture?.venue || null;
+                const displayCity =
+                  match.city || phaseFixture?.city || null;
+                const kickoffDate = kickoffAt ? new Date(kickoffAt) : null;
+                const hasStarted = kickoffDate
+                  ? kickoffDate.getTime() <= appNowTime
+                  : false;
+                const canPredict = !hasStarted;
+                const hasOfficialScore =
+                  match.is_finished &&
+                  match.score_a !== null &&
+                  match.score_b !== null;
+                const canEnterRealScore = isAdmin && hasStarted;
 
-              <div className="space-y-4 p-4 sm:p-5">
-                {phaseMatches.map((match, matchIndex) => {
-                  const phaseFixture = laterPhase
-                    ? getRealLaterFixture(laterPhase, matchIndex)
-                    : null;
-                  const kickoffAt = match.kickoff_at || phaseFixture?.kickoff_at || null;
-                  const displayVenue = match.venue || phaseFixture?.venue || null;
-                  const displayCity = match.city || phaseFixture?.city || null;
-                  const kickoffDate = kickoffAt ? new Date(kickoffAt) : null;
-                  const compactMatchInfo = kickoffDate
-                    ? `${formatMatchDate(kickoffDate, timeZone)} · ${formatMatchTime(kickoffDate, timeZone)}${displayCity ? ` · ${displayCity}` : ""}`
-                    : displayCity ?? "";
-                  const hasStarted = kickoffDate
-                    ? kickoffDate.getTime() <= appNowTime
-                    : false;
-                  const canPredict = !hasStarted;
-                  const hasOfficialScore =
-                    match.is_finished &&
-                    match.score_a !== null &&
-                    match.score_b !== null;
-                  const canEnterRealScore = isAdmin && hasStarted;
+                const statusLabel = hasOfficialScore
+                  ? "Terminé"
+                  : canPredict
+                    ? "Ouvert"
+                    : "Bloqué";
 
-                  const stats = matchStats[match.id];
-                  const odds = matchOdds[match.id] ?? { one: 1, draw: 1, two: 1 };
-                  const myPoints = stats?.myPoints ?? null;
-                  const averagePoints = stats?.averagePoints ?? null;
-                  const valueA = values[match.id]?.a ?? "";
-                  const valueB = values[match.id]?.b ?? "";
+                const stats = matchStats[match.id];
+                const odds = matchOdds[match.id] ?? {
+                  one: 1,
+                  draw: 1,
+                  two: 1,
+                };
+                const myPoints = stats?.myPoints ?? null;
+                const averagePoints = stats?.averagePoints ?? null;
+                const valueA = values[match.id]?.a ?? "";
+                const valueB = values[match.id]?.b ?? "";
+                const cityDisplay = getMatchCity(
+                  displayVenue,
+                  displayCity,
+                  match.team_a,
+                  match.team_b
+                );
 
-                  return (
-                    <article
-                      key={match.id}
-                      className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50/55"
-                    >
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white">
-                              {match.match_number ?? match.id}
-                            </span>
-                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                              {hasOfficialScore ? "Terminé" : canPredict ? "Ouvert" : "Bloqué"}
-                            </span>
-                            {isAdmin ? (
-                              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                                Admin
-                              </span>
-                            ) : null}
-                          </div>
-
-                          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
-                            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Équipe A</div>
-                              <div className="mt-1 text-base font-bold text-slate-950">{match.team_a}</div>
-                              <div className="mt-1 text-[11px] text-slate-500 sm:hidden">{compactMatchInfo}</div>
-                            </div>
-
-                            <div className="flex justify-center py-2 text-sm font-semibold text-slate-500">
-                              vs
-                            </div>
-
-                            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Équipe B</div>
-                              <div className="mt-1 text-base font-bold text-slate-950">{match.team_b}</div>
-                              <div className="mt-1 text-[11px] text-slate-500 sm:hidden">{compactMatchInfo}</div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm lg:min-w-[290px]">
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Date</span>
-                            <span className="font-semibold text-slate-900">{kickoffDate ? formatMatchDate(kickoffDate, timeZone) : "-"}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Heure</span>
-                            <span className="font-semibold text-slate-900">{kickoffDate ? formatMatchTime(kickoffDate, timeZone) : "-"}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Ville</span>
-                            <span className="text-right font-semibold text-slate-900">
-                              {displayCity ?? getMatchCity(displayVenue, displayCity, match.team_a, match.team_b)}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Statut</span>
-                            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${hasOfficialScore ? "bg-sky-50 text-sky-800" : canPredict ? "bg-slate-100 text-slate-700" : "bg-slate-100 text-slate-600"}`}>
-                              {hasOfficialScore ? "Terminé" : canPredict ? "Ouvert" : "Bloqué"}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Cote 1-N-2</span>
-                            <span className="font-mono text-xs font-semibold text-slate-700">
-                              {formatOneDecimal(odds.one)} / {formatOneDecimal(odds.draw)} / {formatOneDecimal(odds.two)}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Mes pts</span>
-                            <span className="font-semibold text-slate-950">{myPoints !== null ? formatOneDecimal(myPoints) : "-"}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Moy. pts</span>
-                            <span className="font-semibold text-slate-900">{averagePoints !== null ? formatOneDecimal(averagePoints) : "-"}</span>
-                          </div>
-                        </div>
+                return (
+                  <article
+                    key={match.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {match.match_number != null && (
+                          <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">
+                            M{match.match_number}
+                          </span>
+                        )}
+                        {isAdmin && (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+                            Admin
+                          </span>
+                        )}
                       </div>
+                      {statusLabel === "Terminé" ? (
+                        <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-800">
+                          Terminé
+                        </span>
+                      ) : statusLabel === "Ouvert" ? (
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                          Ouvert
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                          Bloqué
+                        </span>
+                      )}
+                    </div>
 
-                      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start">
-                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                          <div className="text-sm font-semibold text-slate-900">Pronostic de score</div>
-                          <div className="mt-3 flex flex-wrap items-center gap-3">
-                            <label className="space-y-1 text-sm font-medium text-slate-600">
-                              <span>A</span>
-                              <input
-                                type="number"
-                                min={0}
-                                value={valueA}
-                                onChange={(event) => updateValue(match.id, "a", event.target.value)}
-                                disabled={!canPredict}
-                                className="w-14 rounded border border-slate-200 bg-white px-2 py-2 text-center text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-500"
-                              />
-                            </label>
+                    <div className="mt-2 text-xs text-slate-500">
+                      <span>
+                        {kickoffDate
+                          ? formatMatchDate(kickoffDate, timeZone)
+                          : "-"}
+                      </span>
+                      <span className="mx-1">•</span>
+                      <span>
+                        {kickoffDate
+                          ? formatMatchTime(kickoffDate, timeZone)
+                          : "-"}
+                      </span>
+                      {cityDisplay && cityDisplay !== "-" && (
+                        <>
+                          <span className="mx-1">•</span>
+                          <span>{cityDisplay}</span>
+                        </>
+                      )}
+                    </div>
 
-                            <span className="pt-6 text-slate-500">-</span>
-
-                            <label className="space-y-1 text-sm font-medium text-slate-600">
-                              <span>B</span>
-                              <input
-                                type="number"
-                                min={0}
-                                value={valueB}
-                                onChange={(event) => updateValue(match.id, "b", event.target.value)}
-                                disabled={!canPredict}
-                                className="w-14 rounded border border-slate-200 bg-white px-2 py-2 text-center text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-500"
-                              />
-                            </label>
-
-                            <div className="text-xs text-slate-500">
-                              {canPredict ? "Saisie autorisée avant le coup d'envoi." : "Saisie fermée."}
-                            </div>
-                          </div>
-                        </div>
-
-                        {isAdmin ? (
-                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3" suppressHydrationWarning>
-                            <div className="text-sm font-semibold text-slate-900">Score réel</div>
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
-                              <div className="text-sm text-slate-600">
-                                A réel: <span className="font-semibold text-slate-950">{match.score_a ?? "-"}</span>
-                              </div>
-                              <div className="text-sm text-slate-600">
-                                B réel: <span className="font-semibold text-slate-950">{match.score_b ?? "-"}</span>
-                              </div>
-
-                              {canEnterRealScore ? (
-                                <form
-                                  action={updateMatchResult}
-                                  className="mt-2 flex w-full flex-wrap items-center gap-2"
-                                  suppressHydrationWarning
-                                  onSubmit={() => {
-                                    window.dispatchEvent(new Event(LEADERBOARD_REFRESH_EVENT));
-                                  }}
-                                >
-                                  <input type="hidden" name="match_id" value={match.id} />
-
-                                  <input
-                                    name="score_a"
-                                    type="number"
-                                    min={0}
-                                    defaultValue={match.score_a ?? ""}
-                                    className="w-14 rounded border border-slate-200 px-2 py-2 text-center shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-                                  />
-
-                                  <input
-                                    name="score_b"
-                                    type="number"
-                                    min={0}
-                                    defaultValue={match.score_b ?? ""}
-                                    className="w-14 rounded border border-slate-200 px-2 py-2 text-center shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-                                  />
-
-                                  <button className="rounded bg-sky-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-800">
-                                    Rés.
-                                  </button>
-                                </form>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : null}
+                    <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                      <div className="text-right text-sm font-semibold text-slate-900">
+                        {match.team_a || "?"}
                       </div>
-                    </article>
-                  );
-                })}
-              </div>
+                      <div className="text-center text-base font-black text-slate-900">
+                        {hasOfficialScore
+                          ? `${match.score_a} - ${match.score_b}`
+                          : "vs"}
+                      </div>
+                      <div className="text-left text-sm font-semibold text-slate-900">
+                        {match.team_b || "?"}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        Mon pronostic
+                      </p>
+                      <div className="mt-2 flex items-center justify-center gap-3">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          value={valueA}
+                          onChange={(e) =>
+                            updateValue(match.id, "a", e.target.value)
+                          }
+                          disabled={!canPredict}
+                          className="h-11 w-14 rounded-lg border border-slate-200 bg-white text-center text-lg font-semibold text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
+                        />
+                        <span className="text-slate-400">-</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          value={valueB}
+                          onChange={(e) =>
+                            updateValue(match.id, "b", e.target.value)
+                          }
+                          disabled={!canPredict}
+                          className="h-11 w-14 rounded-lg border border-slate-200 bg-white text-center text-lg font-semibold text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
+                        />
+                      </div>
+                    </div>
+
+                    {canEnterRealScore ? (
+                      <form
+                        action={updateMatchResult}
+                        className="mt-3 rounded-xl border border-sky-200 bg-sky-50/60 p-3"
+                        suppressHydrationWarning
+                        onSubmit={() => {
+                          window.dispatchEvent(
+                            new Event(LEADERBOARD_REFRESH_EVENT)
+                          );
+                        }}
+                      >
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+                          Score réel (admin)
+                        </p>
+                        <div className="mt-2 flex items-center justify-center gap-3">
+                          <input
+                            type="hidden"
+                            name="match_id"
+                            value={match.id}
+                          />
+                          <input
+                            name="score_a"
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            defaultValue={match.score_a ?? ""}
+                            className="h-11 w-14 rounded-lg border border-sky-200 bg-white text-center text-lg font-semibold text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                          />
+                          <span className="text-slate-400">-</span>
+                          <input
+                            name="score_b"
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            defaultValue={match.score_b ?? ""}
+                            className="h-11 w-14 rounded-lg border border-sky-200 bg-white text-center text-lg font-semibold text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                          />
+                          <button
+                            type="submit"
+                            className="rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-800"
+                          >
+                            Valider
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                      <div className="rounded-lg bg-slate-50 px-2 py-1.5">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">
+                          Cote 1-N-2
+                        </p>
+                        <p className="mt-0.5 font-mono text-[11px] font-semibold text-slate-700">
+                          {formatOneDecimal(odds.one)} /{" "}
+                          {formatOneDecimal(odds.draw)} /{" "}
+                          {formatOneDecimal(odds.two)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 px-2 py-1.5">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">
+                          Mes pts
+                        </p>
+                        <p className="mt-0.5 font-semibold text-slate-900">
+                          {myPoints !== null ? formatOneDecimal(myPoints) : "-"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 px-2 py-1.5">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">
+                          Moy. pts
+                        </p>
+                        <p className="mt-0.5 font-semibold text-slate-700">
+                          {averagePoints !== null
+                            ? formatOneDecimal(averagePoints)
+                            : "-"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {canPredict ? (
+                      <button
+                        type="button"
+                        onClick={() => void saveMatch(match)}
+                        disabled={savingMatch === match.id}
+                        className="mt-3 w-full rounded-full bg-[#7a1f2c] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {savingMatch === match.id
+                          ? "Sauvegarde..."
+                          : "Sauvegarder pronostic"}
+                      </button>
+                    ) : null}
+                  </article>
+                );
+              })}
             </div>
           );
         })
       )}
 
-      {message && <p className="text-sm">{message}</p>}
-    </section>
+      {message ? (
+        <p className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm">
+          {message}
+        </p>
+      ) : null}
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/roles";
 import { FIFA_TEAMS } from "@/app/lib/fifa-group-cities";
 import { getRealRound32Fixture } from "@/app/real-knockout/real-knockout-fixtures";
+import Round32SlotSchedule from "./Round32SlotSchedule";
 
 const round32MatchNumbers = Array.from({ length: 16 }, (_, index) => 73 + index);
 const realRound32Phase = "Reel - 16e de finale";
@@ -102,9 +103,9 @@ function buildRound32Slots(
 
     return {
       matchNumber,
-      kickoffAt: existing?.kickoff_at ?? fixture?.kickoff_at ?? "",
-      venue: existing?.venue ?? fixture?.venue ?? "",
-      city: existing?.city ?? fixture?.city ?? "",
+      kickoffAt: fixture?.kickoff_at ?? existing?.kickoff_at ?? "",
+      venue: fixture?.venue ?? existing?.venue ?? "",
+      city: fixture?.city ?? existing?.city ?? "",
       teamA: assignment?.teamA ?? existing?.team_a ?? "",
       teamB: assignment?.teamB ?? existing?.team_b ?? "",
     };
@@ -157,15 +158,15 @@ async function saveRound32Assignments(formData: FormData) {
       return fixture ? [{ matchNumber, teamA: null, teamB: null, fixture }] : [];
     }
 
-    if (!teamA || !teamB) {
-      redirectWithError(`Les deux équipes doivent être renseignées pour le match ${matchNumber}.`);
-    }
-
-    if (!FIFA_TEAMS.includes(teamA) || !FIFA_TEAMS.includes(teamB)) {
+    if (teamA && !FIFA_TEAMS.includes(teamA)) {
       redirectWithError(`Une équipe invalide a été sélectionnée pour le match ${matchNumber}.`);
     }
 
-    if (teamA === teamB) {
+    if (teamB && !FIFA_TEAMS.includes(teamB)) {
+      redirectWithError(`Une équipe invalide a été sélectionnée pour le match ${matchNumber}.`);
+    }
+
+    if (teamA && teamB && teamA === teamB) {
       redirectWithError(`Le match ${matchNumber} ne peut pas contenir la même équipe deux fois.`);
     }
 
@@ -175,8 +176,8 @@ async function saveRound32Assignments(formData: FormData) {
 
     return [{
       matchNumber,
-      teamA,
-      teamB,
+      teamA: teamA || null,
+      teamB: teamB || null,
       fixture,
     }];
   });
@@ -184,16 +185,15 @@ async function saveRound32Assignments(formData: FormData) {
   const usedTeams = new Set<string>();
 
   for (const payload of payloads) {
-    if (!payload.teamA || !payload.teamB) {
-      continue;
-    }
+    for (const team of [payload.teamA, payload.teamB]) {
+      if (!team) continue;
 
-    if (usedTeams.has(payload.teamA) || usedTeams.has(payload.teamB)) {
-      redirectWithError("Chaque équipe ne peut apparaître qu'une seule fois dans les 16e réels.");
-    }
+      if (usedTeams.has(team)) {
+        redirectWithError("Chaque équipe ne peut apparaître qu'une seule fois dans les 16e réels.");
+      }
 
-    usedTeams.add(payload.teamA);
-    usedTeams.add(payload.teamB);
+      usedTeams.add(team);
+    }
   }
 
   const { data: existingRows, error: existingRowsError } = await adminSupabase
@@ -233,8 +233,8 @@ async function saveRound32Assignments(formData: FormData) {
     const nextValues = {
       phase: realRound32Phase,
       match_number: payload.matchNumber,
-      team_a: payload.teamA,
-      team_b: payload.teamB,
+      team_a: payload.teamA ?? "",
+      team_b: payload.teamB ?? "",
       kickoff_at: payload.fixture.kickoff_at,
       venue: payload.fixture.venue,
       city: payload.fixture.city,
@@ -417,13 +417,7 @@ export default async function AdminRealKnockoutPage({
                     Match {slot.matchNumber}
                   </div>
                   <h2 className="mt-3 text-xl font-semibold text-slate-950">{slot.venue}</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {slot.city} · {new Date(slot.kickoffAt).toLocaleString("fr-FR", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                      timeZone: "UTC",
-                    })}
-                  </p>
+                  <Round32SlotSchedule city={slot.city} kickoffAt={slot.kickoffAt} />
                 </div>
 
                 <p className="max-w-xl text-sm leading-6 text-slate-500">

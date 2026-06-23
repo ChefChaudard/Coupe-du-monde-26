@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { computeMatchOdds, type MatchOdds } from "@/app/dashboard/scoring";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import Leaderboard from "@/app/dashboard/leaderboard";
 import { getMatchCity } from "@/app/lib/fifa-cities";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -99,113 +99,113 @@ const realPhaseOrder = [
 const roundOf32Fixtures: RoundOf32Fixture[] = [
   {
     matchNumber: 73,
-    kickoff_at: "2026-06-28T20:00:00.000Z",
-    venue: "Los Angeles Stadium",
+    kickoff_at: "2026-06-28T19:00:00.000Z",
+    venue: "SoFi Stadium",
     teamA: { type: "group", group: "A", position: 2 },
     teamB: { type: "group", group: "B", position: 2 },
   },
   {
     matchNumber: 74,
-    kickoff_at: "2026-06-29T20:00:00.000Z",
-    venue: "Boston Stadium",
+    kickoff_at: "2026-06-29T20:30:00.000Z",
+    venue: "Gillette Stadium",
     teamA: { type: "group", group: "E", position: 1 },
     teamB: { type: "third", candidates: ["A", "B", "C", "D", "F"] },
   },
   {
     matchNumber: 75,
-    kickoff_at: "2026-06-29T20:00:00.000Z",
-    venue: "Estadio Monterrey",
+    kickoff_at: "2026-06-30T01:00:00.000Z",
+    venue: "Estadio BBVA",
     teamA: { type: "group", group: "F", position: 1 },
     teamB: { type: "group", group: "C", position: 2 },
   },
   {
     matchNumber: 76,
-    kickoff_at: "2026-06-29T20:00:00.000Z",
-    venue: "Houston Stadium",
+    kickoff_at: "2026-06-29T17:00:00.000Z",
+    venue: "NRG Stadium",
     teamA: { type: "group", group: "C", position: 1 },
     teamB: { type: "group", group: "F", position: 2 },
   },
   {
     matchNumber: 77,
-    kickoff_at: "2026-06-30T20:00:00.000Z",
-    venue: "New York New Jersey Stadium",
+    kickoff_at: "2026-06-30T21:00:00.000Z",
+    venue: "MetLife Stadium",
     teamA: { type: "group", group: "I", position: 1 },
     teamB: { type: "third", candidates: ["C", "D", "F", "G", "H"] },
   },
   {
     matchNumber: 78,
-    kickoff_at: "2026-06-30T20:00:00.000Z",
-    venue: "Dallas Stadium",
+    kickoff_at: "2026-06-30T17:00:00.000Z",
+    venue: "AT&T Stadium",
     teamA: { type: "group", group: "E", position: 2 },
     teamB: { type: "group", group: "I", position: 2 },
   },
   {
     matchNumber: 79,
-    kickoff_at: "2026-06-30T20:00:00.000Z",
-    venue: "Mexico City Stadium",
+    kickoff_at: "2026-07-01T01:00:00.000Z",
+    venue: "Estadio Azteca",
     teamA: { type: "group", group: "A", position: 1 },
     teamB: { type: "third", candidates: ["C", "E", "F", "H", "I"] },
   },
   {
     matchNumber: 80,
-    kickoff_at: "2026-07-01T20:00:00.000Z",
-    venue: "Atlanta Stadium",
+    kickoff_at: "2026-07-01T16:00:00.000Z",
+    venue: "Mercedes-Benz Stadium",
     teamA: { type: "group", group: "L", position: 1 },
     teamB: { type: "third", candidates: ["E", "H", "I", "J", "K"] },
   },
   {
     matchNumber: 81,
-    kickoff_at: "2026-07-01T20:00:00.000Z",
-    venue: "San Francisco Bay Area Stadium",
+    kickoff_at: "2026-07-02T00:00:00.000Z",
+    venue: "Levi's Stadium",
     teamA: { type: "group", group: "D", position: 1 },
     teamB: { type: "third", candidates: ["B", "E", "F", "I", "J"] },
   },
   {
     matchNumber: 82,
     kickoff_at: "2026-07-01T20:00:00.000Z",
-    venue: "Seattle Stadium",
+    venue: "Lumen Field",
     teamA: { type: "group", group: "G", position: 1 },
     teamB: { type: "third", candidates: ["A", "E", "H", "I", "J"] },
   },
   {
     matchNumber: 83,
-    kickoff_at: "2026-07-02T20:00:00.000Z",
-    venue: "Toronto Stadium",
+    kickoff_at: "2026-07-02T23:00:00.000Z",
+    venue: "BMO Field",
     teamA: { type: "group", group: "K", position: 2 },
     teamB: { type: "group", group: "L", position: 2 },
   },
   {
     matchNumber: 84,
-    kickoff_at: "2026-07-02T20:00:00.000Z",
-    venue: "Los Angeles Stadium",
+    kickoff_at: "2026-07-02T19:00:00.000Z",
+    venue: "SoFi Stadium",
     teamA: { type: "group", group: "H", position: 1 },
     teamB: { type: "group", group: "J", position: 2 },
   },
   {
     matchNumber: 85,
-    kickoff_at: "2026-07-02T20:00:00.000Z",
-    venue: "BC Place Vancouver",
+    kickoff_at: "2026-07-03T03:00:00.000Z",
+    venue: "BC Place",
     teamA: { type: "group", group: "B", position: 1 },
     teamB: { type: "third", candidates: ["E", "F", "G", "I", "J"] },
   },
   {
     matchNumber: 86,
-    kickoff_at: "2026-07-03T20:00:00.000Z",
-    venue: "Miami Stadium",
+    kickoff_at: "2026-07-03T22:00:00.000Z",
+    venue: "Hard Rock Stadium",
     teamA: { type: "group", group: "J", position: 1 },
     teamB: { type: "group", group: "H", position: 2 },
   },
   {
     matchNumber: 87,
-    kickoff_at: "2026-07-03T20:00:00.000Z",
-    venue: "Kansas City Stadium",
+    kickoff_at: "2026-07-04T01:30:00.000Z",
+    venue: "Arrowhead Stadium",
     teamA: { type: "group", group: "K", position: 1 },
     teamB: { type: "third", candidates: ["D", "E", "I", "J", "L"] },
   },
   {
     matchNumber: 88,
-    kickoff_at: "2026-07-03T20:00:00.000Z",
-    venue: "Dallas Stadium",
+    kickoff_at: "2026-07-03T18:00:00.000Z",
+    venue: "AT&T Stadium",
     teamA: { type: "group", group: "D", position: 2 },
     teamB: { type: "group", group: "G", position: 2 },
   },
@@ -862,29 +862,65 @@ export default async function RealKnockoutPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto grid max-w-[1800px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
-        <section>
-          <RealKnockoutScoreForm
-            matches={realMatches}
-            existingPredictions={myPredictions}
-            userId={user.id}
-            matchStats={matchStats}
-            matchOdds={matchOdds}
-            isAdmin={isAdminUser}
-            firstRoundComplete={firstRoundComplete}
-            firstRoundMissingScores={firstRoundMissingScores}
-            tournamentStartAt={tournamentStartAt}
-            updateMatchResult={updateMatchResult}
-            syncRealMatches={syncRealMatches}
-          />
-        </section>
-
-        <section>
-          <div className="xl:sticky xl:top-24 xl:h-[calc(100vh-7rem)] xl:overflow-y-auto xl:overscroll-contain xl:pr-1">
-            <Leaderboard />
+    <main className="min-h-screen bg-slate-50 px-3 py-4 text-slate-900">
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
+        <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#7a1f2c]">
+            2e Tour Réel
+          </p>
+          <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950">
+            Matchs du 2e tour réel
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Vue mobile des matchs du 2e tour réel, phase par phase.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              href="/knockout"
+              className="inline-flex items-center justify-center rounded-full bg-[#7a1f2c] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822]"
+            >
+              Pronostics 2e tour
+            </Link>
+            <Link
+              href="/groupes/mobile"
+              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              Mobile T1
+            </Link>
+            {isAdminUser && (
+              <Link
+                href="/admin/real-knockout"
+                className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                Saisir les 16e
+              </Link>
+            )}
+            {isAdminUser && (
+              <form action={syncRealMatches} suppressHydrationWarning>
+                <button
+                  type="submit"
+                  disabled={!firstRoundComplete}
+                  className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Synchroniser
+                </button>
+              </form>
+            )}
           </div>
         </section>
+
+        <RealKnockoutScoreForm
+          matches={realMatches}
+          existingPredictions={myPredictions}
+          userId={user.id}
+          matchStats={matchStats}
+          matchOdds={matchOdds}
+          isAdmin={isAdminUser}
+          firstRoundComplete={firstRoundComplete}
+          firstRoundMissingScores={firstRoundMissingScores}
+          tournamentStartAt={tournamentStartAt}
+          updateMatchResult={updateMatchResult}
+        />
       </div>
     </main>
   );

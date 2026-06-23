@@ -597,7 +597,7 @@ export default function Topbar() {
                     Des points sont attribués pour chaque équipe correctement placée à sa position finale.
                   </p>
                   <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
-                    1,5 point de base × Cote
+                    1 point de base × Cote
                   </blockquote>
                   <p>
                     Le classement est calculé en continu, sans attendre la fin de la compétition. Un groupe n&apos;est

@@ -8,7 +8,7 @@ import {
 } from "./scoring";
 
 // Coefficient de base appliqué au bonus de classement de groupe.
-const GROUP_PLACEMENT_BASE_POINTS = 1.5;
+const GROUP_PLACEMENT_BASE_POINTS = 1;
 
 type MatchRow = {
   id: number;

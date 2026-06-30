@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import GroupSelector from "@/app/components/GroupSelector";
 import { ROLE_SUPER_ADMIN } from "@/lib/roles";
 import {
   DEFAULT_TIME_ZONE,
@@ -391,64 +390,6 @@ export default function Topbar() {
             </button>
           ) : null}
 
-          <GroupSelector />
-
-          {isSuperAdmin && (
-            <div className="relative shrink-0">
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-sm sm:text-sm">
-                  <span className="font-medium text-slate-500">Simulation</span>
-
-                  <input
-                    type="datetime-local"
-                    value={simulatedInput}
-                    onChange={(event) =>
-                      updateSimulatedDate(event.target.value)
-                    }
-                    className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 sm:text-sm"
-                  />
-                </label>
-
-                <button
-                  type="button"
-                  onClick={() => void clearSimulatedDate()}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 sm:px-4 sm:py-2 sm:text-sm"
-                >
-                  Date sys
-                </button>
-              </div>
-
-              {simulatedDateError && (
-                <p className="absolute left-3 top-full mt-1 whitespace-nowrap text-xs text-red-600">
-                  {simulatedDateError}
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="relative shrink-0">
-            <label className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-sm sm:text-sm">
-              <span className="font-medium text-slate-500">Fuseau</span>
-
-              <select
-                value={timeZone}
-                onChange={(event) => updateTimeZone(event.target.value)}
-                className="max-w-[170px] rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 sm:text-sm"
-              >
-                {timeZoneOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {formatTimeZoneLabel(option)}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {timeZoneError && (
-              <p className="absolute left-3 top-full mt-1 whitespace-nowrap text-xs text-red-600">
-                {timeZoneError}
-              </p>
-            )}
-          </div>
 {!userName && (
   <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
     <Link

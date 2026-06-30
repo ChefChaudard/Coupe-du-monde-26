@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import GroupSelector from "@/app/components/GroupSelector";
+import TimeZoneSelector from "@/app/components/TimeZoneSelector";
 import {
   USER_TIME_ZONE_UPDATED_EVENT,
   getSafeTimeZone,
@@ -206,6 +208,9 @@ export default function Home() {
                 </Link>
               </>
             )}
+<GroupSelector />
+
+            <TimeZoneSelector />
 
             <button
               type="button"

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { computeMatchOdds, type MatchOdds } from "@/app/dashboard/scoring";
+import { computeMatchOdds, getPredictionPoints, type MatchOdds } from "@/app/dashboard/scoring";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getMatchCity } from "@/app/lib/fifa-cities";
@@ -577,36 +577,6 @@ function buildAvailableRealMatches(matches: Match[]) {
   return payload;
 }
 
-function getPointsForPrediction(
-  predictedA: number,
-  predictedB: number,
-  actualA: number,
-  actualB: number,
-  isFinished: boolean | null,
-  phase: string
-) {
-  if (!isFinished) return 0;
-  const normalizedPhase = phase.toLowerCase();
-  const base = normalizedPhase.includes("group")
-    ? 1
-    : normalizedPhase.includes("16e") ||
-        normalizedPhase.includes("8e") ||
-        normalizedPhase.includes("quart")
-      ? 2
-      : normalizedPhase.includes("demi") || normalizedPhase.includes("finale")
-        ? 3
-        : 1;
-
-  if (predictedA === actualA && predictedB === actualB) return 3 * base;
-
-  const predictedOutcome =
-    predictedA > predictedB ? "A" : predictedA < predictedB ? "B" : "D";
-  const actualOutcome =
-    actualA > actualB ? "A" : actualA < actualB ? "B" : "D";
-
-  return predictedOutcome === actualOutcome ? base : 0;
-}
-
 async function syncRealMatches() {
   "use server";
 
@@ -829,34 +799,36 @@ export default async function RealKnockoutPage() {
       (prediction) => prediction.match_id === match.id
     );
 
-    const allPoints = matchPredictions.map((prediction) =>
-      getPointsForPrediction(
-        prediction.predicted_a,
-        prediction.predicted_b,
-        actualA,
-        actualB,
-        match.is_finished,
-        match.phase
-      )
-    );
+const allPoints = matchPredictions.map((prediction) =>
+  getPredictionPoints(
+    prediction.predicted_a,
+    prediction.predicted_b,
+    actualA,
+    actualB,
+    match.is_finished,
+    match.phase,
+    matchOdds[match.id] ?? { one: 1, draw: 1, two: 1 }
+  )
+);
 
     const myPrediction = matchPredictions.find(
       (prediction) => prediction.user_id === user.id
     );
 
-    matchStats[match.id] = {
+matchStats[match.id] = {
       myPoints: myPrediction
-        ? getPointsForPrediction(
+        ? getPredictionPoints(
             myPrediction.predicted_a,
             myPrediction.predicted_b,
             actualA,
             actualB,
             match.is_finished,
-            match.phase
+            match.phase,
+            matchOdds[match.id] ?? { one: 1, draw: 1, two: 1 }
           )
         : null,
       averagePoints:
-        allPoints.reduce<number>((sum, points) => sum + points, 0) /
+        allPoints.reduce<number>((sum, pts) => sum + pts, 0) /
         (allPoints.length || 1),
     };
   }

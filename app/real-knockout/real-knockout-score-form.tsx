@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { formatOneDecimal } from "@/app/dashboard/format";
 import {
@@ -127,9 +127,19 @@ export default function RealKnockoutScoreForm({
     Number.isFinite(tournamentStartAt) &&
     appNowTime >= tournamentStartAt;
 
+  const firstOpenMatchRef = useRef<HTMLElement | null>(null);
+  const hasScrolledRef = useRef(false);
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (isMounted && !hasScrolledRef.current && firstOpenMatchRef.current) {
+      hasScrolledRef.current = true;
+      firstOpenMatchRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [isMounted, simulatedNow]);
 
   useEffect(() => {
     function handleSimulatedDateUpdated(event: Event) {
@@ -224,6 +234,20 @@ export default function RealKnockoutScoreForm({
     setMessage("Pronostic sauvegardé.");
   }
 
+  // Calcul du premier match ouvert pour le scroll automatique
+  let firstOpenMatchId: number | null = null;
+  for (const [, phaseMatches] of groupedMatches) {
+    for (const match of phaseMatches) {
+      const kickoffDate = match.kickoff_at ? new Date(match.kickoff_at) : null;
+      const hasStarted = kickoffDate ? kickoffDate.getTime() <= appNowTime : false;
+      if (!hasStarted) {
+        firstOpenMatchId = match.id;
+        break;
+      }
+    }
+    if (firstOpenMatchId !== null) break;
+  }
+
   return (
     <div className="space-y-5">
       {isMounted && hasTournamentStarted ? (
@@ -307,6 +331,7 @@ export default function RealKnockoutScoreForm({
                 return (
                   <article
                     key={match.id}
+                    ref={match.id === firstOpenMatchId ? firstOpenMatchRef : undefined}
                     className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
                   >
                     <div className="flex items-center justify-between gap-2">

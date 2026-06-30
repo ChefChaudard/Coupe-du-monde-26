@@ -213,6 +213,15 @@ export default async function MobileFirstRoundPage() {
               Vue bureau
             </Link>
           </div>
+
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              className="rounded-full bg-[#7a1f2c] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822]"
+            >
+              Sauvegarder
+            </button>
+          </div>
         </section>
 
         <MobilePredictionForm

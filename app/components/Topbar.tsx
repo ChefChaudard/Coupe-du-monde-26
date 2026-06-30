@@ -22,7 +22,7 @@ const navItems = [
   { key: "mobileT1", label: "Mobile T1", href: "/groupes/mobile" },
   { key: "mobileClassement", label: "Mobile Classement", href: "/classement/mobile" },
   { key: "knockout", label: "2e tours", href: "/knockout" },
-  { key: "realKnockout", label: "2e tours Réels", href: "/real-knockout" },
+  { key: "realKnockout", label: "Phases Finales Réels", href: "/real-knockout" },
   { key: "tours", label: "Tours suivants", href: "/dashboard?tab=tours" },
 ];
 
@@ -62,8 +62,7 @@ export default function Topbar() {
   const [userName, setUserName] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [isReglementOpen, setIsReglementOpen] = useState(false);
-  const [timeZone, setTimeZone] = useState(DEFAULT_TIME_ZONE);
+   const [timeZone, setTimeZone] = useState(DEFAULT_TIME_ZONE);
   const [timeZoneError, setTimeZoneError] = useState("");
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
   const [simulatedInput, setSimulatedInput] = useState<string>("");
@@ -161,29 +160,7 @@ export default function Topbar() {
     void loadSimulatedDate();
   }, [isSuperAdmin]);
 
-  async function handleLogout() {
-    const origin = window.location.origin;
-    const signOutUrl = new URL("/api/auth/signout", origin).toString();
-    const loginUrl = new URL("/login", origin).toString();
-
-    await Promise.allSettled([
-      supabase.auth.signOut(),
-      fetch(signOutUrl, {
-        method: "POST",
-        cache: "no-store",
-      }),
-    ]);
-    setIsAuthenticated(false);
-    setIsSuperAdmin(false);
-    setUserName(null);
-    setSimulatedNow(null);
-    setSimulatedInput("");
-    setSimulatedDateError("");
-    localStorage.removeItem("rememberMe");
-    setIsReglementOpen(false);
-    window.location.replace(loginUrl);
-  }
-
+ 
   async function updateSimulatedDate(value: string) {
     if (!value) {
       return;
@@ -378,9 +355,9 @@ export default function Topbar() {
             <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Pronos
             </span>
-            <span className="block text-[13px] font-semibold text-slate-900">
-              Coupe du Monde 2026
-            </span>
+<span className="block text-[13px] font-semibold text-slate-900">
+  {userName ?? "Coupe du Monde 2026"}
+</span>
           </span>
         </Link>
 
@@ -472,250 +449,20 @@ export default function Topbar() {
               </p>
             )}
           </div>
-
-          {userName ? (
-            <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 sm:px-4 sm:py-2 sm:text-sm"
-              >
-                Déconnexion
-              </button>
-
-              <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-900 sm:py-2 sm:text-sm">
-                {userName}
-              </span>
-            </div>
-          ) : (
-            <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
-              <Link
-                href="/login"
-                className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 sm:px-4 sm:py-2 sm:text-sm"
-              >
-                Se connecter
-              </Link>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setIsReglementOpen(true)}
-            className="rounded-full border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 sm:px-4 sm:py-2 sm:text-sm"
-          >
-            Reglement
-          </button>
-        </div>
+{!userName && (
+  <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
+    <Link
+      href="/login"
+      className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 sm:px-4 sm:py-2 sm:text-sm"
+    >
+      Se connecter
+    </Link>
+  </div>
+)}
+                </div>
       </div>
 
     </header>
-
-      {isReglementOpen ? (
-        <div
-          className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-slate-950/55 p-4 pt-10 backdrop-blur-sm"
-          onClick={() => setIsReglementOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="relative w-full max-w-5xl rounded-3xl border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)]"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="reglement-title"
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Règlement
-                </p>
-                <h2 id="reglement-title" className="mt-1 text-2xl font-bold text-slate-950">
-                  Comment gagner ?
-                </h2>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsReglementOpen(false)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
-              >
-                Fermer
-              </button>
-            </div>
-
-            <div className="max-h-[calc(100vh-7rem)] overflow-y-auto px-6 py-6 text-slate-800">
-              <div className="space-y-6 text-sm leading-7">
-                <p className="text-base text-slate-900">
-                  L&apos;objectif est simple : cumuler le plus de points possible tout au long de la Coupe du Monde.
-                </p>
-
-                <p>
-                  Les points peuvent être gagnés de <strong>4 façons différentes</strong> :
-                </p>
-
-                <ol className="list-decimal space-y-3 pl-5">
-                  <li>En pronostiquant les résultats des matchs de groupe.</li>
-                  <li>En pronostiquant le classement final des groupes.</li>
-                  <li>En construisant votre tableau de la Coupe du Monde.</li>
-                  <li>En pronostiquant les matchs réels de la phase finale.</li>
-                </ol>
-
-                <p>
-                  Chaque bon pronostic rapporte des points selon la formule :
-                </p>
-
-                <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
-                  Points gagnés = Points de base × Cote
-                </blockquote>
-
-                <p>
-                  La cote dépend du nombre de joueurs ayant effectué le même pronostic.
-                </p>
-
-                <section className="space-y-3">
-                  <h3 className="text-lg font-bold text-slate-950">1. Pronostics des matchs de groupe</h3>
-                  <p>
-                    Avant chaque match de groupe, vous devez pronostiquer son résultat : victoire de l&apos;équipe A,
-                    match nul ou victoire de l&apos;équipe B.
-                  </p>
-                  <p>
-                    Vous marquez des points lorsque vous trouvez le bon résultat (1N2).
-                  </p>
-                  <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
-                    1 point de base × Cote
-                  </blockquote>
-                </section>
-
-                <section className="space-y-3">
-                  <h3 className="text-lg font-bold text-slate-950">2. Classement des groupes</h3>
-                  <p>
-                    Avant le début de la compétition, vous devez pronostiquer le classement final de chaque groupe.
-                  </p>
-                  <p>
-                    Pour chaque groupe, vous indiquez quelles équipes termineront 1ère, 2ème, 3ème et 4ème.
-                  </p>
-                  <p>
-                    Des points sont attribués pour chaque équipe correctement placée à sa position finale.
-                  </p>
-                  <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
-                    1 point de base × Cote
-                  </blockquote>
-                  <p>
-                    Le classement est calculé en continu, sans attendre la fin de la compétition. Un groupe n&apos;est
-                    toutefois pris en compte que lorsque <strong>ses quatre équipes ont disputé au moins un match</strong> et
-                    qu&apos;elles ont toutes joué <strong>le même nombre de rencontres</strong>. Le classement est recalculé à
-                    chaque mise à jour de score.
-                  </p>
-                </section>
-
-                <section className="space-y-3">
-                  <h3 className="text-lg font-bold text-slate-950">3. Votre tableau de la Coupe du Monde</h3>
-                  <p>
-                    Avant le début du tournoi, vous construisez votre propre scénario de Coupe du Monde en indiquant
-                    quelles équipes atteindront les 16es de finale, les 8es de finale, les quarts de finale, les
-                    demi-finales, la finale et le titre de Champion du Monde.
-                  </p>
-                  <p>
-                    Lorsque la compétition avance, des points sont attribués pour chaque équipe qui atteint effectivement
-                    le tour que vous aviez pronostiqué. Le champion est conservé dans le tableau, mais le score du
-                    tour s&apos;arrête à la finale.
-                  </p>
-                  <div className="space-y-2">
-                    <p className="font-semibold text-slate-950">16es et 8es de finale :</p>
-                    <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
-                      2 points de base × Cote
-                    </blockquote>
-                    <p className="font-semibold text-slate-950">Quarts, demi-finales et finale :</p>
-                    <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
-                      3 points de base × Cote
-                    </blockquote>
-                    <p className="font-semibold text-slate-950">Vainqueur (Champion du Monde) :</p>
-                    <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
-                      3 points de base × Cote
-                    </blockquote>
-                  </div>
-                </section>
-
-                <section className="space-y-3">
-                  <h3 className="text-lg font-bold text-slate-950">4. Pronostics des matchs à élimination directe</h3>
-                  <p>
-                    À partir des 16es de finale, les affiches réelles sont connues.
-                  </p>
-                  <p>
-                    Avant chaque rencontre, vous devez pronostiquer l&apos;équipe qui se qualifiera pour le tour suivant.
-                  </p>
-                  <p>Le score exact n&apos;a pas d&apos;importance : seule l&apos;équipe qualifiée compte.</p>
-                  <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
-                    2 points de base × Cote
-                  </blockquote>
-                </section>
-
-                <section className="space-y-3 border-t border-slate-200 pt-4">
-                  <h3 className="text-lg font-bold text-slate-950">Le système de cote</h3>
-                  <p>
-                    La cote est calculée automatiquement à partir du nombre total de joueurs et du nombre de joueurs ayant choisi la même issue.
-                  </p>
-                  <ul className="list-disc space-y-2 pl-5">
-                    <li>Plus un pronostic est populaire, plus sa cote est faible.</li>
-                    <li>Plus un pronostic est rare, plus sa cote est élevée.</li>
-                    <li>La cote ne descend jamais sous 1.</li>
-                  </ul>
-                  <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
-                    cote = max(1, arrondi(total_joueurs / nb_joueurs_ayant_pronostiqué cette issue, 2))
-                  </blockquote>
-                  <p>
-                    Exemple: avec 19 joueurs, une issue choisie par 6 joueurs affiche une cote de 3,17. Si une issue n&apos;a été choisie que par 1 joueur, sa cote monte à 19,0.
-                  </p>
-                </section>
-
-                <section className="space-y-3 border-t border-slate-200 pt-4">
-                  <h3 className="text-lg font-bold text-slate-950">Bonus par tour</h3>
-                  <p>
-                    Pour valoriser les tours avancés, la cote de rareté est multipliée par un coefficient propre au tour.
-                  </p>
-                  <div className="overflow-hidden rounded-2xl border border-slate-200">
-                    <table className="w-full border-collapse text-left text-sm">
-                      <thead className="bg-slate-100 text-slate-700">
-                        <tr>
-                          <th className="px-4 py-3 font-semibold">Tour atteint</th>
-                          <th className="px-4 py-3 font-semibold">Coeff.</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 bg-white">
-                        <tr>
-                          <td className="px-4 py-3">16e</td>
-                          <td className="px-4 py-3 font-semibold">2</td>
-                        </tr>
-                        <tr>
-                          <td className="px-4 py-3">8e</td>
-                          <td className="px-4 py-3 font-semibold">2</td>
-                        </tr>
-                        <tr>
-                          <td className="px-4 py-3">Quart</td>
-                          <td className="px-4 py-3 font-semibold">3</td>
-                        </tr>
-                        <tr>
-                          <td className="px-4 py-3">Demi</td>
-                          <td className="px-4 py-3 font-semibold">3</td>
-                        </tr>
-                        <tr>
-                          <td className="px-4 py-3">Finale</td>
-                          <td className="px-4 py-3 font-semibold">3</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
-                    cote finale = max(1, arrondi((total_joueurs / nb_votes) × coefficient_du_tour, 2))
-                  </blockquote>
-                  <p>
-                    Les points gagnés suivent cette cote finale: plus le tour est avancé, plus un bon pronostic peut rapporter de points.
-                  </p>
-                </section>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </>
   );
 }

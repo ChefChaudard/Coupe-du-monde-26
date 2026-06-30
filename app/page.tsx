@@ -20,6 +20,7 @@ export default function Home() {
   const [userName, setUserName] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [profile, setProfile] = useState<ApiUser | null>(null);
+  const [isReglementOpen, setIsReglementOpen] = useState(false);
 
   useEffect(() => {
     document.title = "Accueil | Pronos WC26";
@@ -29,6 +30,7 @@ export default function Home() {
     async function loadInitialUser() {
       try {
         const res = await fetch("/api/me", { cache: "no-store" });
+
         if (!res.ok) {
           setUserEmail(null);
           setUserName(null);
@@ -37,16 +39,9 @@ export default function Home() {
           return;
         }
 
-        const payload = (await res.json()) as {
-          user?: {
-            email?: string | null;
-            nickname?: string | null;
-            roles?: string[];
-            timeZone?: string | null;
-          } | null;
-        };
-
+        const payload = (await res.json()) as { user?: ApiUser | null };
         const apiUser = payload.user ?? null;
+
         if (!apiUser) {
           setUserEmail(null);
           setUserName(null);
@@ -58,6 +53,7 @@ export default function Home() {
         setUserEmail(apiUser.email ?? null);
         setUserName(apiUser.nickname ?? apiUser.email?.split("@")[0] ?? null);
         setProfile(apiUser);
+
         const roles = apiUser.roles ?? [];
         setIsAdmin(roles.includes("admin") || roles.includes("super_admin"));
       } catch {
@@ -110,6 +106,29 @@ export default function Home() {
     };
   }, []);
 
+  async function handleLogout() {
+    const origin = window.location.origin;
+    const signOutUrl = new URL("/api/auth/signout", origin).toString();
+    const loginUrl = new URL("/login", origin).toString();
+
+    await Promise.allSettled([
+      supabase.auth.signOut(),
+      fetch(signOutUrl, {
+        method: "POST",
+        cache: "no-store",
+      }),
+    ]);
+
+    setUserEmail(null);
+    setUserName(null);
+    setProfile(null);
+    setIsAdmin(false);
+
+    localStorage.removeItem("rememberMe");
+
+    window.location.replace(loginUrl);
+  }
+
   return (
     <main className="py-8 sm:py-10">
       <div className="grid items-start gap-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -123,84 +142,192 @@ export default function Home() {
           </h1>
 
           <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-            Une interface de pronostics claire et rapide: groupes, tours éliminatoires,
-            classement live et suivi des points sans surcharge visuelle.
+            Une interface de pronostics claire et rapide: groupes, tours
+            éliminatoires, classement live et suivi des points sans surcharge
+            visuelle.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
-          <Link
-            href="/dashboard"
-            className="rounded-full bg-slate-900 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800"
-          >
-            Accéder au dashboard
-          </Link>
-
-          {!userEmail && (
-            <>
-              <Link
-                href="/create-account"
-                className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                Créer un compte
-              </Link>
-              <Link
-                href="/login"
-                className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                Se connecter
-              </Link>
-            </>
-          )}
-
-          {userEmail && (
             <Link
-              href="/account/password"
+              href="/dashboard"
+              className="rounded-full bg-slate-900 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800"
+            >
+              Accéder au dashboard
+            </Link>
+
+            {!userEmail && (
+              <>
+                <Link
+                  href="/create-account"
+                  className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  Créer un compte
+                </Link>
+
+                <Link
+                  href="/login"
+                  className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  Se connecter
+                </Link>
+              </>
+            )}
+
+            {userEmail && (
+              <Link
+                href="/account/password"
+                className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                Changer mon mot de passe
+              </Link>
+            )}
+
+            {isAdmin && (
+              <>
+                <Link
+                  href="/admin/users"
+                  className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  Comptes et mots de passe
+                </Link>
+
+                <Link
+                  href="/admin/groups"
+                  className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  Créer / gérer groupes
+                </Link>
+
+                <Link
+                  href="/admin/real-knockout"
+                  className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  Qualification Phases Finales
+                </Link>
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsReglementOpen(true)}
               className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
             >
-              Changer mon mot de passe
-            </Link>
-          )}
+              Règlement
+            </button>
 
-          {isAdmin && (
-            <>
-              <Link
-                href="/admin/users"
+            {userEmail && (
+              <button
+                type="button"
+                onClick={handleLogout}
                 className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
               >
-                Comptes et mots de passe
-              </Link>
-              <Link
-                href="/admin/groups"
-                className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                Créer / gérer groupes
-              </Link>
-              <Link
-                href="/admin/real-knockout"
-                className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                Saisie 16e réel
-              </Link>
-            </>
-          )}
+                Déconnexion
+              </button>
+            )}
           </div>
 
           {userName && (
             <div className="mt-6 max-w-xl rounded-2xl border border-slate-200 bg-slate-50 p-5 text-left text-sm text-slate-600">
-              <p className="text-base font-semibold text-slate-900">{userName}</p>
+              <p className="text-base font-semibold text-slate-900">
+                {userName}
+              </p>
+
               {profile && (
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <p><span className="font-medium text-slate-500">Email :</span> {profile.email ?? "—"}</p>
-                  <p><span className="font-medium text-slate-500">Rôle :</span> {profile.roles?.join(", ") ?? "Aucun"}</p>
-                  <p><span className="font-medium text-slate-500">Fuseau :</span> {profile.timeZone ?? "—"}</p>
-                  <p><span className="font-medium text-slate-500">Admin :</span> {isAdmin ? "oui" : "non"}</p>
+                  <p>
+                    <span className="font-medium text-slate-500">Email :</span>{" "}
+                    {profile.email ?? "—"}
+                  </p>
+                  <p>
+                    <span className="font-medium text-slate-500">Rôle :</span>{" "}
+                    {profile.roles?.join(", ") ?? "Aucun"}
+                  </p>
+                  <p>
+                    <span className="font-medium text-slate-500">Fuseau :</span>{" "}
+                    {profile.timeZone ?? "—"}
+                  </p>
+                  <p>
+                    <span className="font-medium text-slate-500">Admin :</span>{" "}
+                    {isAdmin ? "oui" : "non"}
+                  </p>
                 </div>
               )}
             </div>
           )}
         </section>
-
       </div>
+
+      {isReglementOpen ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-slate-950/55 p-4 pt-10 backdrop-blur-sm"
+          onClick={() => setIsReglementOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="relative w-full max-w-5xl rounded-3xl border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)]"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reglement-title"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Règlement
+                </p>
+                <h2
+                  id="reglement-title"
+                  className="mt-1 text-2xl font-bold text-slate-950"
+                >
+                  Comment gagner ?
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsReglementOpen(false)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+              >
+                Fermer
+              </button>
+            </div>
+
+            <div className="max-h-[calc(100vh-7rem)] overflow-y-auto px-6 py-6 text-slate-800">
+              <div className="space-y-6 text-sm leading-7">
+                <p className="text-base text-slate-900">
+                  L&apos;objectif est simple : cumuler le plus de points possible
+                  tout au long de la Coupe du Monde.
+                </p>
+
+                <p>
+                  Les points peuvent être gagnés de{" "}
+                  <strong>4 façons différentes</strong> :
+                </p>
+
+                <ol className="list-decimal space-y-3 pl-5">
+                  <li>En pronostiquant les résultats des matchs de groupe.</li>
+                  <li>En pronostiquant le classement final des groupes.</li>
+                  <li>En construisant votre tableau de la Coupe du Monde.</li>
+                  <li>
+                    En pronostiquant les matchs réels de la phase finale.
+                  </li>
+                </ol>
+
+                <p>Chaque bon pronostic rapporte des points selon la formule :</p>
+
+                <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
+                  Points gagnés = Points de base × Cote
+                </blockquote>
+
+                <p>
+                  La cote dépend du nombre de joueurs ayant effectué le même
+                  pronostic.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

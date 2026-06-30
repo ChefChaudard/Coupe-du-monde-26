@@ -10,6 +10,7 @@ import { formatOneDecimal } from "@/app/dashboard/format";
 
 const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
 const SIMULATED_DATE_STORAGE_KEY = "simulated-date";
+const MOBILE_SAVE_ALL_EVENT = "mobile-save-all-group-predictions";
 
 type Match = {
   id: number;
@@ -148,7 +149,27 @@ export default function MobilePredictionForm({
   const appNowTime = simulatedNow
     ? new Date(simulatedNow).getTime()
     : serverNowTime;
+useEffect(() => {
+  async function handleSaveAll() {
+    const editableMatches = matches.filter((match) => {
+      const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
+      return !hasStarted || (isAdmin && hasStarted);
+    });
 
+    for (const match of editableMatches) {
+      await saveMatch(match);
+    }
+  }
+
+  window.addEventListener("mobile-save-all-group-predictions", handleSaveAll);
+
+  return () => {
+    window.removeEventListener(
+      "mobile-save-all-group-predictions",
+      handleSaveAll
+    );
+  };
+}, [matches, values, realScores, isAdmin, appNowTime]);
   function updateValue(matchId: number, side: "a" | "b", value: string) {
     setValues((prev) => ({
       ...prev,

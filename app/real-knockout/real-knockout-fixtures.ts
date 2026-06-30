@@ -2,6 +2,7 @@ export type RealLaterPhase =
   | "8e de finale"
   | "Quarts de finale"
   | "Demi-finales"
+  | "Match pour la troisième place"
   | "Finale";
 
 export type RealLaterFixture = {
@@ -22,36 +23,47 @@ export type RealMatchLike = {
 
 const fixtures: Record<RealLaterPhase, RealLaterFixture[]> = {
   "8e de finale": [
-    { kickoff_at: "2026-07-04T20:00:00.000Z", venue: "Boston Stadium", city: "Boston" },
-    { kickoff_at: "2026-07-04T20:00:00.000Z", venue: "Houston Stadium", city: "Houston" },
-    { kickoff_at: "2026-07-05T20:00:00.000Z", venue: "Atlanta Stadium", city: "Atlanta" },
-    { kickoff_at: "2026-07-05T20:00:00.000Z", venue: "Dallas Stadium", city: "Dallas" },
-    { kickoff_at: "2026-07-06T20:00:00.000Z", venue: "Los Angeles Stadium", city: "Los Angeles" },
-    { kickoff_at: "2026-07-06T20:00:00.000Z", venue: "Mexico City Stadium", city: "Mexico City" },
-    { kickoff_at: "2026-07-07T20:00:00.000Z", venue: "Seattle Stadium", city: "Seattle" },
-    {
-      kickoff_at: "2026-07-07T20:00:00.000Z",
-      venue: "New York New Jersey Stadium",
-      city: "New Jersey",
-    },
+    // Match 89
+    { kickoff_at: "2026-07-04T21:00:00.000Z", venue: "Philadelphia Stadium", city: "Philadelphia" },
+    // Match 90
+    { kickoff_at: "2026-07-04T17:00:00.000Z", venue: "Toronto Stadium", city: "Toronto" },
+    // Match 91
+    { kickoff_at: "2026-07-05T20:00:00.000Z", venue: "Houston Stadium", city: "Houston" },
+    // Match 92
+    { kickoff_at: "2026-07-06T00:00:00.000Z", venue: "Estadio Azteca", city: "Mexico City" },
+    // Match 93
+    { kickoff_at: "2026-07-06T19:00:00.000Z", venue: "Dallas Stadium", city: "Dallas" },
+    // Match 94
+    { kickoff_at: "2026-07-07T00:00:00.000Z", venue: "Atlanta Stadium", city: "Atlanta" },
+    // Match 95
+    { kickoff_at: "2026-07-07T16:00:00.000Z", venue: "Seattle Stadium", city: "Seattle" },
+    // Match 96
+    { kickoff_at: "2026-07-07T20:00:00.000Z", venue: "Vancouver Stadium", city: "Vancouver" },
   ],
   "Quarts de finale": [
-    { kickoff_at: "2026-07-10T20:00:00.000Z", venue: "Toronto Stadium", city: "Toronto" },
-    { kickoff_at: "2026-07-10T20:00:00.000Z", venue: "Vancouver Stadium", city: "Vancouver" },
-    { kickoff_at: "2026-07-11T20:00:00.000Z", venue: "Miami Stadium", city: "Miami" },
-    { kickoff_at: "2026-07-11T20:00:00.000Z", venue: "Kansas City Stadium", city: "Kansas City" },
+    // Match 97
+    { kickoff_at: "2026-07-09T20:00:00.000Z", venue: "Boston Stadium", city: "Boston" },
+    // Match 98
+    { kickoff_at: "2026-07-10T19:00:00.000Z", venue: "Kansas City Stadium", city: "Kansas City" },
+    // Match 99
+    { kickoff_at: "2026-07-11T21:00:00.000Z", venue: "Miami Stadium", city: "Miami" },
+    // Match 100
+    { kickoff_at: "2026-07-12T01:00:00.000Z", venue: "Los Angeles Stadium", city: "Los Angeles" },
   ],
   "Demi-finales": [
-    { kickoff_at: "2026-07-15T20:00:00.000Z", venue: "Los Angeles Stadium", city: "Los Angeles" },
-    {
-      kickoff_at: "2026-07-15T20:00:00.000Z",
-      venue: "New York New Jersey Stadium",
-      city: "New Jersey",
-    },
+    // Match 101
+    { kickoff_at: "2026-07-14T19:00:00.000Z", venue: "Dallas Stadium", city: "Dallas" },
+    // Match 102
+    { kickoff_at: "2026-07-15T19:00:00.000Z", venue: "Atlanta Stadium", city: "Atlanta" },
+  ],
+  "Match pour la troisième place": [
+    // Match 103
+    { kickoff_at: "2026-07-18T21:00:00.000Z", venue: "Miami Stadium", city: "Miami" },
   ],
   Finale: [
+    // Match 104
     {
-      kickoff_at: "2026-07-19T20:00:00.000Z",
+      kickoff_at: "2026-07-19T19:00:00.000Z",
       venue: "New York New Jersey Stadium",
       city: "New Jersey",
     },
@@ -102,24 +114,30 @@ export function getRealRound32Fixture(index: number) {
 }
 
 export function getRealLaterPhaseMatches(matches: RealMatchLike[]) {
-  return (["8e de finale", "Quarts de finale", "Demi-finales", "Finale"] as RealLaterPhase[]).flatMap(
-    (phase) => {
-      const phaseMatches = matches
-        .filter((match) => match.phase === `Reel - ${phase}`)
-        .slice()
-        .sort((a, b) => {
-          const kickoffDiff =
-            new Date(a.kickoff_at ?? "").getTime() -
-            new Date(b.kickoff_at ?? "").getTime();
-          if (kickoffDiff !== 0) return kickoffDiff;
-          return a.id - b.id;
-        });
+  return (
+    [
+      "8e de finale",
+      "Quarts de finale",
+      "Demi-finales",
+      "Match pour la troisième place",
+      "Finale",
+    ] as RealLaterPhase[]
+  ).flatMap((phase) => {
+    const phaseMatches = matches
+      .filter((match) => match.phase === `Reel - ${phase}`)
+      .slice()
+      .sort((a, b) => {
+        const kickoffDiff =
+          new Date(a.kickoff_at ?? "").getTime() -
+          new Date(b.kickoff_at ?? "").getTime();
+        if (kickoffDiff !== 0) return kickoffDiff;
+        return a.id - b.id;
+      });
 
-      return phaseMatches.map((match, index) => ({
-        id: match.id,
-        phase,
-        fixture: getRealLaterFixture(phase, index),
-      }));
-    }
-  );
+    return phaseMatches.map((match, index) => ({
+      id: match.id,
+      phase,
+      fixture: getRealLaterFixture(phase, index),
+    }));
+  });
 }

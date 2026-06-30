@@ -621,11 +621,28 @@ async function syncAvailableRealMatches(supabase: Awaited<ReturnType<typeof crea
     ).values()
   );
 
-  if (payload.length > 0) {
-    await supabase.from("matches").upsert(payload, {
-      onConflict: "match_number",
-    });
+const withNumber = payload.filter((m) => m.match_number != null);
+const withoutNumber = payload.filter((m) => m.match_number == null);
+
+if (withNumber.length > 0) {
+  await supabase.from("matches").upsert(withNumber, {
+    onConflict: "match_number",
+  });
+}
+
+for (const match of withoutNumber) {
+  const { data: existing } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("phase", match.phase)
+    .eq("team_a", match.team_a)
+    .eq("team_b", match.team_b)
+    .maybeSingle();
+
+  if (!existing) {
+    await supabase.from("matches").insert(match);
   }
+}
 
   const existingLaterMatches = getRealLaterPhaseMatches(safeMatches);
   for (const item of existingLaterMatches) {

@@ -65,6 +65,18 @@ const realPhaseOrder = [
   "Finale",
 ];
 
+// Numéro FIFA du premier match de chaque phase générée après les 16es.
+// Reprend la numérotation commentée dans real-knockout-fixtures.ts
+// (8e de finale: 89-96, Quarts: 97-100, Demi-finales: 101-102, Finale: 104).
+// Sert à figer un match_number stable par match, indispensable pour trier/
+// apparier de façon déterministe (voir bug "faux match en 8e de finale").
+const realPhaseStartMatchNumber: Record<string, number> = {
+  "8e de finale": 89,
+  "Quarts de finale": 97,
+  "Demi-finales": 101,
+  Finale: 104,
+};
+
 const roundOf32Fixtures: RoundOf32Fixture[] = [
   {
     matchNumber: 73,
@@ -372,6 +384,27 @@ function getPhaseMatches(matches: Match[], phase: string) {
     );
 }
 
+// Ordre "bracket" fiable : trie par match_number quand il est connu.
+// C'est CETTE fonction qu'il faut utiliser pour apparier les vainqueurs
+// d'un tour vers le suivant (16e -> 8e -> quarts -> demies -> finale) : se
+// baser sur kickoff_at/id (getPhaseMatches) est fragile car plusieurs matchs
+// partagent le même horaire "placeholder" et l'id dépend de l'ordre
+// d'insertion en base, pas du tableau officiel. C'est ce qui provoquait des
+// appariements erronés (ex: un faux match en 8e de finale).
+function getOrderedPhaseMatches(matches: Match[], phase: string) {
+  return getPhaseMatches(matches, phase).sort((a, b) => {
+    if (a.match_number != null && b.match_number != null) {
+      return a.match_number - b.match_number;
+    }
+    if (a.match_number != null) return -1;
+    if (b.match_number != null) return 1;
+    return (
+      new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime() ||
+      a.id - b.id
+    );
+  });
+}
+
 function hasPairing(matches: Match[], teamA: string, teamB: string) {
   return matches.some(
     (match) =>
@@ -437,8 +470,11 @@ function buildAvailableRealMatches(matches: Match[]) {
   for (let phaseIndex = 1; phaseIndex < realPhaseOrder.length; phaseIndex += 1) {
     const targetPhase = realPhaseOrder[phaseIndex];
     const previousPhase = realPhaseOrder[phaseIndex - 1];
-    const previousMatches = getPhaseMatches(matches, previousPhase);
+    // Utilise l'ordre "bracket" (match_number) pour apparier les vainqueurs,
+    // pas l'ordre par date/id qui peut être ambigu.
+    const previousMatches = getOrderedPhaseMatches(matches, previousPhase);
     const existingTarget = getPhaseMatches(matches, targetPhase);
+    const startMatchNumber = realPhaseStartMatchNumber[targetPhase];
 
     for (let index = 0; index < previousMatches.length; index += 2) {
       const leftMatch = previousMatches[index];
@@ -458,6 +494,13 @@ function buildAvailableRealMatches(matches: Match[]) {
       if (!fixture) continue;
 
       payload.push({
+        // Match_number figé par phase : garantit un ordre stable pour le
+        // tri/l'affichage et permet à l'upsert onConflict("match_number")
+        // de dédupliquer correctement (avant ce champ était toujours null
+        // pour ces phases, donc l'upsert ne détectait aucun conflit et
+        // pouvait réinsérer un doublon à chaque sync).
+        match_number:
+          startMatchNumber != null ? startMatchNumber + index / 2 : null,
         phase: toRealPhase(targetPhase),
         team_a: teamA,
         team_b: teamB,

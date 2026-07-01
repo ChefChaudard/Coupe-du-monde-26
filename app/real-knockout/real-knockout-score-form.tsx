@@ -104,11 +104,21 @@ export default function RealKnockoutScoreForm({
     return Object.entries(groups).map(
       ([phase, phaseMatches]): [string, Match[]] => [
         phase,
-        phaseMatches.slice().sort(
-          (a, b) =>
+        // Trie par match_number (ordre officiel du tableau) quand il est
+        // connu ; ne retombe sur la date/l'id que pour les matchs qui n'en
+        // ont pas encore (sinon deux matchs à la même heure peuvent
+        // s'afficher/s'apparier dans le désordre, cf. bug "faux match" en 8e).
+        phaseMatches.slice().sort((a, b) => {
+          if (a.match_number != null && b.match_number != null) {
+            return a.match_number - b.match_number;
+          }
+          if (a.match_number != null) return -1;
+          if (b.match_number != null) return 1;
+          return (
             new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime() ||
             a.id - b.id
-        ),
+          );
+        }),
       ]
     );
   }, [matches]);

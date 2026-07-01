@@ -345,7 +345,7 @@ export default function RealKnockoutScoreForm({
                     className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                      <div className="flex shrink-0 items-center gap-1.5 flex-wrap">
                         {match.match_number != null && (
                           <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">
                             M{match.match_number}
@@ -357,60 +357,47 @@ export default function RealKnockoutScoreForm({
                           </span>
                         )}
                       </div>
+
+                      <div className="min-w-0 flex-1 truncate text-center text-xs text-slate-500">
+                        <span>
+                          {kickoffDate
+                            ? formatMatchDate(kickoffDate, timeZone)
+                            : "-"}
+                        </span>
+                        <span className="mx-1">•</span>
+                        <span>
+                          {kickoffDate
+                            ? formatMatchTime(kickoffDate, timeZone)
+                            : "-"}
+                        </span>
+                        {cityDisplay && cityDisplay !== "-" && (
+                          <>
+                            <span className="mx-1">•</span>
+                            <span>{cityDisplay}</span>
+                          </>
+                        )}
+                      </div>
+
                       {statusLabel === "Terminé" ? (
-                        <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-800">
+                        <span className="shrink-0 rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-800">
                           Terminé
                         </span>
                       ) : statusLabel === "Ouvert" ? (
-                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                        <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
                           Ouvert
                         </span>
                       ) : (
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
                           Bloqué
                         </span>
                       )}
                     </div>
 
-                    <div className="mt-2 text-xs text-slate-500">
-                      <span>
-                        {kickoffDate
-                          ? formatMatchDate(kickoffDate, timeZone)
-                          : "-"}
-                      </span>
-                      <span className="mx-1">•</span>
-                      <span>
-                        {kickoffDate
-                          ? formatMatchTime(kickoffDate, timeZone)
-                          : "-"}
-                      </span>
-                      {cityDisplay && cityDisplay !== "-" && (
-                        <>
-                          <span className="mx-1">•</span>
-                          <span>{cityDisplay}</span>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                      <div className="text-right text-sm font-semibold text-slate-900">
-                        {match.team_a || "?"}
-                      </div>
-                      <div className="text-center text-base font-black text-slate-900">
-                        {hasOfficialScore
-                          ? `${match.score_a} - ${match.score_b}`
-                          : "vs"}
-                      </div>
-                      <div className="text-left text-sm font-semibold text-slate-900">
-                        {match.team_b || "?"}
-                      </div>
-                    </div>
-
-                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                        Mon pronostic
-                      </p>
-                      <div className="mt-2 flex items-center justify-center gap-3">
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-right text-sm font-semibold text-slate-900">
+                          {match.team_a || "?"}
+                        </span>
                         <input
                           type="number"
                           inputMode="numeric"
@@ -420,9 +407,9 @@ export default function RealKnockoutScoreForm({
                             updateValue(match.id, "a", e.target.value)
                           }
                           disabled={!canPredict}
-                          className="h-11 w-14 rounded-lg border border-slate-200 bg-white text-center text-lg font-semibold text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
+                          className="h-9 w-10 shrink-0 rounded-lg border border-slate-200 bg-white text-center text-base font-semibold text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
                         />
-                        <span className="text-slate-400">-</span>
+                        <span className="shrink-0 text-slate-400">-</span>
                         <input
                           type="number"
                           inputMode="numeric"
@@ -432,9 +419,17 @@ export default function RealKnockoutScoreForm({
                             updateValue(match.id, "b", e.target.value)
                           }
                           disabled={!canPredict}
-                          className="h-11 w-14 rounded-lg border border-slate-200 bg-white text-center text-lg font-semibold text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
+                          className="h-9 w-10 shrink-0 rounded-lg border border-slate-200 bg-white text-center text-base font-semibold text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
                         />
+                        <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-slate-900">
+                          {match.team_b || "?"}
+                        </span>
                       </div>
+                      {hasOfficialScore && (
+                        <p className="mt-1.5 text-center text-[11px] font-semibold text-sky-700">
+                          Score réel : {match.score_a} - {match.score_b}
+                        </p>
+                      )}
                     </div>
 
                     {canEnterRealScore ? (

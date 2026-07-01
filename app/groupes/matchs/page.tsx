@@ -5,10 +5,8 @@ export const revalidate = 0;
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { isAdmin } from "@/lib/roles";
-import { syncAvailableRealMatches } from "@/app/real-knockout/real-knockout-sync";
 import PredictionForm from "@/app/dashboard/prediction-form";
 import { computeMatchOdds, getPredictionPoints, type MatchOdds } from "@/app/dashboard/scoring";
 
@@ -173,9 +171,6 @@ export default async function GroupMatchesPage() {
 
   async function syncRealKnockoutMatches() {
     "use server";
-
-    const adminSupabase = createAdminClient();
-    await syncAvailableRealMatches(adminSupabase);
 
     revalidatePath("/real-knockout");
     revalidatePath("/groupes/matchs");

@@ -5,12 +5,10 @@ export const revalidate = 0;
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { ensureRoles } from "@/lib/roles";
 import PredictionForm from "./prediction-form";
 import Leaderboard from "./leaderboard";
-import { syncAvailableRealMatches } from "@/app/real-knockout/real-knockout-sync";
 import { computeMatchOdds, getPredictionPoints, type MatchOdds } from "./scoring";
 
 export const metadata: Metadata = {
@@ -406,8 +404,6 @@ export default async function DashboardPage({
   async function syncRealKnockoutMatches() {
     "use server";
 
-    const adminSupabase = createAdminClient();
-    await syncAvailableRealMatches(adminSupabase);
 
     revalidatePath("/real-knockout");
     revalidatePath("/dashboard");

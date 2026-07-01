@@ -6,10 +6,8 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { isAdmin } from "@/lib/roles";
-import { syncAvailableRealMatches } from "@/app/real-knockout/real-knockout-sync";
 import {
   computeMatchOdds,
   getPredictionPoints,
@@ -174,9 +172,6 @@ export default async function MobileFirstRoundPage() {
 
   async function syncRealKnockoutMatches() {
     "use server";
-
-    const adminSupabase = createAdminClient();
-    await syncAvailableRealMatches(adminSupabase);
 
     revalidatePath("/real-knockout");
     revalidatePath("/groupes/mobile");

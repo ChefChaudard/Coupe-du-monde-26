@@ -3,13 +3,11 @@ import Link from "next/link";
 import { computeMatchOdds, getPredictionPoints, type MatchOdds } from "@/app/dashboard/scoring";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getMatchCity } from "@/app/lib/fifa-cities";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { isAdmin } from "@/lib/roles";
 import RealKnockoutScoreForm from "./real-knockout-score-form";
-import { getRealLaterFixture, getRealLaterPhaseMatches } from "./real-knockout-fixtures";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -46,8 +44,6 @@ type Prediction = {
 
 type MatchOddsById = Record<number, MatchOdds>;
 
-type NewMatchPayload = Omit<Match, "id">;
-
 type GroupStandingRow = {
   team: string;
   played: number;
@@ -63,29 +59,6 @@ type GroupInfo = {
   finishedMatches: number;
 };
 
-type QualifiedThirdPlace = GroupStandingRow & {
-  group: string;
-};
-
-type RoundOf32Seed =
-  | {
-      type: "group";
-      group: string;
-      position: 1 | 2;
-    }
-  | {
-      type: "third";
-      candidates: string[];
-    };
-
-type RoundOf32Fixture = {
-  matchNumber: number;
-  kickoff_at: string;
-  venue: string;
-  teamA: RoundOf32Seed;
-  teamB: RoundOf32Seed;
-};
-
 const realPhasePrefix = "Reel - ";
 const round32AssignmentsSettingKey = "real_round32_assignments";
 const realPhaseOrder = [
@@ -94,121 +67,6 @@ const realPhaseOrder = [
   "Quarts de finale",
   "Demi-finales",
   "Finale",
-];
-
-const roundOf32Fixtures: RoundOf32Fixture[] = [
-  {
-    matchNumber: 73,
-    kickoff_at: "2026-06-28T19:00:00.000Z",
-    venue: "SoFi Stadium",
-    teamA: { type: "group", group: "A", position: 2 },
-    teamB: { type: "group", group: "B", position: 2 },
-  },
-  {
-    matchNumber: 74,
-    kickoff_at: "2026-06-29T20:30:00.000Z",
-    venue: "Gillette Stadium",
-    teamA: { type: "group", group: "E", position: 1 },
-    teamB: { type: "third", candidates: ["A", "B", "C", "D", "F"] },
-  },
-  {
-    matchNumber: 75,
-    kickoff_at: "2026-06-30T01:00:00.000Z",
-    venue: "Estadio BBVA",
-    teamA: { type: "group", group: "F", position: 1 },
-    teamB: { type: "group", group: "C", position: 2 },
-  },
-  {
-    matchNumber: 76,
-    kickoff_at: "2026-06-29T17:00:00.000Z",
-    venue: "NRG Stadium",
-    teamA: { type: "group", group: "C", position: 1 },
-    teamB: { type: "group", group: "F", position: 2 },
-  },
-  {
-    matchNumber: 77,
-    kickoff_at: "2026-06-30T21:00:00.000Z",
-    venue: "MetLife Stadium",
-    teamA: { type: "group", group: "I", position: 1 },
-    teamB: { type: "third", candidates: ["C", "D", "F", "G", "H"] },
-  },
-  {
-    matchNumber: 78,
-    kickoff_at: "2026-06-30T17:00:00.000Z",
-    venue: "AT&T Stadium",
-    teamA: { type: "group", group: "E", position: 2 },
-    teamB: { type: "group", group: "I", position: 2 },
-  },
-  {
-    matchNumber: 79,
-    kickoff_at: "2026-07-01T01:00:00.000Z",
-    venue: "Estadio Azteca",
-    teamA: { type: "group", group: "A", position: 1 },
-    teamB: { type: "third", candidates: ["C", "E", "F", "H", "I"] },
-  },
-  {
-    matchNumber: 80,
-    kickoff_at: "2026-07-01T16:00:00.000Z",
-    venue: "Mercedes-Benz Stadium",
-    teamA: { type: "group", group: "L", position: 1 },
-    teamB: { type: "third", candidates: ["E", "H", "I", "J", "K"] },
-  },
-  {
-    matchNumber: 81,
-    kickoff_at: "2026-07-02T00:00:00.000Z",
-    venue: "Levi's Stadium",
-    teamA: { type: "group", group: "D", position: 1 },
-    teamB: { type: "third", candidates: ["B", "E", "F", "I", "J"] },
-  },
-  {
-    matchNumber: 82,
-    kickoff_at: "2026-07-01T20:00:00.000Z",
-    venue: "Lumen Field",
-    teamA: { type: "group", group: "G", position: 1 },
-    teamB: { type: "third", candidates: ["A", "E", "H", "I", "J"] },
-  },
-  {
-    matchNumber: 83,
-    kickoff_at: "2026-07-02T23:00:00.000Z",
-    venue: "BMO Field",
-    teamA: { type: "group", group: "K", position: 2 },
-    teamB: { type: "group", group: "L", position: 2 },
-  },
-  {
-    matchNumber: 84,
-    kickoff_at: "2026-07-02T19:00:00.000Z",
-    venue: "SoFi Stadium",
-    teamA: { type: "group", group: "H", position: 1 },
-    teamB: { type: "group", group: "J", position: 2 },
-  },
-  {
-    matchNumber: 85,
-    kickoff_at: "2026-07-03T03:00:00.000Z",
-    venue: "BC Place",
-    teamA: { type: "group", group: "B", position: 1 },
-    teamB: { type: "third", candidates: ["E", "F", "G", "I", "J"] },
-  },
-  {
-    matchNumber: 86,
-    kickoff_at: "2026-07-03T22:00:00.000Z",
-    venue: "Hard Rock Stadium",
-    teamA: { type: "group", group: "J", position: 1 },
-    teamB: { type: "group", group: "H", position: 2 },
-  },
-  {
-    matchNumber: 87,
-    kickoff_at: "2026-07-04T01:30:00.000Z",
-    venue: "Arrowhead Stadium",
-    teamA: { type: "group", group: "K", position: 1 },
-    teamB: { type: "third", candidates: ["D", "E", "I", "J", "L"] },
-  },
-  {
-    matchNumber: 88,
-    kickoff_at: "2026-07-03T18:00:00.000Z",
-    venue: "AT&T Stadium",
-    teamA: { type: "group", group: "D", position: 2 },
-    teamB: { type: "group", group: "G", position: 2 },
-  },
 ];
 
 function toRealPhase(phase: string) {
@@ -382,113 +240,6 @@ function countMissingFirstRoundScores(matches: Match[]) {
   );
 }
 
-function compareGroupRows(a: GroupStandingRow, b: GroupStandingRow) {
-  if (b.points !== a.points) return b.points - a.points;
-  if (b.goalDifference !== a.goalDifference) {
-    return b.goalDifference - a.goalDifference;
-  }
-  if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
-  return a.team.localeCompare(b.team);
-}
-
-function getQualifiedThirdPlaces(groupInfo: Record<string, GroupInfo>) {
-  return Object.entries(groupInfo)
-    .flatMap(([group, info]) => {
-      const row = info.rows[2];
-      return row ? [{ ...row, group }] : [];
-    })
-    .sort(compareGroupRows)
-    .slice(0, 8);
-}
-
-function getThirdPlaceSeeds() {
-  return roundOf32Fixtures.flatMap((fixture, fixtureIndex) =>
-    [fixture.teamA, fixture.teamB].flatMap((seed, seedIndex) =>
-      seed.type === "third"
-        ? [{ fixtureIndex, seedIndex, candidates: seed.candidates }]
-        : []
-    )
-  );
-}
-
-function assignThirdPlaces(groupInfo: Record<string, GroupInfo>) {
-  const thirdSeeds = getThirdPlaceSeeds();
-  const qualifiedThirds = getQualifiedThirdPlaces(groupInfo);
-  const assignments = new Map<number, QualifiedThirdPlace>();
-  const usedGroups = new Set<string>();
-  const seedOrder = thirdSeeds
-    .map((seed, index) => ({ ...seed, index }))
-    .sort((a, b) => a.candidates.length - b.candidates.length);
-
-  function backtrack(seedOrderIndex: number): boolean {
-    if (seedOrderIndex >= seedOrder.length) return true;
-
-    const seed = seedOrder[seedOrderIndex];
-    const candidates = qualifiedThirds.filter(
-      (third) =>
-        seed.candidates.includes(third.group) && !usedGroups.has(third.group)
-    );
-
-    for (const candidate of candidates) {
-      assignments.set(seed.index, candidate);
-      usedGroups.add(candidate.group);
-
-      if (backtrack(seedOrderIndex + 1)) return true;
-
-      assignments.delete(seed.index);
-      usedGroups.delete(candidate.group);
-    }
-
-    return false;
-  }
-
-  return backtrack(0) ? assignments : new Map<number, QualifiedThirdPlace>();
-}
-
-function resolveSeed(
-  seed: RoundOf32Seed,
-  groupInfo: Record<string, GroupInfo>,
-  thirdAssignments: Map<number, QualifiedThirdPlace>,
-  thirdSeedIndex: number
-) {
-  if (seed.type === "third") {
-    return thirdAssignments.get(thirdSeedIndex)?.team ?? null;
-  }
-
-  const group = groupInfo[seed.group];
-  if (!group || group.rows.length < seed.position) return null;
-
-  return group.rows[seed.position - 1].team;
-}
-
-function getPhaseMatches(matches: Match[], phase: string) {
-  return matches
-    .filter((match) => match.phase === toRealPhase(phase))
-    .sort(
-      (a, b) =>
-        new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime() ||
-        a.id - b.id
-    );
-}
-
-function hasPairing(matches: Match[], teamA: string, teamB: string) {
-  return matches.some(
-    (match) =>
-      (match.team_a === teamA && match.team_b === teamB) ||
-      (match.team_a === teamB && match.team_b === teamA)
-  );
-}
-
-function getWinner(match: Match) {
-  if (!match.is_finished || match.score_a === null || match.score_b === null) {
-    return null;
-  }
-
-  if (match.score_a > match.score_b) return match.team_a;
-  if (match.score_b > match.score_a) return match.team_b;
-  return null;
-}
-
 function getTournamentStartAt(matches: Match[]) {
   const kickoffTimes = matches
     .map((match) => match.kickoff_at)
@@ -499,175 +250,6 @@ function getTournamentStartAt(matches: Match[]) {
   if (kickoffTimes.length === 0) return null;
 
   return Math.min(...kickoffTimes);
-}
-
-function buildAvailableRealMatches(matches: Match[]) {
-  if (!isFirstRoundComplete(matches)) return [];
-
-  const payload: NewMatchPayload[] = [];
-  const groupInfo = buildGroupInfo(matches);
-  const thirdAssignments = assignThirdPlaces(groupInfo);
-  const existingRound16 = getPhaseMatches(matches, "16e de finale");
-  let thirdSeedIndex = 0;
-
-  for (const fixture of roundOf32Fixtures) {
-    const resolveFixtureSeed = (seed: RoundOf32Seed) => {
-      const seedIndex = seed.type === "third" ? thirdSeedIndex : -1;
-      if (seed.type === "third") thirdSeedIndex += 1;
-      return resolveSeed(seed, groupInfo, thirdAssignments, seedIndex);
-    };
-
-    const teamA = resolveFixtureSeed(fixture.teamA);
-    const teamB = resolveFixtureSeed(fixture.teamB);
-
-    if (!teamA || !teamB) continue;
-    if (hasPairing(existingRound16, teamA, teamB)) continue;
-
-    payload.push({
-      match_number: fixture.matchNumber,
-      phase: toRealPhase("16e de finale"),
-      team_a: teamA,
-      team_b: teamB,
-      kickoff_at: fixture.kickoff_at,
-      venue: fixture.venue,
-      city: getMatchCity(fixture.venue),
-      score_a: null,
-      score_b: null,
-      is_finished: false,
-    });
-  }
-
-  for (let phaseIndex = 1; phaseIndex < realPhaseOrder.length; phaseIndex += 1) {
-    const targetPhase = realPhaseOrder[phaseIndex];
-    const previousPhase = realPhaseOrder[phaseIndex - 1];
-    const previousMatches = getPhaseMatches(matches, previousPhase);
-    const existingTarget = getPhaseMatches(matches, targetPhase);
-
-    for (let index = 0; index < previousMatches.length; index += 2) {
-      const leftMatch = previousMatches[index];
-      const rightMatch = previousMatches[index + 1];
-      if (!leftMatch || !rightMatch) continue;
-
-      const teamA = getWinner(leftMatch);
-      const teamB = getWinner(rightMatch);
-      if (!teamA || !teamB) continue;
-      if (hasPairing(existingTarget, teamA, teamB)) continue;
-
-      const fixture = getRealLaterFixture(
-        targetPhase as "8e de finale" | "Quarts de finale" | "Demi-finales" | "Finale",
-        index / 2
-      );
-
-      if (!fixture) continue;
-
-      payload.push({
-        phase: toRealPhase(targetPhase),
-        team_a: teamA,
-        team_b: teamB,
-        kickoff_at: fixture.kickoff_at,
-        venue: fixture.venue,
-        city: getMatchCity(fixture.venue),
-        score_a: null,
-        score_b: null,
-        is_finished: false,
-      });
-    }
-  }
-
-  return payload;
-}
-
-async function syncRealMatches() {
-  "use server";
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("roles, role, is_admin")
-    .eq("id", user.id)
-    .single();
-
-  if (!isAdmin(profile ?? undefined)) {
-    throw new Error("Accès admin refusé");
-  }
-
-  const adminSupabase = createAdminClient();
-
-  await syncAvailableRealMatches(adminSupabase);
-
-  revalidatePath("/real-knockout");
-  revalidatePath("/dashboard");
-}
-
-async function syncAvailableRealMatches(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data: matches } = await supabase
-    .from("matches")
-    .select("*")
-    .order("kickoff_at", { ascending: true });
-
-  const safeMatches = (matches ?? []) as Match[];
-  const payload = Array.from(
-    new Map(
-      buildAvailableRealMatches(safeMatches).map((match) => [
-        match.match_number ?? `${match.phase}|${match.team_a}|${match.team_b}|${match.kickoff_at}`,
-        match,
-      ])
-    ).values()
-  );
-
-const withNumber = payload.filter((m) => m.match_number != null);
-const withoutNumber = payload.filter((m) => m.match_number == null);
-
-if (withNumber.length > 0) {
-  await supabase.from("matches").upsert(withNumber, {
-    onConflict: "match_number",
-  });
-}
-
-for (const match of withoutNumber) {
-  const { data: existing } = await supabase
-    .from("matches")
-    .select("id")
-    .eq("phase", match.phase)
-    .eq("team_a", match.team_a)
-    .eq("team_b", match.team_b)
-    .maybeSingle();
-
-  if (!existing) {
-    await supabase.from("matches").insert(match);
-  }
-}
-
-  const existingLaterMatches = getRealLaterPhaseMatches(safeMatches);
-  for (const item of existingLaterMatches) {
-    if (!item.fixture) continue;
-
-    const nextCity = getMatchCity(item.fixture.venue);
-    const current = safeMatches.find((match) => match.id === item.id);
-
-    if (
-      current?.kickoff_at === item.fixture.kickoff_at &&
-      current?.venue === item.fixture.venue &&
-      current?.city === nextCity
-    ) {
-      continue;
-    }
-
-    await supabase
-      .from("matches")
-      .update({
-        kickoff_at: item.fixture.kickoff_at,
-        venue: item.fixture.venue,
-        city: nextCity,
-      })
-      .eq("id", item.id);
-  }
 }
 
 async function updateMatchResult(formData: FormData) {
@@ -703,15 +285,8 @@ async function updateMatchResult(formData: FormData) {
     })
     .eq("id", matchId);
 
-  await syncAvailableRealMatches(supabase);
-
   revalidatePath("/real-knockout");
   revalidatePath("/dashboard");
-}
-
-async function autoSyncRealMatches() {
-  const adminSupabase = createAdminClient();
-  await syncAvailableRealMatches(adminSupabase);
 }
 
 export default async function RealKnockoutPage() {
@@ -731,10 +306,6 @@ export default async function RealKnockoutPage() {
     .single();
 
   const isAdminUser = isAdmin(profile ?? undefined);
-
-  if (isAdminUser) {
-    await autoSyncRealMatches();
-  }
 
   const { data: matches } = await adminSupabase
     .from("matches")
@@ -816,23 +387,23 @@ export default async function RealKnockoutPage() {
       (prediction) => prediction.match_id === match.id
     );
 
-const allPoints = matchPredictions.map((prediction) =>
-  getPredictionPoints(
-    prediction.predicted_a,
-    prediction.predicted_b,
-    actualA,
-    actualB,
-    match.is_finished,
-    match.phase,
-    matchOdds[match.id] ?? { one: 1, draw: 1, two: 1 }
-  )
-);
+    const allPoints = matchPredictions.map((prediction) =>
+      getPredictionPoints(
+        prediction.predicted_a,
+        prediction.predicted_b,
+        actualA,
+        actualB,
+        match.is_finished,
+        match.phase,
+        matchOdds[match.id] ?? { one: 1, draw: 1, two: 1 }
+      )
+    );
 
     const myPrediction = matchPredictions.find(
       (prediction) => prediction.user_id === user.id
     );
 
-matchStats[match.id] = {
+    matchStats[match.id] = {
       myPoints: myPrediction
         ? getPredictionPoints(
             myPrediction.predicted_a,
@@ -883,17 +454,6 @@ matchStats[match.id] = {
               >
                 Saisir les 16e
               </Link>
-            )}
-            {isAdminUser && (
-              <form action={syncRealMatches} suppressHydrationWarning>
-                <button
-                  type="submit"
-                  disabled={!firstRoundComplete}
-                  className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Synchroniser
-                </button>
-              </form>
             )}
           </div>
         </section>

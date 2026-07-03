@@ -3,427 +3,482 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import type {
-  LeaderboardPayload,
-  ScoreBreakdown,
-  ScoreReportRow,
-} from "@/app/dashboard/leaderboard-data";
+import { formatMatchDate, formatMatchTime } from "@/app/lib/time-zone";
+import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
+import { getMatchCity } from "@/app/lib/fifa-cities";
 import { formatOneDecimal } from "@/app/dashboard/format";
-import ScoreReportDetails from "@/app/dashboard/score-report-details";
 
-const STORAGE_KEY = "activeGroupId";
 const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
+const SIMULATED_DATE_STORAGE_KEY = "simulated-date";
+const MOBILE_SAVE_ALL_EVENT = "mobile-save-all-group-predictions";
 
-type LeaderboardRow = LeaderboardPayload["rows"][number];
-
-type RankingMetric = "total" | "group" | "groupPlacement" | "knockout" | "real";
-
-const RANKING_METRICS: { key: RankingMetric; label: string }[] = [
-  { key: "total", label: "Total" },
-  { key: "group", label: "Matchs 1T" },
-  { key: "groupPlacement", label: "Classement Grp" },
-  { key: "knockout", label: "2e tours" },
-  { key: "real", label: "2e tours réel" },
-];
-
-type ReportSectionItem = {
-  key: string;
-  label: string;
-  getValue: (breakdown: ScoreBreakdown, groupPlacementPoints: number) => number;
+type Match = {
+  id: number;
+  phase: string;
+  team_a: string;
+  team_b: string;
+  kickoff_at: string;
+  venue?: string | null;
+  city?: string | null;
+  score_a: number | null;
+  score_b: number | null;
+  is_finished: boolean | null;
 };
 
-const REPORT_SECTION_ITEMS: ReportSectionItem[] = [
-  { key: "groupMatches", label: "Matchs 1T", getValue: (b, g) => b.group - g },
-  { key: "groupPlacement", label: "Classement groupe", getValue: (b, g) => b.groupPlacement || g },
-  { key: "knockoutQualification", label: "Tours élim.", getValue: (b) => b.knockout },
-  { key: "realKnockout", label: "2e tours réels", getValue: (b) => b.real },
-  { key: "topScorer", label: "Meilleur buteur", getValue: (b) => b.topScorer },
-];
+type Prediction = {
+  match_id: number;
+  predicted_a: number;
+  predicted_b: number;
+};
 
-function getMetricValue(
-  metric: RankingMetric,
-  row: LeaderboardRow,
-  details?: ScoreBreakdown,
-  groupPlacementPoints = 0
-) {
-  if (metric === "total") return row.points;
-  if (!details) return 0;
+type MatchStats = {
+  myPoints: number | null;
+  averagePoints: number | null;
+};
 
-  switch (metric) {
-    case "group":
-      return details.group - groupPlacementPoints;
-    case "groupPlacement":
-      return groupPlacementPoints;
-    case "knockout":
-      return details.knockout;
-    case "real":
-      return details.real;
-    default:
-      return 0;
+type MatchOdds = {
+  one: number;
+  draw: number;
+  two: number;
+};
+
+type ScoreEntry = { a: string; b: string };
+type FormValues = Record<number, ScoreEntry>;
+
+function readStoredSimulatedDate() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(SIMULATED_DATE_STORAGE_KEY) || null;
+}
+
+function computeOddsFromCounts(counts: MatchOdds) {
+  const total = counts.one + counts.draw + counts.two;
+
+  if (total === 0) {
+    return { one: 1, draw: 1, two: 1 };
   }
+
+  const toOdds = (count: number) => {
+    const raw = total / Math.max(count, 1);
+    return Math.max(1, Math.round(raw * 100) / 100);
+  };
+
+  return {
+    one: toOdds(counts.one),
+    draw: toOdds(counts.draw),
+    two: toOdds(counts.two),
+  };
 }
 
-function rankBadgeClasses(index: number) {
-  if (index === 0) return "bg-amber-400 text-amber-950";
-  if (index === 1) return "bg-slate-300 text-slate-800";
-  if (index === 2) return "bg-orange-300 text-orange-950";
-  return "bg-slate-100 text-slate-600";
-}
-
-export default function MobileLeaderboard() {
+export default function MobilePredictionForm({
+  matches,
+  existingPredictions,
+  userId,
+  matchStats,
+  matchPredictionCounts,
+  isAdmin,
+  syncRealKnockoutMatches,
+}: {
+  matches: Match[];
+  existingPredictions: Prediction[];
+  userId: string;
+  matchStats: Record<number, MatchStats>;
+  matchPredictionCounts: Record<number, MatchOdds>;
+  isAdmin: boolean;
+  syncRealKnockoutMatches: (formData: FormData) => Promise<void>;
+}) {
   const router = useRouter();
-  const [rows, setRows] = useState<LeaderboardRow[]>([]);
-  const [detailsByUser, setDetailsByUser] = useState<
-    Record<string, ScoreBreakdown>
-  >({});
-  const [groupPlacementPointsByUser, setGroupPlacementPointsByUser] = useState<
-    Record<string, number>
-  >({});
-  const [scoreReportByUser, setScoreReportByUser] = useState<
-    Record<string, ScoreReportRow[]>
-  >({});
-  const [message, setMessage] = useState("Chargement...");
-  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
-  const [reportUserId, setReportUserId] = useState<string | null>(null);
-  const [reportSectionKey, setReportSectionKey] = useState<string | null>(null);
-  const [rankingMetric, setRankingMetric] = useState<RankingMetric>("total");
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return window.localStorage.getItem(STORAGE_KEY);
-  });
+  const timeZone = useUserTimeZone();
+
+  const initialValues = useMemo(() => {
+    const values: FormValues = {};
+    for (const prediction of existingPredictions) {
+      values[prediction.match_id] = {
+        a: String(prediction.predicted_a),
+        b: String(prediction.predicted_b),
+      };
+    }
+    return values;
+  }, [existingPredictions]);
+
+  const initialRealScores = useMemo(() => {
+    const values: FormValues = {};
+    for (const match of matches) {
+      values[match.id] = {
+        a: match.score_a !== null ? String(match.score_a) : "",
+        b: match.score_b !== null ? String(match.score_b) : "",
+      };
+    }
+    return values;
+  }, [matches]);
+
+  const [values, setValues] = useState<FormValues>(initialValues);
+  const [realScores, setRealScores] = useState<FormValues>(initialRealScores);
+  const [savingMatch, setSavingMatch] = useState<number | null>(null);
+  const [message, setMessage] = useState("");
+  const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
+  const [serverNowTime] = useState(() => Date.now());
 
   useEffect(() => {
-    const handleActiveGroupUpdated = () => {
-      setActiveGroupId(window.localStorage.getItem(STORAGE_KEY));
-    };
+    function syncSimulatedDateFromStorage() {
+      setSimulatedNow(readStoredSimulatedDate());
+    }
 
-    window.addEventListener("active-group-updated", handleActiveGroupUpdated);
-    return () =>
-      window.removeEventListener(
-        "active-group-updated",
-        handleActiveGroupUpdated
-      );
-  }, []);
+    async function loadSimulatedDate() {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "simulated_date")
+        .maybeSingle();
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadLeaderboard() {
-      try {
-        setMessage("Chargement...");
-
-        const response = await fetch(
-          `/api/leaderboard${
-            activeGroupId
-              ? `?groupId=${encodeURIComponent(activeGroupId)}`
-              : ""
-          }`,
-          { cache: "no-store" }
-        );
-
-        if (cancelled) return;
-
-        const payload = (await response.json()) as LeaderboardPayload & {
-          error?: string;
-        };
-
-        if (!response.ok) {
-          setMessage(payload.error ?? "Erreur chargement classement.");
-          return;
-        }
-
-        setRows(payload.rows);
-        setDetailsByUser(payload.detailsByUser);
-        setGroupPlacementPointsByUser(
-          payload.groupPlacementPointsByUser ?? {}
-        );
-        setScoreReportByUser(payload.scoreReportByUser ?? {});
-        setMessage(payload.message);
-      } catch (error) {
-        console.error("Erreur leaderboard mobile:", error);
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : "Erreur chargement classement."
-        );
+      if (data?.value) {
+        setSimulatedNow(data.value);
+      } else {
+        setSimulatedNow(readStoredSimulatedDate());
       }
     }
 
-    void loadLeaderboard();
-
-    const handleLeaderboardRefresh = () => {
-      void loadLeaderboard();
-    };
-
-    const channel = supabase
-      .channel("leaderboard-mobile-live")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "predictions" },
-        () => {
-          void loadLeaderboard();
-          router.refresh();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "matches" },
-        () => {
-          void loadLeaderboard();
-          router.refresh();
-        }
-      )
-      .subscribe();
-
-    window.addEventListener(
-      LEADERBOARD_REFRESH_EVENT,
-      handleLeaderboardRefresh
-    );
+    syncSimulatedDateFromStorage();
+    const intervalId = window.setInterval(syncSimulatedDateFromStorage, 500);
+    void loadSimulatedDate();
 
     return () => {
-      cancelled = true;
-      supabase.removeChannel(channel);
-      window.removeEventListener(
-        LEADERBOARD_REFRESH_EVENT,
-        handleLeaderboardRefresh
-      );
+      window.clearInterval(intervalId);
     };
-  }, [activeGroupId, router]);
+  }, []);
 
-  const sortedRows = useMemo(
-    () =>
-      rows
-        .map((row) => ({
-          row,
-          value: getMetricValue(
-            rankingMetric,
-            row,
-            detailsByUser[row.user_id],
-            groupPlacementPointsByUser[row.user_id] ?? 0
-          ),
-        }))
-        .sort((a, b) => b.value - a.value || b.row.points - a.row.points),
-    [rows, rankingMetric, detailsByUser, groupPlacementPointsByUser]
-  );
+  const appNowTime = simulatedNow
+    ? new Date(simulatedNow).getTime()
+    : serverNowTime;
+useEffect(() => {
+  async function handleSaveAll() {
+    const editableMatches = matches.filter((match) => {
+      const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
+      return !hasStarted || (isAdmin && hasStarted);
+    });
 
-  const reportRow = useMemo(
-    () =>
-      sortedRows.find((entry) => entry.row.user_id === reportUserId)?.row ?? null,
-    [sortedRows, reportUserId]
-  );
-
-  useEffect(() => {
-    if (reportUserId && !sortedRows.some((entry) => entry.row.user_id === reportUserId)) {
-      setReportUserId(null);
-      setReportSectionKey(null);
+    for (const match of editableMatches) {
+      await saveMatch(match);
     }
-  }, [sortedRows, reportUserId]);
-
-  function closeReport() {
-    setReportUserId(null);
-    setReportSectionKey(null);
   }
 
-  function openReportSection(userId: string, sectionKey: string) {
-    setReportUserId(userId);
-    setReportSectionKey(sectionKey);
+  window.addEventListener("mobile-save-all-group-predictions", handleSaveAll);
+
+  return () => {
+    window.removeEventListener(
+      "mobile-save-all-group-predictions",
+      handleSaveAll
+    );
+  };
+}, [matches, values, realScores, isAdmin, appNowTime]);
+  function updateValue(matchId: number, side: "a" | "b", value: string) {
+    setValues((prev) => ({
+      ...prev,
+      [matchId]: {
+        a: side === "a" ? value : prev[matchId]?.a ?? "",
+        b: side === "b" ? value : prev[matchId]?.b ?? "",
+      },
+    }));
   }
 
-  useEffect(() => {
-    if (!reportRow || typeof document === "undefined") return;
+  function updateRealScore(matchId: number, side: "a" | "b", value: string) {
+    setRealScores((prev) => ({
+      ...prev,
+      [matchId]: {
+        a: side === "a" ? value : prev[matchId]?.a ?? "",
+        b: side === "b" ? value : prev[matchId]?.b ?? "",
+      },
+    }));
+  }
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+  async function saveMatch(match: Match) {
+    setMessage("");
+    setSavingMatch(match.id);
 
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [reportRow]);
+    try {
+      const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
 
-  if (sortedRows.length === 0) {
+      // Prediction (editable only before kickoff).
+      const entry = values[match.id];
+      if (!hasStarted && entry && entry.a !== "" && entry.b !== "") {
+        const predictedA = Number(entry.a);
+        const predictedB = Number(entry.b);
+
+        if (
+          !Number.isNaN(predictedA) &&
+          !Number.isNaN(predictedB) &&
+          predictedA >= 0 &&
+          predictedB >= 0
+        ) {
+          const { error } = await supabase.from("predictions").upsert(
+            [
+              {
+                user_id: userId,
+                match_id: match.id,
+                predicted_a: predictedA,
+                predicted_b: predictedB,
+                updated_at: new Date().toISOString(),
+              },
+            ],
+            { onConflict: "user_id,match_id" }
+          );
+
+          if (error) {
+            setMessage(`Erreur sauvegarde pronostic : ${error.message}`);
+            return;
+          }
+        }
+      }
+
+      // Real score (admin only, after kickoff).
+      if (isAdmin && hasStarted) {
+        const real = realScores[match.id];
+        if (real && real.a !== "" && real.b !== "") {
+          const scoreA = Number(real.a);
+          const scoreB = Number(real.b);
+
+          if (
+            !Number.isNaN(scoreA) &&
+            !Number.isNaN(scoreB) &&
+            scoreA >= 0 &&
+            scoreB >= 0
+          ) {
+            const { error } = await supabase
+              .from("matches")
+              .update({
+                score_a: scoreA,
+                score_b: scoreB,
+                is_finished: true,
+              })
+              .eq("id", match.id);
+
+            if (error) {
+              setMessage(`Erreur sauvegarde score réel : ${error.message}`);
+              return;
+            }
+
+            await syncRealKnockoutMatches(new FormData());
+          }
+        }
+      }
+
+      window.dispatchEvent(new Event(LEADERBOARD_REFRESH_EVENT));
+      router.refresh();
+      setMessage("Sauvegarde effectuée.");
+    } catch (error) {
+      console.error("Erreur saveMatch mobile:", error);
+      setMessage("Erreur lors de la sauvegarde.");
+    } finally {
+      setSavingMatch(null);
+    }
+  }
+
+  if (matches.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-center text-sm text-slate-500 shadow-sm">
-        {message}
+        Aucun match du premier tour n&apos;est disponible pour le moment.
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
-      <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        {(() => {
-          const totalMetric = RANKING_METRICS[0];
-          const isTotalActive = rankingMetric === totalMetric.key;
+    <div className="space-y-3">
+      {message ? (
+        <p className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm">
+          {message}
+        </p>
+      ) : null}
 
-          return (
-            <label
-              className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition ${
-                isTotalActive
-                  ? "border-red-600 bg-red-600 text-white"
-                  : "border-red-200 bg-white text-red-600"
-              }`}
-            >
-              <input
-                type="radio"
-                name="ranking-metric-mobile"
-                value={totalMetric.key}
-                checked={isTotalActive}
-                onChange={() => setRankingMetric(totalMetric.key)}
-                className="sr-only"
-              />
-              {totalMetric.label}
-            </label>
-          );
-        })()}
+      {matches.map((match) => {
+        const kickoffDate = new Date(match.kickoff_at);
+        const hasStarted = kickoffDate.getTime() <= appNowTime;
+        const canPredict = !hasStarted;
+        const hasOfficialScore =
+          match.is_finished &&
+          match.score_a !== null &&
+          match.score_b !== null;
+        const canEnterRealScore = isAdmin && hasStarted;
 
-        <div className="grid grid-cols-2 gap-2">
-          {RANKING_METRICS.slice(1).map((metric) => {
-            const isActive = rankingMetric === metric.key;
+        const statusLabel = !hasStarted
+          ? "Ouvert"
+          : hasOfficialScore
+            ? "Terminé"
+            : "Bloqué";
 
-            return (
-              <label
-                key={metric.key}
-                className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition ${
-                  isActive
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-600"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="ranking-metric-mobile"
-                  value={metric.key}
-                  checked={isActive}
-                  onChange={() => setRankingMetric(metric.key)}
-                  className="sr-only"
-                />
-                {metric.label}
-              </label>
-            );
-          })}
-        </div>
-      </div>
+        const stats = matchStats[match.id];
+        const myPoints = stats?.myPoints ?? null;
+        const averagePoints = stats?.averagePoints ?? null;
 
-      {sortedRows.map(({ row, value }, index) => {
-        const breakdown = detailsByUser[row.user_id];
-        const groupPlacementPoints =
-          groupPlacementPointsByUser[row.user_id] ?? 0;
-        const isExpanded = expandedUserId === row.user_id;
+        const predictionCounts = {
+          ...(matchPredictionCounts[match.id] ?? { one: 0, draw: 0, two: 0 }),
+        };
+        const currentEntry = values[match.id];
+        if (currentEntry && currentEntry.a !== "" && currentEntry.b !== "") {
+          const predictedA = Number(currentEntry.a);
+          const predictedB = Number(currentEntry.b);
+          if (!Number.isNaN(predictedA) && !Number.isNaN(predictedB)) {
+            if (predictedA > predictedB) predictionCounts.one += 1;
+            else if (predictedA < predictedB) predictionCounts.two += 1;
+            else predictionCounts.draw += 1;
+          }
+        }
+        const odds = computeOddsFromCounts(predictionCounts);
 
         return (
           <article
-            key={row.user_id}
-            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+            key={match.id}
+            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
           >
-            <button
-              type="button"
-              onClick={() =>
-                setExpandedUserId(isExpanded ? null : row.user_id)
-              }
-              className="flex w-full items-center gap-3 px-3 py-3 text-left"
-            >
-              <span
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black ${rankBadgeClasses(
-                  index
-                )}`}
-              >
-                {index + 1}
+            <div className="flex items-center justify-between gap-2">
+              <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">
+                {match.phase}
               </span>
+              {statusLabel === "Terminé" ? (
+                <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-800">
+                  Terminé
+                </span>
+              ) : statusLabel === "Ouvert" ? (
+                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                  Ouvert
+                </span>
+              ) : (
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                  Bloqué
+                </span>
+              )}
+            </div>
 
-              <span className="flex-1 truncate text-sm font-semibold text-slate-900">
-                {row.nickname || "Joueur"}
+            <div className="mt-2 text-xs text-slate-500">
+              <span>{formatMatchDate(kickoffDate, timeZone)}</span>
+              <span className="mx-1">•</span>
+              <span>{formatMatchTime(kickoffDate, timeZone)}</span>
+              <span className="mx-1">•</span>
+              <span>
+                {getMatchCity(
+                  match.venue,
+                  match.city,
+                  match.team_a,
+                  match.team_b
+                )}
               </span>
+            </div>
 
-              <span className="shrink-0 rounded-full bg-slate-900 px-3 py-1 text-sm font-black text-white">
-                {formatOneDecimal(value)}
-              </span>
+            <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+              <div className="text-right text-sm font-semibold text-slate-900">
+                {match.team_a}
+              </div>
+              <div className="text-center text-base font-black text-slate-900">
+                {hasOfficialScore
+                  ? `${match.score_a} - ${match.score_b}`
+                  : "vs"}
+              </div>
+              <div className="text-left text-sm font-semibold text-slate-900">
+                {match.team_b}
+              </div>
+            </div>
 
-              <svg
-                className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${
-                  isExpanded ? "rotate-180" : ""
-                }`}
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                  clipRule="evenodd"
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Mon pronostic
+              </p>
+              <div className="mt-2 flex items-center justify-center gap-3">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={values[match.id]?.a ?? ""}
+                  onChange={(e) => updateValue(match.id, "a", e.target.value)}
+                  disabled={!canPredict}
+                  className="h-11 w-14 rounded-lg border border-slate-200 bg-white text-center text-lg font-semibold text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
                 />
-              </svg>
-            </button>
+                <span className="text-slate-400">-</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={values[match.id]?.b ?? ""}
+                  onChange={(e) => updateValue(match.id, "b", e.target.value)}
+                  disabled={!canPredict}
+                  className="h-11 w-14 rounded-lg border border-slate-200 bg-white text-center text-lg font-semibold text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
+                />
+              </div>
+            </div>
 
-            {isExpanded && breakdown ? (
-              <div className="border-t border-slate-100 bg-slate-50 px-3 py-3">
-                <p className="mb-2 text-[11px] text-slate-500">
-                  Touchez une catégorie pour voir le détail des points.
+            {isAdmin ? (
+              <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50/60 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+                  Score réel (admin)
                 </p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {REPORT_SECTION_ITEMS.map((item) => (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => openReportSection(row.user_id, item.key)}
-                      className="flex items-center justify-between rounded-lg bg-white px-2.5 py-1.5 text-left shadow-sm transition active:scale-[0.98]"
-                    >
-                      <span className="text-slate-500">{item.label}</span>
-                      <span className="font-semibold text-slate-900">
-                        {formatOneDecimal(item.getValue(breakdown, groupPlacementPoints))}
-                      </span>
-                    </button>
-                  ))}
+                <div className="mt-2 flex items-center justify-center gap-3">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={realScores[match.id]?.a ?? ""}
+                    onChange={(e) =>
+                      updateRealScore(match.id, "a", e.target.value)
+                    }
+                    disabled={!canEnterRealScore}
+                    className="h-11 w-14 rounded-lg border border-sky-200 bg-white text-center text-lg font-semibold text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-100 disabled:text-slate-400"
+                  />
+                  <span className="text-slate-400">-</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={realScores[match.id]?.b ?? ""}
+                    onChange={(e) =>
+                      updateRealScore(match.id, "b", e.target.value)
+                    }
+                    disabled={!canEnterRealScore}
+                    className="h-11 w-14 rounded-lg border border-sky-200 bg-white text-center text-lg font-semibold text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-100 disabled:text-slate-400"
+                  />
                 </div>
               </div>
+            ) : null}
+
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="rounded-lg bg-slate-50 px-2 py-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-slate-400">
+                  Cote 1-N-2
+                </p>
+                <p className="mt-0.5 font-mono text-[11px] font-semibold text-slate-700">
+                  {formatOneDecimal(odds.one)} / {formatOneDecimal(odds.draw)} /{" "}
+                  {formatOneDecimal(odds.two)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-slate-50 px-2 py-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-slate-400">
+                  Mes pts
+                </p>
+                <p className="mt-0.5 font-semibold text-slate-900">
+                  {myPoints !== null ? formatOneDecimal(myPoints) : "-"}
+                </p>
+              </div>
+              <div className="rounded-lg bg-slate-50 px-2 py-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-slate-400">
+                  Moy. pts
+                </p>
+                <p className="mt-0.5 font-semibold text-slate-700">
+                  {averagePoints !== null
+                    ? formatOneDecimal(averagePoints)
+                    : "-"}
+                </p>
+              </div>
+            </div>
+
+            {canPredict || canEnterRealScore ? (
+              <button
+                type="button"
+                onClick={() => void saveMatch(match)}
+                disabled={savingMatch === match.id}
+                className="mt-3 w-full rounded-full bg-[#7a1f2c] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingMatch === match.id ? "Sauvegarde..." : "Sauvegarder"}
+              </button>
             ) : null}
           </article>
         );
       })}
-
-      {reportRow ? (
-        <div
-          className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-slate-950/55 p-3 pt-8 backdrop-blur-sm"
-          onClick={closeReport}
-        >
-          <div
-            className="relative mt-2 max-h-[calc(100vh-3rem)] w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)]"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-4">
-              <button
-                type="button"
-                aria-label="Fermer le report"
-                className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-                onClick={closeReport}
-              >
-                <span className="text-lg leading-none">×</span>
-              </button>
-
-              <div className="pr-12">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  Report détaillé
-                  {reportSectionKey
-                    ? ` · ${REPORT_SECTION_ITEMS.find((item) => item.key === reportSectionKey)?.label ?? ""}`
-                    : ""}
-                </p>
-                <h3 className="mt-1 text-base font-semibold text-slate-900">
-                  {reportRow.nickname || "Joueur"}
-                </h3>
-                <div className="mt-2 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-900">
-                  {formatOneDecimal(reportRow.points)} pts
-                </div>
-              </div>
-            </div>
-
-            <div className="max-h-[calc(100vh-9rem)] overflow-y-auto p-4">
-              <ScoreReportDetails
-                reportRows={scoreReportByUser[reportRow.user_id] ?? []}
-                sectionKey={reportSectionKey ?? undefined}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

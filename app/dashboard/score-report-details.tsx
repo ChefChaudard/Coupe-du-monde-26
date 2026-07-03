@@ -115,9 +115,6 @@ function ReportItemContext({ item }: { item: ScoreReportRow }) {
         <p>
           {item.predictedScore} / {item.actualScore}
         </p>
-        <p className="mt-0.5 text-slate-500">
-          {item.predictedOutcome} → {item.actualOutcome}
-        </p>
       </div>
     );
   }
@@ -126,10 +123,7 @@ function ReportItemContext({ item }: { item: ScoreReportRow }) {
     return (
       <div className="text-xs text-slate-600">
         <p>
-          {item.team} - rang {item.rank}
-        </p>
-        <p className="mt-0.5 text-slate-500">
-          {item.predictedCount}/{item.participants} pronostics sur ce rang
+          {item.predictedCount} joueurs sur {item.participants}
         </p>
       </div>
     );
@@ -153,11 +147,7 @@ function ReportItemContext({ item }: { item: ScoreReportRow }) {
     return (
       <div className="text-xs text-slate-600">
         <p>
-          {item.team} - {item.slotLabel}
-        </p>
-        <p className="mt-0.5 text-slate-500">placement en {item.phase}</p>
-        <p className="mt-0.5 text-slate-500">
-          {item.predictedCount}/{item.participants} joueurs sur cette équipe dans ce tour
+          {item.predictedCount} joueurs sur {item.participants}
         </p>
       </div>
     );
@@ -175,7 +165,6 @@ function ReportItemRow({ item, withTopBorder }: { item: ScoreReportRow; withTopB
     >
       <div className="min-w-0">
         <p className="truncate font-semibold text-slate-900">{item.label}</p>
-        <p className="text-xs text-slate-500">{item.phase}</p>
       </div>
 
       <ReportItemContext item={item} />

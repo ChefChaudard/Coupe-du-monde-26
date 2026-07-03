@@ -236,7 +236,7 @@ function normalizeKnockoutTeamKey(value?: string | null) {
   return (value ?? "")
     .trim()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase();
 }
 
@@ -263,7 +263,7 @@ function normalizePlayerName(value?: string | null) {
   return value
     .trim()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase();
 }
 
@@ -922,7 +922,7 @@ export function computeLeaderboardData(
         reportId: `knockoutPlacement-${prediction.user_id}-${matchId}-a`,
         kind: "knockoutPlacement",
         phase,
-        label: `${selectedTeamA} bien placé en ${phase}`,
+        label: selectedTeamA,
         points: teamAPoints,
         base: basePoints,
         odds,
@@ -945,7 +945,7 @@ export function computeLeaderboardData(
         reportId: `knockoutPlacement-${prediction.user_id}-${matchId}-b`,
         kind: "knockoutPlacement",
         phase,
-        label: `${selectedTeamB} bien placé en ${phase}`,
+        label: selectedTeamB,
         points: teamBPoints,
         base: basePoints,
         odds,

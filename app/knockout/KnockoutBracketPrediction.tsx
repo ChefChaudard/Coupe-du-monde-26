@@ -4,10 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { formatOneDecimal } from "@/app/dashboard/format";
 import { round32Placeholders, type Round32Teams } from "./bracket-data";
-import {
-  getTopScorerProbability,
-  topScorerCandidates,
-} from "./top-scorer-candidates";
+import TopScorerSelect from "./TopScorerSelect";
 import { type RealLaterPhase } from "../real-knockout/real-knockout-fixtures";
 
 const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
@@ -129,7 +126,7 @@ function normalizeTeamKey(value?: string | null) {
   return (value ?? "")
     .trim()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase();
 }
 
@@ -990,23 +987,13 @@ if (error) {
 
         <label className="block space-y-2 text-sm font-medium text-slate-700">
           <span>Selectionner le meilleur buteur de la Coupe du monde</span>
-          <select
+          <TopScorerSelect
             value={selectedTopScorer}
-            onChange={(event) => handleTopScorerChange(event.target.value)}
+            onChange={handleTopScorerChange}
             disabled={isTournamentLocked}
-            className="w-full rounded-xl border border-amber-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 disabled:bg-slate-100"
-          >
-            <option value="">Selectionner le meilleur buteur</option>
-            {topScorerCandidates.map((player, index) => {
-              const probability = getTopScorerProbability(index);
-
-              return (
-                <option key={player} value={player}>
-                  {player} ({formatOneDecimal(probability)}%)
-                </option>
-              );
-            })}
-          </select>
+            showProbabilities
+            placeholder="Selectionner le meilleur buteur"
+          />
         </label>
       </div>
 

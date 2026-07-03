@@ -11,6 +11,12 @@ import {
   type RealLaterPhase,
 } from "@/app/real-knockout/real-knockout-fixtures";
 import Round32SlotSchedule from "./Round32SlotSchedule";
+import TopScorerSelect from "@/app/knockout/TopScorerSelect";
+import { topScorerCandidates } from "@/app/knockout/top-scorer-candidates";
+
+const TOP_SCORER_ROUND_KEY = "topScorer";
+const TOP_SCORER_REAL_PHASE = "Reel - Meilleur buteur";
+const TOP_SCORER_LABEL = "Meilleur buteur";
 
 type Fixture = {
   kickoff_at: string;
@@ -379,12 +385,92 @@ async function saveAssignments(formData: FormData) {
   redirect(`/admin/real-knockout?round=${round.key}`);
 }
 
+async function saveTopScorer(formData: FormData) {
+  "use server";
+
+  const supabase = await createClient();
+  const adminSupabase = createAdminClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("roles, role, is_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile || !isAdmin(profile)) {
+    redirectWithError(TOP_SCORER_ROUND_KEY, "Accès administration refusé.");
+  }
+
+  const player = String(formData.get("topScorer") ?? "").trim();
+
+  if (player && !(topScorerCandidates as readonly string[]).includes(player)) {
+    redirectWithError(TOP_SCORER_ROUND_KEY, "Joueur invalide sélectionné.");
+  }
+
+  const { data: existingRow, error: existingRowError } = await adminSupabase
+    .from("matches")
+    .select("id")
+    .eq("phase", TOP_SCORER_REAL_PHASE)
+    .maybeSingle();
+
+  if (existingRowError) {
+    throw new Error(existingRowError.message);
+  }
+
+  if (!player) {
+    if (existingRow) {
+      const { error } = await adminSupabase.from("matches").delete().eq("id", existingRow.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    }
+  } else if (existingRow) {
+    const { error } = await adminSupabase
+      .from("matches")
+      .update({ team_a: player, is_finished: true })
+      .eq("id", existingRow.id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } else {
+    const { error } = await adminSupabase.from("matches").insert({
+      phase: TOP_SCORER_REAL_PHASE,
+      team_a: player,
+      team_b: "",
+      kickoff_at: new Date().toISOString(),
+      venue: "",
+      city: "",
+      score_a: null,
+      score_b: null,
+      is_finished: true,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  revalidatePath("/admin/real-knockout");
+  revalidatePath("/dashboard");
+  revalidatePath("/classement");
+  redirect(`/admin/real-knockout?round=${TOP_SCORER_ROUND_KEY}`);
+}
+
 export default async function AdminRealKnockoutPage({
   searchParams,
 }: {
   searchParams?: Promise<{ error?: string; round?: string }>;
 }) {
   const resolvedSearchParams = await searchParams;
+  const isTopScorerView = resolvedSearchParams?.round === TOP_SCORER_ROUND_KEY;
   const selectedRound = getRoundByKey(resolvedSearchParams?.round);
   const errorMessage = resolvedSearchParams?.error ?? null;
 
@@ -407,31 +493,49 @@ export default async function AdminRealKnockoutPage({
     redirect("/dashboard");
   }
 
-  const { data: existingRows, error } = await adminSupabase
-    .from("matches")
-    .select("id, match_number, team_a, team_b, kickoff_at, venue, city, score_a, score_b, is_finished")
-    .eq("phase", selectedRound.realPhase)
-    .in("match_number", selectedRound.matchNumbers)
-    .order("match_number", { ascending: true });
+  const { data: existingRows, error } = isTopScorerView
+    ? { data: [], error: null }
+    : await adminSupabase
+        .from("matches")
+        .select("id, match_number, team_a, team_b, kickoff_at, venue, city, score_a, score_b, is_finished")
+        .eq("phase", selectedRound.realPhase)
+        .in("match_number", selectedRound.matchNumbers)
+        .order("match_number", { ascending: true });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  const { data: settingsRow } = await adminSupabase
-    .from("app_settings")
-    .select("value")
-    .eq("key", selectedRound.settingKey)
-    .maybeSingle();
+  const { data: settingsRow } = isTopScorerView
+    ? { data: null }
+    : await adminSupabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", selectedRound.settingKey)
+        .maybeSingle();
 
-  const slots = buildSlots(
-    selectedRound,
-    (existingRows ?? []) as MatchRow[],
-    parseAssignments(settingsRow?.value ?? null)
-  );
+  const slots = isTopScorerView
+    ? []
+    : buildSlots(
+        selectedRound,
+        (existingRows ?? []) as MatchRow[],
+        parseAssignments(settingsRow?.value ?? null)
+      );
 
   const firstMatchNumber = selectedRound.matchNumbers[0];
   const lastMatchNumber = selectedRound.matchNumbers[selectedRound.matchNumbers.length - 1];
+
+  const { data: topScorerRow, error: topScorerError } = await adminSupabase
+    .from("matches")
+    .select("team_a")
+    .eq("phase", TOP_SCORER_REAL_PHASE)
+    .maybeSingle();
+
+  if (topScorerError) {
+    throw new Error(topScorerError.message);
+  }
+
+  const currentTopScorer = topScorerRow?.team_a ?? "";
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(122,31,44,0.12),_transparent_38%),linear-gradient(180deg,_#f8fafc_0%,_#f1f5f9_100%)] px-4 py-6 sm:px-6 lg:px-8">
@@ -474,7 +578,7 @@ export default async function AdminRealKnockoutPage({
 
           <div className="mt-6 flex flex-wrap gap-2">
             {knockoutRounds.map((round) => {
-              const isActive = round.key === selectedRound.key;
+              const isActive = !isTopScorerView && round.key === selectedRound.key;
 
               return (
                 <Link
@@ -490,109 +594,187 @@ export default async function AdminRealKnockoutPage({
                 </Link>
               );
             })}
+
+            <Link
+              href={`/admin/real-knockout?round=${TOP_SCORER_ROUND_KEY}`}
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                isTopScorerView
+                  ? "bg-[#7a1f2c] text-white shadow-sm"
+                  : "border border-slate-300 bg-white text-slate-900 hover:border-slate-400 hover:bg-slate-50"
+              }`}
+            >
+              {TOP_SCORER_LABEL}
+            </Link>
           </div>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Tour sélectionné
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">{selectedRound.shortLabel}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Matchs à remplir
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">{slots.length}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Matchs prévus
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">
-                {firstMatchNumber === lastMatchNumber
-                  ? firstMatchNumber
-                  : `${firstMatchNumber} - ${lastMatchNumber}`}
-              </p>
-            </div>
+            {isTopScorerView ? (
+              <>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Tour sélectionné
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-950">{TOP_SCORER_LABEL}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 sm:col-span-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Buteur actuellement enregistré
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-950">
+                    {currentTopScorer || "Non défini"}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Tour sélectionné
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-950">{selectedRound.shortLabel}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Matchs à remplir
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-950">{slots.length}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Matchs prévus
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-950">
+                    {firstMatchNumber === lastMatchNumber
+                      ? firstMatchNumber
+                      : `${firstMatchNumber} - ${lastMatchNumber}`}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </header>
 
-        <form action={saveAssignments} className="space-y-4" suppressHydrationWarning>
-          <input type="hidden" name="roundKey" value={selectedRound.key} />
+        {isTopScorerView ? (
+          <form action={saveTopScorer} className="space-y-4" suppressHydrationWarning>
+            <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+              <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="inline-flex rounded-full bg-[#7a1f2c]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#7a1f2c]">
+                    Résultat officiel
+                  </div>
+                  <h2 className="mt-3 text-xl font-semibold text-slate-950">Meilleur buteur de la Coupe du monde</h2>
+                </div>
 
-          {slots.map((slot) => {
-            const availableTeams = getAvailableTeamsForSlot(slots, slot);
+                <p className="max-w-xl text-sm leading-6 text-slate-500">
+                  Les joueurs ayant pronostiqué ce buteur reçoivent automatiquement leurs points au
+                  prochain calcul du classement.
+                </p>
+              </div>
 
-            return (
-              <section
-                key={slot.matchNumber}
-                className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+              <div className="mt-5">
+                <label className="space-y-2">
+                  <span className="text-sm font-semibold text-slate-700">Meilleur buteur réel</span>
+                  <TopScorerSelect
+                    name="topScorer"
+                    defaultValue={currentTopScorer}
+                    showProbabilities={false}
+                    placeholder="Sélectionner le meilleur buteur"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#7a1f2c] focus:bg-white focus:ring-4 focus:ring-[#7a1f2c]/10"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <div className="flex flex-col items-start justify-between gap-4 rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)] lg:flex-row lg:items-center">
+              <p className="text-sm leading-6 text-slate-600">
+                Après sauvegarde, le classement est recalculé pour tous les joueurs ayant pronostiqué
+                ce buteur.
+              </p>
+              <button
+                type="submit"
+                className="rounded-full bg-[#7a1f2c] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822]"
               >
-                <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <div className="inline-flex rounded-full bg-[#7a1f2c]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#7a1f2c]">
-                      Match {slot.matchNumber}
+                Enregistrer le meilleur buteur
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form action={saveAssignments} className="space-y-4" suppressHydrationWarning>
+            <input type="hidden" name="roundKey" value={selectedRound.key} />
+
+            {slots.map((slot) => {
+              const availableTeams = getAvailableTeamsForSlot(slots, slot);
+
+              return (
+                <section
+                  key={slot.matchNumber}
+                  className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+                >
+                  <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="inline-flex rounded-full bg-[#7a1f2c]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#7a1f2c]">
+                        Match {slot.matchNumber}
+                      </div>
+                      <h2 className="mt-3 text-xl font-semibold text-slate-950">{slot.venue}</h2>
+                      <Round32SlotSchedule city={slot.city} kickoffAt={slot.kickoffAt} />
                     </div>
-                    <h2 className="mt-3 text-xl font-semibold text-slate-950">{slot.venue}</h2>
-                    <Round32SlotSchedule city={slot.city} kickoffAt={slot.kickoffAt} />
+
+                    <p className="max-w-xl text-sm leading-6 text-slate-500">
+                      Les sélections doivent rester uniques sur l&apos;ensemble du tour sélectionné.
+                    </p>
                   </div>
 
-                  <p className="max-w-xl text-sm leading-6 text-slate-500">
-                    Les sélections doivent rester uniques sur l&apos;ensemble du tour sélectionné.
-                  </p>
-                </div>
+                  <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-700">Équipe A</span>
+                      <select
+                        name={`match_${slot.matchNumber}_a`}
+                        defaultValue={slot.teamA}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#7a1f2c] focus:bg-white focus:ring-4 focus:ring-[#7a1f2c]/10"
+                      >
+                        <option value="">Sélectionner une équipe</option>
+                        {availableTeams.map((team) => (
+                          <option key={`${slot.matchNumber}-a-${team}`} value={team}>
+                            {team}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-                <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                  <label className="space-y-2">
-                    <span className="text-sm font-semibold text-slate-700">Équipe A</span>
-                    <select
-                      name={`match_${slot.matchNumber}_a`}
-                      defaultValue={slot.teamA}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#7a1f2c] focus:bg-white focus:ring-4 focus:ring-[#7a1f2c]/10"
-                    >
-                      <option value="">Sélectionner une équipe</option>
-                      {availableTeams.map((team) => (
-                        <option key={`${slot.matchNumber}-a-${team}`} value={team}>
-                          {team}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-700">Équipe B</span>
+                      <select
+                        name={`match_${slot.matchNumber}_b`}
+                        defaultValue={slot.teamB}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#7a1f2c] focus:bg-white focus:ring-4 focus:ring-[#7a1f2c]/10"
+                      >
+                        <option value="">Sélectionner une équipe</option>
+                        {availableTeams.map((team) => (
+                          <option key={`${slot.matchNumber}-b-${team}`} value={team}>
+                            {team}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </section>
+              );
+            })}
 
-                  <label className="space-y-2">
-                    <span className="text-sm font-semibold text-slate-700">Équipe B</span>
-                    <select
-                      name={`match_${slot.matchNumber}_b`}
-                      defaultValue={slot.teamB}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#7a1f2c] focus:bg-white focus:ring-4 focus:ring-[#7a1f2c]/10"
-                    >
-                      <option value="">Sélectionner une équipe</option>
-                      {availableTeams.map((team) => (
-                        <option key={`${slot.matchNumber}-b-${team}`} value={team}>
-                          {team}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              </section>
-            );
-          })}
-
-          <div className="flex flex-col items-start justify-between gap-4 rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)] lg:flex-row lg:items-center">
-            <p className="text-sm leading-6 text-slate-600">
-              Après sauvegarde, les matchs du tour {selectedRound.label} sont réinjectés dans la table
-              des matchs et réapparaissent dans la page publique des phases finales.
-            </p>
-            <button
-              type="submit"
-              className="rounded-full bg-[#7a1f2c] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822]"
-            >
-              Enregistrer {selectedRound.label}
-            </button>
-          </div>
-        </form>
+            <div className="flex flex-col items-start justify-between gap-4 rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)] lg:flex-row lg:items-center">
+              <p className="text-sm leading-6 text-slate-600">
+                Après sauvegarde, les matchs du tour {selectedRound.label} sont réinjectés dans la table
+                des matchs et réapparaissent dans la page publique des phases finales.
+              </p>
+              <button
+                type="submit"
+                className="rounded-full bg-[#7a1f2c] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822]"
+              >
+                Enregistrer {selectedRound.label}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </main>
   );

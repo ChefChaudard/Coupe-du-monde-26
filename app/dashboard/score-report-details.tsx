@@ -167,14 +167,18 @@ function ReportItemRow({ item, withTopBorder }: { item: ScoreReportRow; withTopB
         <p className="truncate font-semibold text-slate-900">{item.label}</p>
       </div>
 
-      <ReportItemContext item={item} />
+      <div className="flex items-center justify-between gap-3 sm:contents">
+        <ReportItemContext item={item} />
 
-      <div className="text-right text-xs font-medium text-slate-700">
-        x{formatOneDecimal(item.odds)}
-      </div>
+        <div className="flex shrink-0 items-center gap-3 sm:contents">
+          <div className="text-right text-xs font-medium text-slate-700">
+            x{formatOneDecimal(item.odds)}
+          </div>
 
-      <div className="text-right text-sm font-semibold text-slate-900">
-        +{formatOneDecimal(item.points)}
+          <div className="text-right text-sm font-semibold text-slate-900">
+            +{formatOneDecimal(item.points)}
+          </div>
+        </div>
       </div>
     </div>
   );

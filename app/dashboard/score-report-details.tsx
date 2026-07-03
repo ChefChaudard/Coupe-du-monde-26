@@ -184,8 +184,17 @@ function ReportItemRow({ item, withTopBorder }: { item: ScoreReportRow; withTopB
   );
 }
 
-export default function ScoreReportDetails({ reportRows }: { reportRows: ScoreReportRow[] }) {
-  const sections = getReportSections(reportRows);
+export default function ScoreReportDetails({
+  reportRows,
+  sectionKey,
+}: {
+  reportRows: ScoreReportRow[];
+  sectionKey?: string;
+}) {
+  const allSections = getReportSections(reportRows);
+  const sections = sectionKey
+    ? allSections.filter((section) => section.key === sectionKey)
+    : allSections;
 
   return (
     <div className="space-y-3">
@@ -264,7 +273,7 @@ export default function ScoreReportDetails({ reportRows }: { reportRows: ScoreRe
           })
         ) : (
           <p className="rounded-xl border border-slate-200 bg-white px-3 py-4 text-sm text-slate-500">
-            Aucun point acquis pour ce joueur.
+            {sectionKey ? "Aucun point acquis dans cette catégorie." : "Aucun point acquis pour ce joueur."}
           </p>
         )}
       </div>

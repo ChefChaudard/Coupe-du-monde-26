@@ -26,6 +26,20 @@ const RANKING_METRICS: { key: RankingMetric; label: string }[] = [
   { key: "real", label: "2e tours réel" },
 ];
 
+type ReportSectionItem = {
+  key: string;
+  label: string;
+  getValue: (breakdown: ScoreBreakdown, groupPlacementPoints: number) => number;
+};
+
+const REPORT_SECTION_ITEMS: ReportSectionItem[] = [
+  { key: "groupMatches", label: "Matchs 1T", getValue: (b, g) => b.group - g },
+  { key: "groupPlacement", label: "Classement groupe", getValue: (b, g) => b.groupPlacement || g },
+  { key: "knockoutQualification", label: "Tours élim.", getValue: (b) => b.knockout },
+  { key: "realKnockout", label: "2e tours réels", getValue: (b) => b.real },
+  { key: "topScorer", label: "Meilleur buteur", getValue: (b) => b.topScorer },
+];
+
 function getMetricValue(
   metric: RankingMetric,
   row: LeaderboardRow,
@@ -71,6 +85,7 @@ export default function MobileLeaderboard() {
   const [message, setMessage] = useState("Chargement...");
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [reportUserId, setReportUserId] = useState<string | null>(null);
+  const [reportSectionKey, setReportSectionKey] = useState<string | null>(null);
   const [rankingMetric, setRankingMetric] = useState<RankingMetric>("total");
   const [activeGroupId, setActiveGroupId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
@@ -200,8 +215,19 @@ export default function MobileLeaderboard() {
   useEffect(() => {
     if (reportUserId && !sortedRows.some((entry) => entry.row.user_id === reportUserId)) {
       setReportUserId(null);
+      setReportSectionKey(null);
     }
   }, [sortedRows, reportUserId]);
+
+  function closeReport() {
+    setReportUserId(null);
+    setReportSectionKey(null);
+  }
+
+  function openReportSection(userId: string, sectionKey: string) {
+    setReportUserId(userId);
+    setReportSectionKey(sectionKey);
+  }
 
   useEffect(() => {
     if (!reportRow || typeof document === "undefined") return;
@@ -330,30 +356,24 @@ export default function MobileLeaderboard() {
 
             {isExpanded && breakdown ? (
               <div className="border-t border-slate-100 bg-slate-50 px-3 py-3">
+                <p className="mb-2 text-[11px] text-slate-500">
+                  Touchez une catégorie pour voir le détail des points.
+                </p>
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <DetailItem
-                    label="Matchs 1T"
-                    value={breakdown.group - groupPlacementPoints}
-                  />
-                  <DetailItem
-                    label="Classement groupe"
-                    value={breakdown.groupPlacement || groupPlacementPoints}
-                  />
-                  <DetailItem label="Tours élim." value={breakdown.knockout} />
-                  <DetailItem label="2e tours réels" value={breakdown.real} />
-                  <DetailItem
-                    label="Meilleur buteur"
-                    value={breakdown.topScorer}
-                  />
+                  {REPORT_SECTION_ITEMS.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => openReportSection(row.user_id, item.key)}
+                      className="flex cursor-pointer items-center justify-between rounded-lg bg-white px-2.5 py-1.5 text-left shadow-sm transition active:scale-[0.98]"
+                    >
+                      <span className="text-slate-500">{item.label}</span>
+                      <span className="font-semibold text-slate-900">
+                        {formatOneDecimal(item.getValue(breakdown, groupPlacementPoints))}
+                      </span>
+                    </button>
+                  ))}
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => setReportUserId(row.user_id)}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-sm transition active:scale-[0.99]"
-                >
-                  Voir le report détaillé
-                </button>
               </div>
             ) : null}
           </article>
@@ -363,7 +383,7 @@ export default function MobileLeaderboard() {
       {reportRow ? (
         <div
           className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-slate-950/55 p-3 pt-8 backdrop-blur-sm"
-          onClick={() => setReportUserId(null)}
+          onClick={closeReport}
         >
           <div
             className="relative mt-2 max-h-[calc(100vh-3rem)] w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)]"
@@ -374,7 +394,7 @@ export default function MobileLeaderboard() {
                 type="button"
                 aria-label="Fermer le report"
                 className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-                onClick={() => setReportUserId(null)}
+                onClick={closeReport}
               >
                 <span className="text-lg leading-none">×</span>
               </button>
@@ -382,6 +402,9 @@ export default function MobileLeaderboard() {
               <div className="pr-12">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                   Report détaillé
+                  {reportSectionKey
+                    ? ` · ${REPORT_SECTION_ITEMS.find((item) => item.key === reportSectionKey)?.label ?? ""}`
+                    : ""}
                 </p>
                 <h3 className="mt-1 text-base font-semibold text-slate-900">
                   {reportRow.nickname || "Joueur"}
@@ -395,22 +418,12 @@ export default function MobileLeaderboard() {
             <div className="max-h-[calc(100vh-9rem)] overflow-y-auto p-4">
               <ScoreReportDetails
                 reportRows={scoreReportByUser[reportRow.user_id] ?? []}
+                sectionKey={reportSectionKey ?? undefined}
               />
             </div>
           </div>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function DetailItem({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-center justify-between rounded-lg bg-white px-2.5 py-1.5 shadow-sm">
-      <span className="text-slate-500">{label}</span>
-      <span className="font-semibold text-slate-900">
-        {formatOneDecimal(value)}
-      </span>
     </div>
   );
 }

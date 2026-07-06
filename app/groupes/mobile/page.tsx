@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -193,21 +192,6 @@ export default async function MobileFirstRoundPage() {
             Vue optimisée pour mobile : tous les matchs du premier tour, du plus
             proche au plus lointain.
           </p>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link
-              href="/dashboard?tab=groupes"
-              className="inline-flex items-center justify-center rounded-full bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800"
-            >
-              Vue groupes
-            </Link>
-            <Link
-              href="/groupes/matchs"
-              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              Vue bureau
-            </Link>
-          </div>
 
           <div className="mt-4 flex justify-end">
             <button

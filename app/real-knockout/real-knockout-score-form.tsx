@@ -30,11 +30,6 @@ type Match = {
 
 const SIMULATED_DATE_STORAGE_KEY = "simulated-date";
 
-function readStoredSimulatedDate() {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(SIMULATED_DATE_STORAGE_KEY) || null;
-}
-
 type Prediction = {
   match_id: number;
   predicted_a: number;
@@ -152,15 +147,14 @@ export default function RealKnockoutScoreForm({
   }, [isMounted, simulatedNow]);
 
   useEffect(() => {
-    function handleSimulatedDateUpdated(event: Event) {
-      const nextValue = (event as CustomEvent<string>).detail;
-      setSimulatedNow(nextValue || null);
-    }
+    let cancelled = false;
 
-    function syncSimulatedDateFromStorage() {
-      setSimulatedNow(readStoredSimulatedDate());
-    }
-
+    // The database (app_settings.simulated_date) is the single source of
+    // truth. A per-device localStorage fallback used to be read here too,
+    // but a stale value left over from earlier testing on a given device
+    // would then override the real clock forever on that device, even
+    // after the global setting was cleared. localStorage is now only used
+    // for same-browser instant reactivity (below), never as a fallback.
     async function loadSimulatedDate() {
       const { data } = await supabase
         .from("app_settings")
@@ -168,20 +162,33 @@ export default function RealKnockoutScoreForm({
         .eq("key", "simulated_date")
         .maybeSingle();
 
-      if (data?.value) {
-        setSimulatedNow(data.value);
-      } else {
-        setSimulatedNow(readStoredSimulatedDate());
+      if (!cancelled) {
+        setSimulatedNow(data?.value || null);
+      }
+    }
+
+    function handleSimulatedDateUpdated(event: Event) {
+      const nextValue = (event as CustomEvent<string>).detail;
+      setSimulatedNow(nextValue || null);
+    }
+
+    function handleStorageEvent(event: StorageEvent) {
+      if (event.key === SIMULATED_DATE_STORAGE_KEY) {
+        setSimulatedNow(event.newValue || null);
       }
     }
 
     window.addEventListener("simulated-date-updated", handleSimulatedDateUpdated);
-    syncSimulatedDateFromStorage();
-    const intervalId = window.setInterval(syncSimulatedDateFromStorage, 500);
+    window.addEventListener("storage", handleStorageEvent);
     void loadSimulatedDate();
+    // Re-check the global setting periodically so an already-open tab
+    // reflects a live admin toggle without needing a page refresh.
+    const intervalId = window.setInterval(loadSimulatedDate, 15000);
 
     return () => {
+      cancelled = true;
       window.removeEventListener("simulated-date-updated", handleSimulatedDateUpdated);
+      window.removeEventListener("storage", handleStorageEvent);
       window.clearInterval(intervalId);
     };
   }, []);

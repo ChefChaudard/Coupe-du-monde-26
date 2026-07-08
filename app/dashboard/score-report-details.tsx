@@ -91,6 +91,22 @@ export function getReportSections(reportRows: ScoreReportRow[]): ReportSection[]
   return sections.filter((section) => section.items.length > 0);
 }
 
+// Nombre total d'équipes en lice à chaque tour à élimination directe
+// (ex: 16e de finale = 16 matchs = 32 équipes). Sert à afficher
+// "X équipes qualifiées / Y" dans le report détaillé.
+const KNOCKOUT_ROUND_TEAM_COUNTS: Record<string, number> = {
+  "16e de finale": 32,
+  "8e de finale": 16,
+  "Quarts de finale": 8,
+  "Demi-finales": 4,
+  Finale: 2,
+};
+
+const TOTAL_KNOCKOUT_TEAMS = Object.values(KNOCKOUT_ROUND_TEAM_COUNTS).reduce(
+  (sum, count) => sum + count,
+  0
+);
+
 function groupMatchReportItemsByPhase(items: ScoreReportRow[]): ReportPhaseGroup[] {
   const groups = new Map<string, ScoreReportRow[]>();
 
@@ -214,6 +230,8 @@ export default function ScoreReportDetails({
               section.key === "groupPlacement" ||
               section.key === "knockoutQualification" ||
               section.key === "realKnockout";
+            const isKnockoutQualification = section.key === "knockoutQualification";
+            const totalTeamsFound = isKnockoutQualification ? section.items.length : null;
 
             return (
               <div key={section.key} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -222,8 +240,15 @@ export default function ScoreReportDetails({
                     <p className="text-sm font-semibold text-slate-900">{section.title}</p>
                     <p className="mt-0.5 text-xs text-slate-500">{section.subtitle}</p>
                   </div>
-                  <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-900">
-                    {formatOneDecimal(sectionPoints)} pts
+                  <div className="flex shrink-0 items-center gap-2">
+                    {totalTeamsFound !== null ? (
+                      <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-900">
+                        {totalTeamsFound}/{TOTAL_KNOCKOUT_TEAMS} équipes
+                      </div>
+                    ) : null}
+                    <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-900">
+                      {formatOneDecimal(sectionPoints)} pts
+                    </div>
                   </div>
                 </div>
 
@@ -240,6 +265,10 @@ export default function ScoreReportDetails({
                               : section.key === "realKnockout"
                                 ? "Points cumulés sur ce tour réel."
                                 : "Points cumulés sur ce groupe.";
+                        const roundTeamCount =
+                          section.key === "knockoutQualification"
+                            ? KNOCKOUT_ROUND_TEAM_COUNTS[phaseGroup.phase]
+                            : undefined;
 
                         return (
                           <div key={phaseGroup.phase} className="border-t border-slate-100 first:border-t-0 first:pt-0 pt-4">
@@ -248,8 +277,15 @@ export default function ScoreReportDetails({
                                 <p className="text-sm font-semibold text-slate-900">{phaseGroup.phase}</p>
                                 <p className="text-xs text-slate-500">{groupLabel}</p>
                               </div>
-                              <div className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-900">
-                                {formatOneDecimal(phasePoints)} pts
+                              <div className="flex shrink-0 items-center gap-2">
+                                {roundTeamCount ? (
+                                  <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-900">
+                                    {phaseGroup.items.length}/{roundTeamCount} équipes
+                                  </div>
+                                ) : null}
+                                <div className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-900">
+                                  {formatOneDecimal(phasePoints)} pts
+                                </div>
                               </div>
                             </div>
 

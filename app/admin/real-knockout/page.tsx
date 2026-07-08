@@ -11,11 +11,10 @@ import {
   type RealLaterPhase,
 } from "@/app/real-knockout/real-knockout-fixtures";
 import Round32SlotSchedule from "./Round32SlotSchedule";
-import TopScorerSelect from "@/app/knockout/TopScorerSelect";
+import TopScorerMultiSelect from "@/app/knockout/TopScorerMultiSelect";
 import { topScorerCandidates } from "@/app/knockout/top-scorer-candidates";
 
 const TOP_SCORER_ROUND_KEY = "topScorer";
-const TOP_SCORER_REAL_PHASE = "Reel - Meilleur buteur";
 const TOP_SCORER_LABEL = "Meilleur buteur";
 
 type Fixture = {
@@ -407,51 +406,49 @@ async function saveTopScorer(formData: FormData) {
     redirectWithError(TOP_SCORER_ROUND_KEY, "Accès administration refusé.");
   }
 
-  const player = String(formData.get("topScorer") ?? "").trim();
+  const rawPlayers = formData.getAll("topScorers").map((value) => String(value).trim());
+  const players = Array.from(new Set(rawPlayers.filter((value) => value.length > 0)));
 
-  if (player && !(topScorerCandidates as readonly string[]).includes(player)) {
+  const invalidPlayer = players.find(
+    (player) => !(topScorerCandidates as readonly string[]).includes(player)
+  );
+
+  if (invalidPlayer) {
     redirectWithError(TOP_SCORER_ROUND_KEY, "Joueur invalide sélectionné.");
   }
 
-  const { data: existingRow, error: existingRowError } = await adminSupabase
-    .from("matches")
-    .select("id")
-    .eq("phase", TOP_SCORER_REAL_PHASE)
-    .maybeSingle();
+  const { data: existingRows, error: existingRowsError } = await adminSupabase
+    .from("real_top_scorers")
+    .select("id, player_name");
 
-  if (existingRowError) {
-    throw new Error(existingRowError.message);
+  if (existingRowsError) {
+    throw new Error(existingRowsError.message);
   }
 
-  if (!player) {
-    if (existingRow) {
-      const { error } = await adminSupabase.from("matches").delete().eq("id", existingRow.id);
+  const currentPlayers = existingRows ?? [];
+  const rowsToDelete = currentPlayers.filter((row) => !players.includes(row.player_name));
+  const playersToInsert = players.filter(
+    (player) => !currentPlayers.some((row) => row.player_name === player)
+  );
 
-      if (error) {
-        throw new Error(error.message);
-      }
-    }
-  } else if (existingRow) {
+  if (rowsToDelete.length > 0) {
     const { error } = await adminSupabase
-      .from("matches")
-      .update({ team_a: player, is_finished: true })
-      .eq("id", existingRow.id);
+      .from("real_top_scorers")
+      .delete()
+      .in(
+        "id",
+        rowsToDelete.map((row) => row.id)
+      );
 
     if (error) {
       throw new Error(error.message);
     }
-  } else {
-    const { error } = await adminSupabase.from("matches").insert({
-      phase: TOP_SCORER_REAL_PHASE,
-      team_a: player,
-      team_b: "",
-      kickoff_at: new Date().toISOString(),
-      venue: "",
-      city: "",
-      score_a: null,
-      score_b: null,
-      is_finished: true,
-    });
+  }
+
+  if (playersToInsert.length > 0) {
+    const { error } = await adminSupabase
+      .from("real_top_scorers")
+      .insert(playersToInsert.map((player_name) => ({ player_name })));
 
     if (error) {
       throw new Error(error.message);
@@ -525,17 +522,18 @@ export default async function AdminRealKnockoutPage({
   const firstMatchNumber = selectedRound.matchNumbers[0];
   const lastMatchNumber = selectedRound.matchNumbers[selectedRound.matchNumbers.length - 1];
 
-  const { data: topScorerRow, error: topScorerError } = await adminSupabase
-    .from("matches")
-    .select("team_a")
-    .eq("phase", TOP_SCORER_REAL_PHASE)
-    .maybeSingle();
+  const { data: topScorerRows, error: topScorerError } = isTopScorerView
+    ? await adminSupabase
+        .from("real_top_scorers")
+        .select("player_name")
+        .order("player_name", { ascending: true })
+    : { data: [], error: null };
 
   if (topScorerError) {
     throw new Error(topScorerError.message);
   }
 
-  const currentTopScorer = topScorerRow?.team_a ?? "";
+  const currentTopScorers = (topScorerRows ?? []).map((row) => row.player_name);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(122,31,44,0.12),_transparent_38%),linear-gradient(180deg,_#f8fafc_0%,_#f1f5f9_100%)] px-4 py-6 sm:px-6 lg:px-8">
@@ -618,10 +616,12 @@ export default async function AdminRealKnockoutPage({
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 sm:col-span-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Buteur actuellement enregistré
+                    {currentTopScorers.length > 1
+                      ? "Buteurs actuellement enregistrés (ex-aequo)"
+                      : "Buteur actuellement enregistré"}
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-slate-950">
-                    {currentTopScorer || "Non défini"}
+                    {currentTopScorers.length > 0 ? currentTopScorers.join(", ") : "Non défini"}
                   </p>
                 </div>
               </>
@@ -666,35 +666,30 @@ export default async function AdminRealKnockoutPage({
                 </div>
 
                 <p className="max-w-xl text-sm leading-6 text-slate-500">
-                  Les joueurs ayant pronostiqué ce buteur reçoivent automatiquement leurs points au
-                  prochain calcul du classement.
+                  Les joueurs ayant pronostiqué un de ces buteurs reçoivent automatiquement leurs
+                  points au prochain calcul du classement. Sélectionne plusieurs joueurs en cas
+                  d'ex-aequo.
                 </p>
               </div>
 
               <div className="mt-5">
-                <label className="space-y-2">
-                  <span className="text-sm font-semibold text-slate-700">Meilleur buteur réel</span>
-                  <TopScorerSelect
-                    name="topScorer"
-                    defaultValue={currentTopScorer}
-                    showProbabilities={false}
-                    placeholder="Sélectionner le meilleur buteur"
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#7a1f2c] focus:bg-white focus:ring-4 focus:ring-[#7a1f2c]/10"
-                  />
-                </label>
+                <span className="mb-2 block text-sm font-semibold text-slate-700">
+                  Meilleur(s) buteur(s) réel(s)
+                </span>
+                <TopScorerMultiSelect name="topScorers" defaultSelected={currentTopScorers} />
               </div>
             </section>
 
             <div className="flex flex-col items-start justify-between gap-4 rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)] lg:flex-row lg:items-center">
               <p className="text-sm leading-6 text-slate-600">
                 Après sauvegarde, le classement est recalculé pour tous les joueurs ayant pronostiqué
-                ce buteur.
+                un de ces buteurs.
               </p>
               <button
                 type="submit"
                 className="rounded-full bg-[#7a1f2c] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822]"
               >
-                Enregistrer le meilleur buteur
+                Enregistrer le(s) meilleur(s) buteur(s)
               </button>
             </div>
           </form>

@@ -13,16 +13,26 @@ function normalizeSelection(value: string | null | undefined) {
   return (value ?? "")
     .trim()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase();
 }
 
 export const TOP_SCORER_POINTS = 20;
 
-export function getTopScorerPoints(predictedPlayer: string | null, actualPlayer: string | null) {
-  if (!predictedPlayer || !actualPlayer) return 0;
+// `actualPlayers` accepte un seul nom (rétro-compatibilité) ou une liste de
+// joueurs en cas d'ex-aequo pour le titre de meilleur buteur.
+export function getTopScorerPoints(
+  predictedPlayer: string | null,
+  actualPlayers: string | string[] | null
+) {
+  if (!predictedPlayer || !actualPlayers) return 0;
 
-  return normalizeSelection(predictedPlayer) === normalizeSelection(actualPlayer)
+  const actualList = Array.isArray(actualPlayers) ? actualPlayers : [actualPlayers];
+  if (actualList.length === 0) return 0;
+
+  const normalizedPredicted = normalizeSelection(predictedPlayer);
+
+  return actualList.some((actual) => normalizeSelection(actual) === normalizedPredicted)
     ? TOP_SCORER_POINTS
     : 0;
 }

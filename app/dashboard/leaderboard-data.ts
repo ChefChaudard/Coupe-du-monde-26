@@ -267,13 +267,16 @@ function normalizePlayerName(value?: string | null) {
     .toLowerCase();
 }
 
-function buildActualTopScorer(matches: MatchRow[]) {
-  const topScorerMatch = matches.find((match) => {
-    const normalizedPhase = fromRealPhase(match.phase).toLowerCase();
-    return normalizedPhase.includes("buteur") || normalizedPhase.includes("scorer");
-  });
+type RealTopScorerRow = {
+  player_name: string | null;
+};
 
-  return normalizePlayerName(topScorerMatch?.team_a ?? topScorerMatch?.team_b);
+// Plusieurs joueurs peuvent être retenus en cas d'ex-aequo pour le titre de
+// meilleur buteur de la Coupe du monde (table dédiée `real_top_scorers`).
+function buildActualTopScorers(realTopScorers: RealTopScorerRow[]) {
+  return realTopScorers
+    .map((row) => (row.player_name ?? "").trim())
+    .filter((name) => name.length > 0);
 }
 
 function buildTopScorerParticipationCounts(predictions: KnockoutPredictionRow[]) {
@@ -710,7 +713,8 @@ export function computeLeaderboardData(
   profiles: ProfileRow[],
   groupMemberIds: Set<string> | null,
   knockoutPredictions: KnockoutPredictionRow[] = [],
-  matches: MatchRow[] = []
+  matches: MatchRow[] = [],
+  realTopScorers: RealTopScorerRow[] = []
 ): LeaderboardPayload {
   const profileMap = new Map(
     profiles.map((profile) => [profile.id, profile.nickname ?? "Inconnu"])
@@ -753,7 +757,7 @@ export function computeLeaderboardData(
   const actualTeamsByPhase = buildActualTeamsByPhase(matches);
   const knockoutTeamOddsByPhase = buildKnockoutTeamOddsByPhase(knockoutPredictions);
   const knockoutParticipationCounts = buildKnockoutPhaseParticipationCounts(knockoutPredictions);
-  const actualTopScorer = buildActualTopScorer(matches);
+  const actualTopScorers = buildActualTopScorers(realTopScorers);
   const topScorerParticipationCounts = buildTopScorerParticipationCounts(knockoutPredictions);
   const actualChampion = buildActualChampion(matches);
   const championParticipationCounts = buildChampionParticipationCounts(knockoutPredictions);
@@ -970,9 +974,9 @@ export function computeLeaderboardData(
     if (prediction.match_key !== TOP_SCORER_MATCH_KEY) continue;
 
     const selectedPlayer = prediction.team_a ?? prediction.winner;
-    if (!selectedPlayer || !actualTopScorer) continue;
+    if (!selectedPlayer || actualTopScorers.length === 0) continue;
 
-    const points = getTopScorerPoints(selectedPlayer, actualTopScorer);
+    const points = getTopScorerPoints(selectedPlayer, actualTopScorers);
     if (points <= 0) continue;
 
     const normalizedPlayer = normalizePlayerName(selectedPlayer);

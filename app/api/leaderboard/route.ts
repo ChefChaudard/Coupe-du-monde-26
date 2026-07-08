@@ -45,7 +45,13 @@ export async function GET(request: Request) {
       }
     }
 
-    const [{ data: predictions, error: predictionsError }, { data: profiles, error: profilesError }, { data: matches, error: matchesError }, { data: knockoutPredictions, error: knockoutPredictionsError }] = await Promise.all([
+    const [
+      { data: predictions, error: predictionsError },
+      { data: profiles, error: profilesError },
+      { data: matches, error: matchesError },
+      { data: knockoutPredictions, error: knockoutPredictionsError },
+      { data: realTopScorers, error: realTopScorersError },
+    ] = await Promise.all([
       fetchAllRows<{
         user_id: string;
         match_id: number;
@@ -81,18 +87,47 @@ export async function GET(request: Request) {
           .order("match_key", { ascending: true })
           .order("user_id", { ascending: true })
       ),
+      client.from("real_top_scorers").select("player_name"),
     ]);
 
-    return { predictions, profiles, matches, knockoutPredictions, predictionsError, profilesError, matchesError, knockoutPredictionsError };
+    return {
+      predictions,
+      profiles,
+      matches,
+      knockoutPredictions,
+      realTopScorers,
+      predictionsError,
+      profilesError,
+      matchesError,
+      knockoutPredictionsError,
+      realTopScorersError,
+    };
   };
 
   let leaderboardData = await loadLeaderboard(true);
 
-  if (leaderboardData.predictionsError || leaderboardData.profilesError || leaderboardData.matchesError || leaderboardData.knockoutPredictionsError) {
+  if (
+    leaderboardData.predictionsError ||
+    leaderboardData.profilesError ||
+    leaderboardData.matchesError ||
+    leaderboardData.knockoutPredictionsError ||
+    leaderboardData.realTopScorersError
+  ) {
     leaderboardData = await loadLeaderboard(false);
   }
 
-  const { predictions, profiles, matches, knockoutPredictions, predictionsError, profilesError, matchesError, knockoutPredictionsError } = leaderboardData;
+  const {
+    predictions,
+    profiles,
+    matches,
+    knockoutPredictions,
+    realTopScorers,
+    predictionsError,
+    profilesError,
+    matchesError,
+    knockoutPredictionsError,
+    realTopScorersError,
+  } = leaderboardData;
 
   if (predictionsError) {
     return NextResponse.json({ error: predictionsError.message }, { status: 500 });
@@ -108,6 +143,10 @@ export async function GET(request: Request) {
 
   if (knockoutPredictionsError) {
     return NextResponse.json({ error: knockoutPredictionsError.message }, { status: 500 });
+  }
+
+  if (realTopScorersError) {
+    return NextResponse.json({ error: realTopScorersError.message }, { status: 500 });
   }
 
   const matchesById = new Map(
@@ -126,7 +165,8 @@ export async function GET(request: Request) {
     (profiles ?? []) as unknown as Parameters<typeof computeLeaderboardData>[1],
     groupMemberIds,
     (knockoutPredictions ?? []) as unknown as Parameters<typeof computeLeaderboardData>[3],
-    (matches ?? []) as unknown as Parameters<typeof computeLeaderboardData>[4]
+    (matches ?? []) as unknown as Parameters<typeof computeLeaderboardData>[4],
+    (realTopScorers ?? []) as unknown as Parameters<typeof computeLeaderboardData>[5]
   );
 
   return NextResponse.json(payload);

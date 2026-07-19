@@ -303,7 +303,7 @@ function buildActualChampion(matches: MatchRow[]) {
   const finalMatch = matches.find((match) => {
     if (!match.phase.startsWith(realPhasePrefix)) return false;
     const normalizedPhase = fromRealPhase(match.phase).toLowerCase();
-    return normalizedPhase.includes("finale") && !normalizedPhase.includes("demi");
+    return normalizedPhase === "finale";
   });
 
   if (
@@ -319,7 +319,6 @@ function buildActualChampion(matches: MatchRow[]) {
   if (finalMatch.score_b > finalMatch.score_a) return normalizeKnockoutTeam(finalMatch.team_b);
   return "";
 }
-
 function buildChampionParticipationCounts(predictions: KnockoutPredictionRow[]) {
   const participants = new Set<string>();
   const championParticipants = new Map<string, Set<string>>();

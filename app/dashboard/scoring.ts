@@ -225,12 +225,14 @@ export function computeLeagueRealRanking(
 
 // ----- Qualifies (quarts / demi / finale / vainqueur), CL26 -----
 
+export const QUALIFIES_HUITIEMES_POINTS = 3;
 export const QUALIFIES_QUARTS_POINTS = 6;
 export const QUALIFIES_DEMI_POINTS = 6;
 export const QUALIFIES_FINALE_POINTS = 12;
 export const QUALIFIES_VAINQUEUR_POINTS = 12;
 
 export function getQualifiesTierPoints(groupName: string) {
+  if (groupName === "8emes de finale") return QUALIFIES_HUITIEMES_POINTS;
   if (groupName === "Quarts de finale") return QUALIFIES_QUARTS_POINTS;
   if (groupName === "Demi-finales") return QUALIFIES_DEMI_POINTS;
   if (groupName === "Finale") return QUALIFIES_FINALE_POINTS;
@@ -248,6 +250,7 @@ type KnockoutMatchForQualifies = {
 };
 
 export type RealQualifiesTeams = {
+  huitiemes: Set<string>;
   quarts: Set<string>;
   demi: Set<string>;
   finale: Set<string>;
@@ -260,13 +263,16 @@ export type RealQualifiesTeams = {
 export function computeRealTeamsByTier(
   matches: KnockoutMatchForQualifies[]
 ): RealQualifiesTeams {
+  const huitiemes = new Set<string>();
   const quarts = new Set<string>();
   const demi = new Set<string>();
   const finale = new Set<string>();
   let vainqueur: string | null = null;
-
   for (const match of matches) {
-    if (match.phase === "Quarts de finale") {
+    if (match.phase === "8e de finale") {
+      if (match.team_a) huitiemes.add(match.team_a);
+      if (match.team_b) huitiemes.add(match.team_b);
+    } else if (match.phase === "Quarts de finale") {
       if (match.team_a) quarts.add(match.team_a);
       if (match.team_b) quarts.add(match.team_b);
     } else if (match.phase === "Demi-finales") {
@@ -275,7 +281,6 @@ export function computeRealTeamsByTier(
     } else if (match.phase === "Finale") {
       if (match.team_a) finale.add(match.team_a);
       if (match.team_b) finale.add(match.team_b);
-
       if (
         match.is_finished &&
         match.score_a !== null &&
@@ -288,6 +293,5 @@ export function computeRealTeamsByTier(
       }
     }
   }
-
-  return { quarts, demi, finale, vainqueur };
+  return { huitiemes, quarts, demi, finale, vainqueur };
 }

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase/client";
 const POSITION_OFFSET = 1000;
 
 const TIERS = [
+  { key: "huitiemes", groupName: "8emes de finale", label: "8emes", count: 16 },
   { key: "quarts", groupName: "Quarts de finale", label: "Quarts", count: 8 },
   { key: "demi", groupName: "Demi-finales", label: "Demi", count: 4 },
   { key: "finale", groupName: "Finale", label: "Finale", count: 2 },

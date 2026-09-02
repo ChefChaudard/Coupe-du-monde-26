@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 
 const GROUP_NAME = "Phase de ligue";
 const POSITION_OFFSET = 1000;
+const HOLD_INITIAL_DELAY_MS = 400;
+const HOLD_REPEAT_INTERVAL_MS = 150;
 
 type PredictionRow = {
   team_name: string;
@@ -26,6 +28,9 @@ export default function LeagueRankingPrediction({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  const holdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     async function loadPrediction() {
@@ -59,19 +64,70 @@ export default function LeagueRankingPrediction({
     void loadPrediction();
   }, [userId, teams]);
 
-  function moveTeam(index: number, direction: -1 | 1) {
+  useEffect(() => {
+    return () => {
+      stopRepeat();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function moveTeamByName(team: string, direction: -1 | 1) {
     if (locked) return;
 
-    const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= orderedTeams.length) return;
-
     setOrderedTeams((prev) => {
+      const index = prev.indexOf(team);
+      if (index === -1) return prev;
+
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+
       const next = [...prev];
       [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
       return next;
     });
 
     setSaveMessage(null);
+  }
+
+  function stopRepeat() {
+    if (holdTimeoutRef.current) {
+      clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
+    }
+    if (holdIntervalRef.current) {
+      clearInterval(holdIntervalRef.current);
+      holdIntervalRef.current = null;
+    }
+  }
+
+  function startRepeat(team: string, direction: -1 | 1) {
+    if (locked) return;
+
+    stopRepeat();
+    moveTeamByName(team, direction);
+
+    holdTimeoutRef.current = setTimeout(() => {
+      holdIntervalRef.current = setInterval(() => {
+        moveTeamByName(team, direction);
+      }, HOLD_REPEAT_INTERVAL_MS);
+    }, HOLD_INITIAL_DELAY_MS);
+  }
+
+  function handlePointerDown(
+    event: React.PointerEvent<HTMLButtonElement>,
+    team: string,
+    direction: -1 | 1
+  ) {
+    if (locked) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    startRepeat(team, direction);
+  }
+
+  function handlePointerUp(event: React.PointerEvent<HTMLButtonElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    stopRepeat();
   }
 
   async function handleSave() {
@@ -134,6 +190,7 @@ export default function LeagueRankingPrediction({
           <h1 className="text-2xl font-bold tracking-tight text-slate-950">Classement phase de ligue</h1>
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Classez les 36 equipes de la 1ere a la 36eme place a l&apos;aide des fleches, puis sauvegardez.
+            Maintenez une fleche enfoncee pour deplacer une equipe plusieurs fois de suite.
           </p>
         </div>
         <button type="button" onClick={() => void handleSave()} disabled={saving || locked}
@@ -179,11 +236,43 @@ export default function LeagueRankingPrediction({
                     <span className="text-xs font-semibold text-slate-400">
                       ({realRankByTeam[team] ?? "-"})
                     </span>
-                    <button type="button" onClick={() => moveTeam(index, -1)} disabled={index === 0 || locked}
+                    <button
+                      type="button"
+                      onPointerDown={(event) => handlePointerDown(event, team, -1)}
+                      onPointerUp={handlePointerUp}
+                      onPointerCancel={handlePointerUp}
+                      onKeyDown={(event) => {
+                        if ((event.key === "Enter" || event.key === " ") && !event.repeat) {
+                          event.preventDefault();
+                          startRepeat(team, -1);
+                        }
+                      }}
+                      onKeyUp={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          stopRepeat();
+                        }
+                      }}
+                      disabled={index === 0 || locked}
                       aria-label={`Monter ${team}`}
                       className="rounded border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                       dangerouslySetInnerHTML={{ __html: "&uarr;" }} />
-                    <button type="button" onClick={() => moveTeam(index, 1)} disabled={index === orderedTeams.length - 1 || locked}
+                    <button
+                      type="button"
+                      onPointerDown={(event) => handlePointerDown(event, team, 1)}
+                      onPointerUp={handlePointerUp}
+                      onPointerCancel={handlePointerUp}
+                      onKeyDown={(event) => {
+                        if ((event.key === "Enter" || event.key === " ") && !event.repeat) {
+                          event.preventDefault();
+                          startRepeat(team, 1);
+                        }
+                      }}
+                      onKeyUp={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          stopRepeat();
+                        }
+                      }}
+                      disabled={index === orderedTeams.length - 1 || locked}
                       aria-label={`Descendre ${team}`}
                       className="rounded border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                       dangerouslySetInnerHTML={{ __html: "&darr;" }} />

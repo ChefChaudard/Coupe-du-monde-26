@@ -448,7 +448,7 @@ export default function KnockoutMobilePredictionForm({
               {isAdmin ? (
                 <div className="min-w-[140px] flex-1 rounded-xl border border-sky-200 bg-sky-50/60 p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">
-                    Score reel (admin)
+                    Score reel
                   </p>
                   <div className="mt-2 flex items-center justify-center gap-3">
                     <input
@@ -479,7 +479,7 @@ export default function KnockoutMobilePredictionForm({
               ) : null}
             </div>
 
-            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+             <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs">
               <div className="rounded-lg bg-slate-50 px-2 py-1.5">
                 <p className="text-[10px] uppercase tracking-wide text-slate-400">
                   Cote 1-N-2
@@ -496,16 +496,6 @@ export default function KnockoutMobilePredictionForm({
                 </p>
                 <p className="mt-0.5 font-semibold text-slate-900">
                   {myPoints !== null ? formatOneDecimal(myPoints) : "-"}
-                </p>
-              </div>
-              <div className="rounded-lg bg-slate-50 px-2 py-1.5">
-                <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                  Moy. pts
-                </p>
-                <p className="mt-0.5 font-semibold text-slate-700">
-                  {averagePoints !== null
-                    ? formatOneDecimal(averagePoints)
-                    : "-"}
                 </p>
               </div>
             </div>

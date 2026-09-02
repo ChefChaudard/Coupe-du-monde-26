@@ -1143,14 +1143,15 @@ export function computeLeaderboardData(
 
   // ----- Qualifies (quarts / demi / finale / vainqueur), CL26 -----
   const realTiers = computeRealTeamsByTier(matches);
-  const qualifiesGroupNames = ["Quarts de finale", "Demi-finales", "Finale", "Vainqueur"];
+  const qualifiesGroupNames = ["8emes de finale", "Quarts de finale", "Demi-finales", "Finale", "Vainqueur"];
   const qualifiesRows = relevantGroupPredictions.filter((row) =>
     qualifiesGroupNames.includes(row.group_name)
   );
   for (const row of qualifiesRows) {
     let isCorrect = false;
-
-    if (row.group_name === "Quarts de finale") {
+    if (row.group_name === "8emes de finale") {
+      isCorrect = realTiers.huitiemes.has(row.team_name);
+    } else if (row.group_name === "Quarts de finale") {
       isCorrect = realTiers.quarts.has(row.team_name);
     } else if (row.group_name === "Demi-finales") {
       isCorrect = realTiers.demi.has(row.team_name);

@@ -132,9 +132,10 @@ export default async function ReglementPage() {
             </div>
             <div>
               <h3 className="font-semibold text-slate-900">
-                Equipes qualifiees (quarts, demi, finale, vainqueur)
+                Equipes qualifiees (8emes, quarts, demi, finale, vainqueur)
               </h3>
               <ul className="mt-2 list-disc space-y-1 pl-5">
+                <li>Equipe pronostiquee qui atteint reellement les 8emes de finale : 3 points.</li>
                 <li>Equipe pronostiquee qui atteint reellement les quarts : 6 points.</li>
                 <li>Equipe pronostiquee qui atteint reellement les demi-finales : 6 points.</li>
                 <li>Equipe pronostiquee qui atteint reellement la finale : 12 points.</li>

@@ -299,7 +299,7 @@ useEffect(() => {
         style={{ top: "var(--topbar-height, 64px)" }}
       >
         <h1 className="text-2xl font-black tracking-tight text-slate-950">
-          Premier tour — ordre chronologique
+          Premier tour
         </h1>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
@@ -444,7 +444,7 @@ useEffect(() => {
               {isAdmin ? (
                 <div className="min-w-[140px] flex-1 rounded-xl border border-sky-200 bg-sky-50/60 p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">
-                    Score réel (admin)
+                    Score réel
                   </p>
                   <div className="mt-2 flex items-center justify-center gap-3">
                     <input
@@ -475,7 +475,7 @@ useEffect(() => {
               ) : null}
             </div>
 
-            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+               <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs">
               <div className="rounded-lg bg-slate-50 px-2 py-1.5">
                 <p className="text-[10px] uppercase tracking-wide text-slate-400">
                   Cote 1-N-2
@@ -494,18 +494,7 @@ useEffect(() => {
                   {myPoints !== null ? formatOneDecimal(myPoints) : "-"}
                 </p>
               </div>
-              <div className="rounded-lg bg-slate-50 px-2 py-1.5">
-                <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                  Moy. pts
-                </p>
-                <p className="mt-0.5 font-semibold text-slate-700">
-                  {averagePoints !== null
-                    ? formatOneDecimal(averagePoints)
-                    : "-"}
-                </p>
-              </div>
             </div>
-
 
           </article>
         );

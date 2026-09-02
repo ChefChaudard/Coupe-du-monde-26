@@ -15,6 +15,7 @@ const LEAGUE_GROUP_NAME = "Phase de ligue";
 const POOL_SIZE = 24;
 
 const TIERS = [
+  { key: "huitiemes", groupName: "8emes de finale", label: "8emes", count: 16 },
   { key: "quarts", groupName: "Quarts de finale", label: "Quarts", count: 8 },
   { key: "demi", groupName: "Demi-finales", label: "Demi", count: 4 },
   { key: "finale", groupName: "Finale", label: "Finale", count: 2 },

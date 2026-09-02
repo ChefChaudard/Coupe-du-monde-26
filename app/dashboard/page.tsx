@@ -9,7 +9,8 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { ensureRoles } from "@/lib/roles";
 import PredictionForm from "./prediction-form";
 import Leaderboard from "./leaderboard";
-import { computeMatchOdds, getPredictionPoints, type MatchOdds } from "./scoring";
+import { getMatchOdds, getPredictionPoints, type MatchOdds } from "./scoring";
+import { isGroupPhase } from "@/lib/phase";
 
 export const metadata: Metadata = {
   title: "Groupes",
@@ -43,6 +44,9 @@ type Match = {
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
+  odds_home: number | null;
+  odds_draw: number | null;
+  odds_away: number | null;
 };
 
 function buildGroupStandings(matches: Match[]) {
@@ -126,10 +130,6 @@ function buildGroupStandings(matches: Match[]) {
   return standings;
 }
 
-function isGroupPhase(phase: string) {
-  return phase.toLowerCase().includes("group");
-}
-
 type NewMatchPayload = Omit<Match, "id">;
 
 function getFutureKickoffDate(daysAfter: number) {
@@ -164,6 +164,9 @@ function buildKnockoutMatches(
     score_a: null,
     score_b: null,
     is_finished: false,
+    odds_home: null,
+    odds_draw: null,
+    odds_away: null,
   }));
 
   const allMatches: NewMatchPayload[] = [...round32Matches];
@@ -191,6 +194,9 @@ function buildKnockoutMatches(
         score_a: null,
         score_b: null,
         is_finished: false,
+        odds_home: null,
+        odds_draw: null,
+        odds_away: null,
       });
       dateOffset += 1;
     }
@@ -278,7 +284,6 @@ export default async function DashboardPage({
 
   const matchStats: Record<number, MatchStats> = {};
   const matchOdds: Record<number, MatchOdds> = {};
-  const matchPredictionCounts: Record<number, MatchOdds> = {};
   const groupStandings = buildGroupStandings(matches ?? []);
 
   // Total number of players in the competition (everyone who has made at least
@@ -291,24 +296,7 @@ export default async function DashboardPage({
       (p) => p.match_id === match.id
     );
 
-    const predictionCounts = matchPredictions.reduce<MatchOdds>(
-      (acc, prediction) => {
-        if (prediction.predicted_a > prediction.predicted_b) {
-          acc.one += 1;
-        } else if (prediction.predicted_a < prediction.predicted_b) {
-          acc.two += 1;
-        } else {
-          acc.draw += 1;
-        }
-
-        return acc;
-      },
-      { one: 0, draw: 0, two: 0 }
-    );
-
-    matchPredictionCounts[match.id] = predictionCounts;
-
-    const matchOddsForMatch = computeMatchOdds(matchPredictions);
+    const matchOddsForMatch = getMatchOdds(match);
     matchOdds[match.id] = matchOddsForMatch;
 
     if (!match.is_finished || match.score_a === null || match.score_b === null) {
@@ -418,7 +406,6 @@ export default async function DashboardPage({
             existingPredictions={myPredictions}
             userId={user.id}
             matchStats={matchStats}
-            matchPredictionCounts={matchPredictionCounts}
             isAdmin={isAdmin}
             createKnockoutMatches={createKnockoutMatches}
             syncRealKnockoutMatches={syncRealKnockoutMatches}

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { formatOneDecimal } from "@/app/dashboard/format";
-import { round32Placeholders, type Round32Teams } from "./bracket-data";
+import { round16Placeholders, type Round16Teams } from "./bracket-data";
 import TopScorerSelect from "./TopScorerSelect";
 import { type RealLaterPhase } from "../real-knockout/real-knockout-fixtures";
 
@@ -52,31 +52,30 @@ const TOP_SCORER_MATCH_KEY = "top_scorer";
 const TOP_SCORER_LABEL = "Meilleur buteur";
 
 
-function buildBracket(round32Teams?: Round32Teams): BracketMatch[] {
+function buildBracket(round16Teams?: Round16Teams): BracketMatch[] {
   const matches: BracketMatch[] = [];
 
-  for (let i = 0; i < 16; i += 1) {
-    const [teamA, teamB] = round32Teams?.[i] ?? round32Placeholders[i] ?? [
-      `1er du groupe ${String.fromCharCode(65 + (i % 8))}`,
-      `2eme du groupe ${String.fromCharCode(65 + (i % 8))}`,
+  for (let i = 0; i < 8; i += 1) {
+    const [teamA, teamB] = round16Teams?.[i] ?? round16Placeholders[i] ?? [
+      `Qualifie phase de ligue ${i * 2 + 1}`,
+      `Qualifie phase de ligue ${i * 2 + 2}`,
     ];
 
     matches.push({
       id: i + 1,
-      phase: "16e de finale",
+      phase: "8e de finale",
       teamA,
       teamB,
     });
   }
 
   const rounds = [
-    { phase: "8e de finale", count: 8, label: "16e de finale" },
     { phase: "Quarts de finale", count: 4, label: "8e de finale" },
     { phase: "Demi-finales", count: 2, label: "Quarts de finale" },
     { phase: "Finale", count: 1, label: "Demi-finales" },
   ];
 
-  let nextMatchId = 17;
+  let nextMatchId = 9;
   let previousRoundStart = 1;
 
   for (const round of rounds) {
@@ -107,7 +106,7 @@ function dedupe(values: string[]) {
 }
 
 function isSyntheticTeamLabel(value: string) {
-  return /^(Vainqueur|1er du groupe|2eme du groupe|3eme du groupe)\b/i.test(
+  return /^(Vainqueur|Qualifie phase de ligue)\b/i.test(
     value.trim()
   );
 }
@@ -167,8 +166,6 @@ function getTeamsSelectedInPhase(
 
 function getPreviousPhaseName(phase: string) {
   switch (phase) {
-    case "8e de finale":
-      return "16e de finale";
     case "Quarts de finale":
       return "8e de finale";
     case "Demi-finales":
@@ -231,7 +228,6 @@ function getActualWinner(matchInfo?: BracketMatchInfo) {
 function getWinnerPointsBase(phase: string) {
   const normalizedPhase = phase.toLowerCase();
 
-  if (normalizedPhase.includes("16e")) return 2;
   if (normalizedPhase.includes("8e")) return 2;
   if (normalizedPhase.includes("quart")) return 2;
   if (normalizedPhase.includes("demi")) return 3;
@@ -313,29 +309,19 @@ function getStatusClass(status: MatchStatus) {
   return "rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600";
 }
 
-function formatTheoreticalTeamLabel(label: string) {
-  const trimmed = label.trim();
-
-  if (/^1er\s+du\s+groupe\s+/i.test(trimmed)) {
-    return trimmed.replace(/^1er\s+du\s+groupe\s+/i, "Vainqueur du groupe ");
-  }
-
-  return trimmed;
-}
-
-function getRound32QualificationRuleLabel() {
+function getRound16QualificationRuleLabel() {
   return [
-    "Règle FIFA 2026 pour le tour à 32:",
-    "12 premiers de groupe + 12 deuxièmes + 8 meilleurs troisièmes.",
-    "Les groupes vont de A à L.",
+    "Format Ligue des champions 2026-27:",
+    "8 qualifies directs de la phase de ligue (rangs 1-8)",
+    "contre 8 vainqueurs des barrages aller-retour (rangs 9-24).",
   ].join(" ");
 }
 
 function getTheoreticalMatchLabel(match: BracketMatch) {
-  if (match.phase === "16e de finale") {
-    const placeholder = round32Placeholders[match.id - 1] ?? [match.teamA, match.teamB];
+  if (match.phase === "8e de finale") {
+    const placeholder = round16Placeholders[match.id - 1] ?? [match.teamA, match.teamB];
 
-    return `${getRound32QualificationRuleLabel()} ${formatTheoreticalTeamLabel(placeholder[0])} contre ${formatTheoreticalTeamLabel(placeholder[1])}`;
+    return `${getRound16QualificationRuleLabel()} ${placeholder[0]} contre ${placeholder[1]}`;
   }
 
   const previousPhase = getPreviousPhaseName(match.phase);
@@ -358,7 +344,6 @@ function formatDisplayedPoints(value: number | null) {
 function getKnockoutOddsCoefficient(phase: string) {
   const normalizedPhase = phase.toLowerCase();
 
-  if (normalizedPhase.includes("16e")) return 2;
   if (normalizedPhase.includes("8e")) return 2;
   if (normalizedPhase.includes("quart")) return 3;
   if (normalizedPhase.includes("demi")) return 3;
@@ -378,8 +363,8 @@ function computeOddsFromCounts(totalPlayersCount: number, teamCount: number, pha
 
 export default function KnockoutBracketPrediction({
   userId,
-  round32Teams,
-  groupTeamsByLetter = {},
+  round16Teams,
+  leaguePhaseTeams = [],
   matchInfoById = {},
   actualTeamsByPhase = {},
   teamOddsByPhase = {},
@@ -388,11 +373,11 @@ export default function KnockoutBracketPrediction({
   tournamentStartAt = null,
   storageKey = "knockoutBracketPredictions",
   title = "Pronostics Tours Eliminatoires",
-  description = "Les 16e se jouent avec les 48 pays qualifies. Pour les tours suivants, les listes proposent uniquement les equipes du tour precedent, sans doublon possible dans un meme tour. Chaque equipe correctement pronostiquee rapporte 2 points multiplies par sa cote. La cote d'une issue correspond au total des joueurs ayant pronostiqué ce match divisé par le nombre de joueurs ayant joué cette issue.",
+  description = "Les 8e de finale se jouent avec les 16 equipes qualifiees (8 qualifies directs de la phase de ligue + 8 vainqueurs de barrage). Pour les tours suivants, les listes proposent uniquement les equipes du tour precedent, sans doublon possible dans un meme tour. Chaque equipe correctement pronostiquee rapporte 2 points multiplies par sa cote. La cote d'une issue correspond au total des joueurs ayant pronostiqué ce match divisé par le nombre de joueurs ayant joué cette issue.",
 }: {
   userId: string;
-  round32Teams?: Round32Teams;
-  groupTeamsByLetter?: Record<string, string[]>;
+  round16Teams?: Round16Teams;
+  leaguePhaseTeams?: string[];
   matchInfoById?: Record<number, BracketMatchInfo>;
   actualTeamsByPhase?: Record<string, string[]>;
   teamOddsByPhase?: TeamOddsByPhase;
@@ -403,7 +388,7 @@ export default function KnockoutBracketPrediction({
   title?: string;
   description?: string;
 }) {
-  const bracket = useMemo(() => buildBracket(round32Teams), [round32Teams]);
+  const bracket = useMemo(() => buildBracket(round16Teams), [round16Teams]);
   const matchesById = useMemo(
     () => Object.fromEntries(bracket.map((match) => [match.id, match])),
     [bracket]
@@ -648,8 +633,8 @@ async function handleSaveKnockout() {
     updated_at: new Date().toISOString(),
   }));
 
-  const finalMatch = matchesById[31];
-  const champion = selectedWinners[31] ?? null;
+  const finalMatch = matchesById[15];
+  const champion = selectedWinners[15] ?? null;
 
   if (champion && finalMatch) {
     rows.push({
@@ -705,8 +690,8 @@ if (error) {
     }, {});
   }, [bracket]);
 
-  const champion = selectedWinners[31] ?? null;
-  const championBonus = getChampionBonusPoints(champion, matchInfoById[31]);
+  const champion = selectedWinners[15] ?? null;
+  const championBonus = getChampionBonusPoints(champion, matchInfoById[15]);
   const totalPoints = useMemo(() => {
     const roundPoints = bracket.reduce((sum, match) => {
       const selected = selectedWinners[match.id];
@@ -720,9 +705,8 @@ if (error) {
 
     return roundPoints + (championBonus ?? 0);
   }, [bracket, championBonus, matchInfoById, selectedWinners]);
-  const firstRoundPhase = "16e de finale";
+  const firstRoundPhase = "8e de finale";
   const nextPhaseOrder = [
-    "8e de finale",
     "Quarts de finale",
     "Demi-finales",
     "Finale",
@@ -733,9 +717,9 @@ if (error) {
     "Demi-finales",
     "Finale",
   ];
-  const allRound32Teams = useMemo(
-    () => dedupe(Object.values(groupTeamsByLetter).flat()).sort((left, right) => left.localeCompare(right)),
-    [groupTeamsByLetter]
+  const firstRoundTeamPool = useMemo(
+    () => dedupe(leaguePhaseTeams).sort((left, right) => left.localeCompare(right)),
+    [leaguePhaseTeams]
   );
 
   function getLiveTeamOdds(phase: string, team: string) {
@@ -767,7 +751,7 @@ if (error) {
         ? getTeamsSelectedInPhase(phaseGroups[previousPhase], selectedTeams)
         : []
       : phase === firstRoundPhase
-        ? allRound32Teams
+        ? firstRoundTeamPool
         : [];
 
     function formatTeamOption(team: string) {
@@ -793,7 +777,7 @@ if (error) {
               match,
               matchesById,
               previousPhaseTeams,
-              allRound32Teams
+              firstRoundTeamPool
             );
             const teamAOptions = filterTeamsForPhase(
               teamOptions,

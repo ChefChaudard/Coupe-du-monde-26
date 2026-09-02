@@ -20,9 +20,9 @@ type RankingMetric = "total" | "group" | "groupPlacement" | "knockout" | "real";
 
 const RANKING_METRICS: { key: RankingMetric; label: string }[] = [
   { key: "total", label: "Total" },
-  { key: "group", label: "Matchs 1T" },
-  { key: "groupPlacement", label: "Classement Grp" },
-  { key: "knockout", label: "2e tours" },
+  { key: "group", label: "1er Tour" },
+  { key: "groupPlacement", label: "Classement Equipes" },
+  { key: "knockout", label: "Qualifiés" },
   { key: "real", label: "2e tours réel" },
 ];
 
@@ -33,11 +33,10 @@ type ReportSectionItem = {
 };
 
 const REPORT_SECTION_ITEMS: ReportSectionItem[] = [
-  { key: "groupMatches", label: "Matchs 1T", getValue: (b, g) => b.group - g },
-  { key: "groupPlacement", label: "Classement groupe", getValue: (b, g) => b.groupPlacement || g },
-  { key: "knockoutQualification", label: "Tours élim.", getValue: (b) => b.knockout },
+  { key: "groupMatches", label: "1er Tour", getValue: (b, g) => b.group - g },
+  { key: "groupPlacement", label: "Classement Equipes", getValue: (b, g) => b.groupPlacement || g },
+  { key: "knockoutQualification", label: "Qualifiés", getValue: (b) => b.knockout },
   { key: "realKnockout", label: "2e tours réels", getValue: (b) => b.real },
-  { key: "topScorer", label: "Meilleur buteur", getValue: (b) => b.topScorer },
 ];
 
 function getMetricValue(

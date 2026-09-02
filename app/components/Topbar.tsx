@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { ROLE_SUPER_ADMIN } from "@/lib/roles";
+import { ROLE_ADMIN, ROLE_SUPER_ADMIN } from "@/lib/roles";
 import {
   DEFAULT_TIME_ZONE,
   formatTimeZoneLabel,
@@ -17,12 +17,13 @@ import {
 
 const navItems = [
   { key: "home", label: "Accueil", href: "/" },
-  { key: "groupes", label: "Groupes", href: "/dashboard?tab=groupes" },
-  { key: "mobileT1", label: "Mobile T1", href: "/groupes/mobile" },
-  { key: "mobileClassement", label: "Mobile Classement", href: "/classement/mobile" },
-  { key: "knockout", label: "2e tours", href: "/knockout" },
-  { key: "realKnockout", label: "Phases Finales Réels", href: "/real-knockout" },
-  { key: "tours", label: "Tours suivants", href: "/dashboard?tab=tours" },
+    { key: "mobileT1", label: "1er Tour", href: "/groupes/mobile" },
+    { key: "knockout", label: "Classement Equipes", href: "/knockout" },
+      { key: "qualifies", label: "Qualifiés", href: "/knockout/qualifies" },
+      { key: "realKnockout", label: "2eme Tour Réel", href: "/knockout/mobile" },
+       { key: "mobileClassement", label: "Classement Joueurs", href: "/classement/mobile" },
+  { key: "reglement", label: "Reglement CL 26-27", href: "/reglement" },
+  { key: "quote", label: "Quote", href: "" },
 ];
 
 const SIMULATED_DATE_STORAGE_KEY = "simulated-date";
@@ -67,6 +68,8 @@ export default function Topbar() {
   const [simulatedInput, setSimulatedInput] = useState<string>("");
   const [simulatedDateError, setSimulatedDateError] = useState("");
   const [savingGroups, setSavingGroups] = useState(false);
+  const [syncingOdds, setSyncingOdds] = useState(false);
+  const [canSyncOdds, setCanSyncOdds] = useState(false);
 
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -81,6 +84,7 @@ export default function Topbar() {
       if (!apiUser) {
         setIsAuthenticated(false);
         setIsSuperAdmin(false);
+        setCanSyncOdds(false);
         setUserName(null);
         setTimeZone(getStoredTimeZone() ?? DEFAULT_TIME_ZONE);
         return;
@@ -89,6 +93,11 @@ export default function Topbar() {
       setIsAuthenticated(true);
       setIsSuperAdmin(
         apiUser.roles?.includes(ROLE_SUPER_ADMIN) ?? false
+      );
+      setCanSyncOdds(
+        (apiUser.roles?.includes(ROLE_SUPER_ADMIN) ||
+          apiUser.roles?.includes(ROLE_ADMIN)) ??
+          false
       );
 
       setUserName(
@@ -103,9 +112,10 @@ export default function Topbar() {
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (!session?.user) {
-          setIsAuthenticated(false);
-          setIsSuperAdmin(false);
-          setUserName(null);
+        setIsAuthenticated(false);
+        setIsSuperAdmin(false);
+        setCanSyncOdds(false);
+        setUserName(null);
           setTimeZone(getStoredTimeZone() ?? DEFAULT_TIME_ZONE);
           return;
         }
@@ -159,7 +169,7 @@ export default function Topbar() {
     void loadSimulatedDate();
   }, [isSuperAdmin]);
 
- 
+
   async function updateSimulatedDate(value: string) {
     if (!value) {
       return;
@@ -288,13 +298,14 @@ export default function Topbar() {
   }
 
   const currentKey = useMemo(() => {
-    if (pathname === "/") return "home";
+if (pathname === "/") return "home";
     if (pathname.startsWith("/account/")) return "account";
     if (pathname === "/knockout") return "knockout";
     if (pathname === "/real-knockout") return "realKnockout";
     if (pathname.startsWith("/admin/groups")) return "adminGroups";
     if (pathname === "/groupes/mobile") return "mobileT1";
-    if (pathname === "/classement/mobile") return "mobileClassement";
+       if (pathname === "/classement/mobile") return "mobileClassement";
+    if (pathname === "/reglement") return "reglement";
 
     if (pathname === "/dashboard") {
       const tab = searchParams.get("tab");
@@ -305,28 +316,27 @@ export default function Topbar() {
     return null;
   }, [pathname, searchParams]);
 
-  const visibleNavKeys = useMemo(() => {
-    const mapping: Record<string, string[]> = {
-      home: ["home", "groupes", "mobileT1", "mobileClassement", "knockout", "realKnockout"],
-      account: ["home", "groupes", "mobileT1", "mobileClassement", "knockout", "realKnockout"],
-      groupes: ["home", "mobileT1", "mobileClassement", "knockout", "realKnockout"],
-      mobileT1: ["home", "groupes", "mobileClassement", "knockout", "realKnockout"],
-      mobileClassement: ["home", "groupes", "mobileT1", "knockout", "realKnockout"],
-      adminGroups: ["home", "groupes", "mobileT1", "mobileClassement", "knockout", "realKnockout"],
-      tours: ["home", "mobileT1", "mobileClassement", "knockout", "realKnockout"],
-      knockout: ["home", "groupes", "mobileT1", "mobileClassement", "realKnockout"],
-      realKnockout: ["home", "groupes", "mobileT1", "mobileClassement", "knockout"],
-    };
+    const visibleNavKeys = useMemo(
+    () => navItems.map((item) => item.key),
+    []
+  );
 
-    return mapping[currentKey ?? "home"] ?? [
-      "home",
-      "groupes",
-      "mobileT1",
-      "mobileClassement",
-      "knockout",
-      "realKnockout",
-    ];
-  }, [currentKey]);
+  const headerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    function updateTopbarHeight() {
+      if (headerRef.current) {
+        document.documentElement.style.setProperty(
+          "--topbar-height",
+          `${headerRef.current.getBoundingClientRect().height}px`
+        );
+      }
+    }
+
+    updateTopbarHeight();
+    window.addEventListener("resize", updateTopbarHeight);
+    return () => window.removeEventListener("resize", updateTopbarHeight);
+  }, []);
 
   const showSaveGroupsButton = currentKey === "groupes";
 
@@ -341,15 +351,85 @@ export default function Topbar() {
       setSavingGroups(false);
     }
   }
+  async function handleSyncOdds() {
+    if (syncingOdds) return;
 
+    setSyncingOdds(true);
+
+    try {
+      const response = await fetch("/api/admin/sync-odds", { method: "POST" });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        window.alert(payload.error ?? "Erreur lors de la synchronisation des cotes.");
+        return;
+      }
+
+      window.alert(
+        `Cotes mises à jour : ${payload.updated} match(s) sur ${payload.totalEvents} trouvé(s).`
+      );
+    } catch (error) {
+      console.error("Erreur handleSyncOdds:", error);
+      window.alert("Erreur lors de la synchronisation des cotes.");
+    } finally {
+      setSyncingOdds(false);
+    }
+  }
+  if (pathname === "/") {
+    return (
+      <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
+        <div className="relative mx-auto flex w-full max-w-[1600px] items-center px-4 py-2 sm:px-6 lg:px-8">
+          <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[13px]">
+            <span className="font-bold text-slate-950">Pronos 7eme</span>
+            {userName && (
+              <span className="font-medium text-slate-500"> ({userName})</span>
+            )}
+          </div>
+
+          {!userName && (
+            <Link
+              href="/login"
+              className="ml-auto shrink-0 rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 sm:px-4 sm:py-2 sm:text-sm"
+            >
+              Se connecter
+            </Link>
+          )}
+        </div>
+      </header>
+    );
+  }
+if (
+    pathname === "/admin/users" ||
+    pathname === "/admin/groups" ||
+    pathname === "/admin/real-knockout"
+  ) {
+    return (
+      <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-[1600px] flex-nowrap items-center gap-2 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
+          <nav className="flex shrink-0 items-center gap-1.5">
+            <Link
+              href="/"
+              className="whitespace-nowrap rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 sm:px-3 sm:text-sm"
+            >
+              Accueil
+            </Link>
+
+            <Link
+              href="/administration"
+              className="whitespace-nowrap rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 sm:px-3 sm:text-sm"
+            >
+              Accueil Administration
+            </Link>
+          </nav>
+        </div>
+      </header>
+    );
+  }
   return (
     <>
-    <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
-      <div className="mx-auto flex w-full max-w-[1600px] flex-nowrap items-center gap-2 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
-        <Link href="/" className="flex shrink-0 items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-200 bg-slate-900 text-xs font-semibold text-white shadow-sm">
-            WC
-          </span>
+       <header ref={headerRef} className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
+      <div className="mx-auto flex h-full w-full max-w-[1600px] flex-nowrap items-center gap-2 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
+<Link href="/" className="flex shrink-0 items-center gap-2.5">
           <span className="leading-tight">
             <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Pronos
@@ -360,22 +440,36 @@ export default function Topbar() {
           </span>
         </Link>
 
-        <nav className="flex shrink-0 items-center gap-1.5 lg:ml-3">
+         <nav className="flex shrink-0 items-center gap-1.5 lg:ml-3">
           {navItems
-            .filter((item) => visibleNavKeys.includes(item.key))
-            .map((item) => (
-              <Link
-                key={item.key}
-                href={item.href}
-                className={`whitespace-nowrap rounded-full border px-2.5 py-1.5 text-xs font-medium transition sm:px-3 sm:text-sm ${
-                  currentKey === item.key
-                    ? "border-slate-900 bg-slate-900 text-white shadow-sm"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
+            .filter((item) =>
+              item.key === "quote" ? canSyncOdds : visibleNavKeys.includes(item.key)
+            )
+            .map((item) =>
+              item.key === "quote" ? (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => void handleSyncOdds()}
+                  disabled={syncingOdds}
+                  className="whitespace-nowrap rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60 sm:px-3 sm:text-sm"
+                >
+                  {syncingOdds ? "Synchro..." : item.label}
+                </button>
+              ) : (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  className={`whitespace-nowrap rounded-full border px-2.5 py-1.5 text-xs font-medium transition sm:px-3 sm:text-sm ${
+                    currentKey === item.key
+                      ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              )
+            )}
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center justify-end gap-2.5">

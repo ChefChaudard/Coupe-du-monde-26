@@ -5,12 +5,18 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { formatMatchDate, formatMatchTime } from "@/app/lib/time-zone";
 import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
-import { getMatchCity } from "@/app/lib/fifa-cities";
 import { formatOneDecimal } from "@/app/dashboard/format";
 
 const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
 const SIMULATED_DATE_STORAGE_KEY = "simulated-date";
-const MOBILE_SAVE_ALL_EVENT = "mobile-save-all-group-predictions";
+
+const ROUND_ORDER = ["8e de finale", "Quarts de finale", "Demi-finales", "Finale"];
+const ROUND_SHORT_LABELS: Record<string, string> = {
+  "8e de finale": "8eme",
+  "Quarts de finale": "Quarts",
+  "Demi-finales": "Demi",
+  Finale: "Finale",
+};
 
 type Match = {
   id: number;
@@ -41,9 +47,7 @@ type MatchStats = {
 
 type FormValues = Record<number, { a: string; b: string }>;
 
-
-
-export default function MobilePredictionForm({
+export default function KnockoutMobilePredictionForm({
   matches,
   existingPredictions,
   userId,
@@ -90,17 +94,17 @@ export default function MobilePredictionForm({
   const [simulatedNow, setSimulatedNow] = useState<string | null>(null);
   const [serverNowTime] = useState(() => Date.now());
 
-    const JOURNEE_SIZE = 18;
-  const journees = useMemo(() => {
-    const chunks: Match[][] = [];
-    for (let i = 0; i < matches.length; i += JOURNEE_SIZE) {
-      chunks.push(matches.slice(i, i + JOURNEE_SIZE));
-    }
-    return chunks;
+  const rounds = useMemo(() => {
+    return ROUND_ORDER.map((phase) => ({
+      phase,
+      label: ROUND_SHORT_LABELS[phase] ?? phase,
+      matches: matches.filter((match) => match.phase === phase),
+    })).filter((round) => round.matches.length > 0);
   }, [matches]);
-  const [selectedJournee, setSelectedJournee] = useState(0);
-    const [savingAll, setSavingAll] = useState(false);
-  
+
+  const [selectedRound, setSelectedRound] = useState(0);
+  const [savingAll, setSavingAll] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -146,49 +150,49 @@ export default function MobilePredictionForm({
     : serverNowTime;
 
   useEffect(() => {
-    if (journees.length === 0) return;
+    if (rounds.length === 0) return;
 
-    const firstUpcomingIndex = journees.findIndex((journeeMatches) =>
-      journeeMatches.some(
+    const firstUpcomingIndex = rounds.findIndex((round) =>
+      round.matches.some(
         (match) => new Date(match.kickoff_at).getTime() > appNowTime
       )
     );
 
-    setSelectedJournee(
-      firstUpcomingIndex === -1 ? journees.length - 1 : firstUpcomingIndex
+    setSelectedRound(
+      firstUpcomingIndex === -1 ? rounds.length - 1 : firstUpcomingIndex
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [journees.length, appNowTime]);
+  }, [rounds.length, appNowTime]);
 
-  const visibleMatches = journees[selectedJournee] ?? matches;
+  const visibleMatches = rounds[selectedRound]?.matches ?? matches;
 
-async function handleSaveAll() {
-  setSavingAll(true);
-  try {
-    const editableMatches = matches.filter((match) => {
-      const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
-      return !hasStarted || (isAdmin && hasStarted);
-    });
+  async function handleSaveAll() {
+    setSavingAll(true);
+    try {
+      const editableMatches = matches.filter((match) => {
+        const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
+        return !hasStarted || (isAdmin && hasStarted);
+      });
 
-    for (const match of editableMatches) {
-      await saveMatch(match);
+      for (const match of editableMatches) {
+        await saveMatch(match);
+      }
+    } finally {
+      setSavingAll(false);
     }
-  } finally {
-    setSavingAll(false);
   }
-}
 
-useEffect(() => {
-  window.addEventListener("mobile-save-all-group-predictions", handleSaveAll);
+  useEffect(() => {
+    window.addEventListener("mobile-save-all-knockout-predictions", handleSaveAll);
 
-  return () => {
-    window.removeEventListener(
-      "mobile-save-all-group-predictions",
-      handleSaveAll
-    );
-  };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [matches, values, realScores, isAdmin, appNowTime]);
+    return () => {
+      window.removeEventListener(
+        "mobile-save-all-knockout-predictions",
+        handleSaveAll
+      );
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matches, values, realScores, isAdmin, appNowTime]);
 
   function updateValue(matchId: number, side: "a" | "b", value: string) {
     setValues((prev) => ({
@@ -272,7 +276,7 @@ useEffect(() => {
               .eq("id", match.id);
 
             if (error) {
-              setMessage(`Erreur sauvegarde score réel : ${error.message}`);
+              setMessage(`Erreur sauvegarde score reel : ${error.message}`);
               return;
             }
 
@@ -283,42 +287,42 @@ useEffect(() => {
 
       window.dispatchEvent(new Event(LEADERBOARD_REFRESH_EVENT));
       router.refresh();
-      setMessage("Sauvegarde effectuée.");
+      setMessage("Sauvegarde effectuee.");
     } catch (error) {
-      console.error("Erreur saveMatch mobile:", error);
+      console.error("Erreur saveMatch mobile knockout:", error);
       setMessage("Erreur lors de la sauvegarde.");
     } finally {
       setSavingMatch(null);
     }
   }
 
-   return (
+  return (
     <div className="space-y-3">
-           <section
+      <section
         className="sticky z-40 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm"
         style={{ top: "var(--topbar-height, 64px)" }}
       >
         <h1 className="text-2xl font-black tracking-tight text-slate-950">
-          Premier tour — ordre chronologique
+          Deuxieme tour
         </h1>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
-            {journees.map((_, index) => (
+            {rounds.map((round, index) => (
               <button
-                key={index}
+                key={round.phase}
                 type="button"
-                               onClick={() => {
-                  setSelectedJournee(index);
+                onClick={() => {
+                  setSelectedRound(index);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  selectedJournee === index
+                  selectedRound === index
                     ? "bg-[#7a1f2c] text-white"
                     : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
                 }`}
               >
-                J{index + 1}
+                {round.label}
               </button>
             ))}
           </div>
@@ -342,7 +346,7 @@ useEffect(() => {
 
       {matches.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-center text-sm text-slate-500 shadow-sm">
-          Aucun match du premier tour n&apos;est disponible pour le moment.
+          Aucun match du deuxieme tour n&apos;est disponible pour le moment.
         </div>
       ) : null}
 
@@ -359,14 +363,14 @@ useEffect(() => {
         const statusLabel = !hasStarted
           ? "Ouvert"
           : hasOfficialScore
-            ? "Terminé"
-            : "Bloqué";
+            ? "Termine"
+            : "Bloque";
 
         const stats = matchStats[match.id];
         const myPoints = stats?.myPoints ?? null;
         const averagePoints = stats?.averagePoints ?? null;
 
-               const odds = {
+        const odds = {
           one: match.odds_home,
           draw: match.odds_draw,
           two: match.odds_away,
@@ -377,7 +381,7 @@ useEffect(() => {
             key={match.id}
             className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
           >
-                                   <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2">
               <div className="w-14 shrink-0 text-[11px] leading-tight text-slate-500">
                 <div>{formatMatchDate(kickoffDate, timeZone)}</div>
                 <div>{formatMatchTime(kickoffDate, timeZone)}</div>
@@ -398,9 +402,9 @@ useEffect(() => {
               </div>
 
               <div className="w-16 shrink-0 text-right">
-                {statusLabel === "Terminé" ? (
+                {statusLabel === "Termine" ? (
                   <span className="rounded-full bg-sky-50 px-2 py-1 text-[10px] font-semibold text-sky-800">
-                    Terminé
+                    Termine
                   </span>
                 ) : statusLabel === "Ouvert" ? (
                   <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">
@@ -408,12 +412,12 @@ useEffect(() => {
                   </span>
                 ) : (
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">
-                    Bloqué
+                    Bloque
                   </span>
                 )}
               </div>
             </div>
-                <div className="mt-3 flex flex-wrap gap-3">
+            <div className="mt-3 flex flex-wrap gap-3">
               <div className="min-w-[140px] flex-1 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Mon pronostic
@@ -444,7 +448,7 @@ useEffect(() => {
               {isAdmin ? (
                 <div className="min-w-[140px] flex-1 rounded-xl border border-sky-200 bg-sky-50/60 p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">
-                    Score réel (admin)
+                    Score reel (admin)
                   </p>
                   <div className="mt-2 flex items-center justify-center gap-3">
                     <input
@@ -505,8 +509,6 @@ useEffect(() => {
                 </p>
               </div>
             </div>
-
-
           </article>
         );
       })}

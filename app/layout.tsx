@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const appTitle = process.env.VERCEL_ENV ? "Pronos WC26" : "Pronos WC26 (Local)";
+const appTitle = process.env.VERCEL_ENV ? "Pronos 7eme Compagnie" : "Pronos 7eme Compagnie (Local)";
 
 export const metadata: Metadata = {
   title: {

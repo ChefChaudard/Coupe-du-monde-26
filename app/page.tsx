@@ -1,338 +1,137 @@
-"use client";
-
+import type { Metadata } from "next";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase/client";
-import GroupSelector from "@/app/components/GroupSelector";
-import TimeZoneSelector from "@/app/components/TimeZoneSelector";
-import {
-  USER_TIME_ZONE_UPDATED_EVENT,
-  getSafeTimeZone,
-} from "@/app/lib/time-zone";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { isAdmin, isSuperAdmin } from "@/lib/roles";
 
-type ApiUser = {
-  email?: string | null;
-  nickname?: string | null;
-  roles?: string[];
-  timeZone?: string | null;
+export const metadata: Metadata = {
+  title: "Accueil",
 };
 
-export default function Home() {
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [userName, setUserName] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [profile, setProfile] = useState<ApiUser | null>(null);
-  const [isReglementOpen, setIsReglementOpen] = useState(false);
+async function handleSignOut() {
+  "use server";
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/login");
+}
 
-  useEffect(() => {
-    document.title = "Accueil | Pronos WC26";
-  }, []);
+export default async function Home() {
+  const supabase = await createClient();
 
-  useEffect(() => {
-    async function loadInitialUser() {
-      try {
-        const res = await fetch("/api/me", { cache: "no-store" });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-        if (!res.ok) {
-          setUserEmail(null);
-          setUserName(null);
-          setProfile(null);
-          setIsAdmin(false);
-          return;
-        }
+  let canManageAdmin = false;
+  let canManageSuperAdmin = false;
 
-        const payload = (await res.json()) as { user?: ApiUser | null };
-        const apiUser = payload.user ?? null;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("roles, role, is_admin, nickname")
+      .eq("id", user.id)
+      .maybeSingle();
 
-        if (!apiUser) {
-          setUserEmail(null);
-          setUserName(null);
-          setProfile(null);
-          setIsAdmin(false);
-          return;
-        }
-
-        setUserEmail(apiUser.email ?? null);
-        setUserName(apiUser.nickname ?? apiUser.email?.split("@")[0] ?? null);
-        setProfile(apiUser);
-
-        const roles = apiUser.roles ?? [];
-        setIsAdmin(roles.includes("admin") || roles.includes("super_admin"));
-      } catch {
-        setUserEmail(null);
-        setUserName(null);
-        setProfile(null);
-        setIsAdmin(false);
-      }
-    }
-
-    void loadInitialUser();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(async () => {
-      void loadInitialUser();
-    });
-
-    function handleTimeZoneUpdated(event: Event) {
-      const nextTimeZone = (event as CustomEvent<string>).detail;
-      const safeTimeZone = getSafeTimeZone(nextTimeZone);
-
-      setProfile((current) =>
-        current ? { ...current, timeZone: safeTimeZone } : current
-      );
-    }
-
-    function handleWindowFocus() {
-      void loadInitialUser();
-    }
-
-    function handleVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        void loadInitialUser();
-      }
-    }
-
-    window.addEventListener("focus", handleWindowFocus);
-    window.addEventListener("pageshow", handleWindowFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener(USER_TIME_ZONE_UPDATED_EVENT, handleTimeZoneUpdated);
-
-    return () => {
-      listener.subscription.unsubscribe();
-      window.removeEventListener("focus", handleWindowFocus);
-      window.removeEventListener("pageshow", handleWindowFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener(
-        USER_TIME_ZONE_UPDATED_EVENT,
-        handleTimeZoneUpdated
-      );
-    };
-  }, []);
-
-  async function handleLogout() {
-    const origin = window.location.origin;
-    const signOutUrl = new URL("/api/auth/signout", origin).toString();
-    const loginUrl = new URL("/login", origin).toString();
-
-    await Promise.allSettled([
-      supabase.auth.signOut(),
-      fetch(signOutUrl, {
-        method: "POST",
-        cache: "no-store",
-      }),
-    ]);
-
-    setUserEmail(null);
-    setUserName(null);
-    setProfile(null);
-    setIsAdmin(false);
-
-    localStorage.removeItem("rememberMe");
-
-    window.location.replace(loginUrl);
+    canManageAdmin = isAdmin(profile ?? undefined);
+    canManageSuperAdmin = isSuperAdmin(profile ?? undefined);
   }
 
   return (
     <main className="py-8 sm:py-10">
-      <div className="grid items-start gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        {/* Bloc Général */}
         <section className="rounded-3xl border border-slate-200 bg-white/85 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Pronos WC26
-          </p>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Général
+          </h2>
 
-          <h1 className="mt-4 max-w-2xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
-            Coupe du Monde 2026
-          </h1>
-
-          <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-            Une interface de pronostics claire et rapide: groupes, tours
-            éliminatoires, classement live et suivi des points sans surcharge
-            visuelle.
-          </p>
-
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-4 flex flex-wrap gap-3">
             <Link
-              href="/dashboard"
+              href="/classement/mobile"
               className="rounded-full bg-slate-900 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800"
             >
-              Accéder au dashboard
+              CL 26-27
             </Link>
 
-            {!userEmail && (
-              <>
-                <Link
-                  href="/create-account"
-                  className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
-                >
-                  Créer un compte
-                </Link>
-
-                <Link
-                  href="/login"
-                  className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
-                >
-                  Se connecter
-                </Link>
-              </>
-            )}
-
-            {userEmail && (
+            {user ? (
               <Link
                 href="/account/password"
                 className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
               >
                 Changer mon mot de passe
               </Link>
-            )}
+            ) : null}
 
-            {isAdmin && (
-              <>
-                <Link
-                  href="/admin/users"
+            {user ? (
+              <form action={handleSignOut}>
+                <button
+                  type="submit"
                   className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
                 >
-                  Comptes et mots de passe
-                </Link>
+                  Déconnexion
+                </button>
+              </form>
+            ) : null}
 
-                <Link
-                  href="/admin/groups"
-                  className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
-                >
-                  Créer / gérer groupes
-                </Link>
-
-                <Link
-                  href="/admin/real-knockout"
-                  className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
-                >
-                  Qualification Phases Finales
-                </Link>
-              </>
-            )}
-<GroupSelector />
-
-            <TimeZoneSelector />
-
-            <button
-              type="button"
-              onClick={() => setIsReglementOpen(true)}
-              className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+            <Link
+              href="/world-cup-26/classement"
+              className="rounded-full bg-slate-300 px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:bg-slate-400"
             >
-              Règlement
-            </button>
+              World Cup 26
+            </Link>
+          </div>
+        </section>
 
-            {userEmail && (
-              <button
-                type="button"
-                onClick={handleLogout}
+        {/* Bloc Admin */}
+        {canManageAdmin ? (
+          <section className="rounded-3xl border border-slate-200 bg-white/85 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Admin
+            </h2>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link
+                href="/admin/users"
                 className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
               >
-                Déconnexion
-              </button>
-            )}
-          </div>
+                Comptes et mots de passe
+              </Link>
 
-          {userName && (
-            <div className="mt-6 max-w-xl rounded-2xl border border-slate-200 bg-slate-50 p-5 text-left text-sm text-slate-600">
-              <p className="text-base font-semibold text-slate-900">
-                {userName}
-              </p>
-
-              {profile && (
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <p>
-                    <span className="font-medium text-slate-500">Email :</span>{" "}
-                    {profile.email ?? "—"}
-                  </p>
-                  <p>
-                    <span className="font-medium text-slate-500">Rôle :</span>{" "}
-                    {profile.roles?.join(", ") ?? "Aucun"}
-                  </p>
-                  <p>
-                    <span className="font-medium text-slate-500">Fuseau :</span>{" "}
-                    {profile.timeZone ?? "—"}
-                  </p>
-                  <p>
-                    <span className="font-medium text-slate-500">Admin :</span>{" "}
-                    {isAdmin ? "oui" : "non"}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      </div>
-
-      {isReglementOpen ? (
-        <div
-          className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-slate-950/55 p-4 pt-10 backdrop-blur-sm"
-          onClick={() => setIsReglementOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="relative w-full max-w-5xl rounded-3xl border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)]"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="reglement-title"
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Règlement
-                </p>
-                <h2
-                  id="reglement-title"
-                  className="mt-1 text-2xl font-bold text-slate-950"
-                >
-                  Comment gagner ?
-                </h2>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsReglementOpen(false)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+              <Link
+                href="/paiements"
+                className="rounded-full bg-emerald-700 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-emerald-800"
               >
-                Fermer
-              </button>
+                Payé
+              </Link>
             </div>
+          </section>
+        ) : null}
 
-            <div className="max-h-[calc(100vh-7rem)] overflow-y-auto px-6 py-6 text-slate-800">
-              <div className="space-y-6 text-sm leading-7">
-                <p className="text-base text-slate-900">
-                  L&apos;objectif est simple : cumuler le plus de points possible
-                  tout au long de la Coupe du Monde.
-                </p>
+        {/* Bloc Super Admin */}
+        {canManageSuperAdmin ? (
+          <section className="rounded-3xl border border-slate-200 bg-white/85 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Super Admin
+            </h2>
 
-                <p>
-                  Les points peuvent être gagnés de{" "}
-                  <strong>4 façons différentes</strong> :
-                </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link
+                href="/admin/groups"
+                className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                Créer / gérer groupes
+              </Link>
 
-                <ol className="list-decimal space-y-3 pl-5">
-                  <li>En pronostiquant les résultats des matchs de groupe.</li>
-                  <li>En pronostiquant le classement final des groupes.</li>
-                  <li>En construisant votre tableau de la Coupe du Monde.</li>
-                  <li>
-                    En pronostiquant les matchs réels de la phase finale.
-                  </li>
-                </ol>
-
-                <p>Chaque bon pronostic rapporte des points selon la formule :</p>
-
-                <blockquote className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-950">
-                  Points gagnés = Points de base × Cote
-                </blockquote>
-
-                <p>
-                  La cote dépend du nombre de joueurs ayant effectué le même
-                  pronostic.
-                </p>
-              </div>
+              <Link
+                href="/administration"
+                className="rounded-full bg-slate-900 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800"
+              >
+                Administration
+              </Link>
             </div>
-          </div>
-        </div>
-      ) : null}
+          </section>
+        ) : null}
+      </div>
     </main>
   );
 }

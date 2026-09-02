@@ -13,6 +13,7 @@ import { useUserTimeZone } from "@/app/lib/use-user-time-zone";
 import GroupStandingsTooltip from "./group-standings-tooltip";
 import { formatOneDecimal } from "./format";
 import { getMatchCity } from "@/app/lib/fifa-cities";
+import { isGroupPhase } from "@/lib/phase";
 
 const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
 
@@ -27,6 +28,9 @@ type Match = {
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
+  odds_home: number | null;
+  odds_draw: number | null;
+  odds_away: number | null;
 };
 
 type GroupStandingRow = {
@@ -52,37 +56,6 @@ type MatchStats = {
   averagePoints: number | null;
 };
 
-type MatchOdds = {
-  one: number;
-  draw: number;
-  two: number;
-};
-
-function computeOddsFromCounts(counts: MatchOdds) {
-  const total = counts.one + counts.draw + counts.two;
-
-  if (total === 0) {
-    return { one: 1, draw: 1, two: 1 };
-  }
-
-  const toOdds = (count: number) => {
-    const raw = total / Math.max(count, 1);
-    return Math.max(1, Math.round(raw * 100) / 100);
-  };
-
-  return {
-    one: toOdds(counts.one),
-    draw: toOdds(counts.draw),
-    two: toOdds(counts.two),
-  };
-}
-
-function getPredictionOutcome(predictedA: number, predictedB: number) {
-  if (predictedA > predictedB) return "one" as const;
-  if (predictedA < predictedB) return "two" as const;
-  return "draw" as const;
-}
-
 type FormValues = Record<number, { a: string; b: string }>;
 
 type PredictionDraft = {
@@ -95,10 +68,6 @@ type TabKey = "groupes" | "tours";
 
 const SIMULATED_DATE_STORAGE_KEY = "simulated-date";
 
-
-function isGroupPhase(phase: string) {
-  return phase.toLowerCase().includes("group");
-}
 
 const CHRONO_BLOCK_LABEL = "Premier tour - ordre chronologique";
 
@@ -364,6 +333,9 @@ function buildPlaceholderKnockoutGroups() {
       score_a: null,
       score_b: null,
       is_finished: false,
+      odds_home: null,
+      odds_draw: null,
+      odds_away: null,
     }));
 
     groups.push([phase, phaseMatches]);
@@ -429,7 +401,6 @@ export default function PredictionForm({
   existingPredictions,
   userId,
   matchStats,
-  matchPredictionCounts,
   isAdmin,
   createKnockoutMatches,
   syncRealKnockoutMatches,
@@ -440,13 +411,13 @@ export default function PredictionForm({
   existingPredictions: Prediction[];
   userId: string;
   matchStats: Record<number, MatchStats>;
-  matchPredictionCounts: Record<number, MatchOdds>;
   isAdmin: boolean;
   createKnockoutMatches: (formData: FormData) => Promise<void>;
   syncRealKnockoutMatches: (formData: FormData) => Promise<void>;
   initialTab?: TabKey;
   chronological?: boolean;
 }) {
+
   const initialValues = useMemo(() => {
     const values: FormValues = {};
 
@@ -887,44 +858,11 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                     const stats = matchStats[match.id];
                     const myPoints = stats?.myPoints ?? null;
                     const averagePoints = stats?.averagePoints ?? null;
-                    const currentEntry = values[match.id];
-                    const predictionCounts = {
-                      ...(matchPredictionCounts[match.id] ?? {
-                        one: 0,
-                        draw: 0,
-                        two: 0,
-                      }),
+                                        const odds = {
+                      one: match.odds_home,
+                      draw: match.odds_draw,
+                      two: match.odds_away,
                     };
-
-                    const initialEntry = initialValues[match.id];
-                    if (initialEntry?.a !== undefined && initialEntry?.b !== undefined) {
-                      const initialA = Number(initialEntry.a);
-                      const initialB = Number(initialEntry.b);
-
-                      if (!Number.isNaN(initialA) && !Number.isNaN(initialB)) {
-                        const initialOutcome = getPredictionOutcome(initialA, initialB);
-                        predictionCounts[initialOutcome] = Math.max(
-                          0,
-                          predictionCounts[initialOutcome] - 1
-                        );
-                      }
-                    }
-
-                    if (currentEntry && currentEntry.a !== "" && currentEntry.b !== "") {
-                      const predictedA = Number(currentEntry.a);
-                      const predictedB = Number(currentEntry.b);
-
-                      if (!Number.isNaN(predictedA) && !Number.isNaN(predictedB)) {
-                        const currentOutcome = getPredictionOutcome(
-                          predictedA,
-                          predictedB
-                        );
-                        predictionCounts[currentOutcome] += 1;
-                      }
-                    }
-
-                    const odds = computeOddsFromCounts(predictionCounts);
-
                     return (
                       <tr
                         key={match.id}
@@ -998,7 +936,7 @@ setMessage(`Sauvegarde effectuée pour ${phase}.`);
                         </td>
 
                         <td className="px-1 py-2 text-center font-mono text-[11px] text-slate-700">
-                          {formatOneDecimal(odds.one)} / {formatOneDecimal(odds.draw)} / {formatOneDecimal(odds.two)}
+                          {odds.one !== null ? formatOneDecimal(odds.one) : "-"} / {odds.draw !== null ? formatOneDecimal(odds.draw) : "-"} / {odds.two !== null ? formatOneDecimal(odds.two) : "-"}
                         </td>
 
                         <td className="px-1 py-2 text-center font-semibold text-slate-900">

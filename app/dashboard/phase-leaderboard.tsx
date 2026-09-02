@@ -3,11 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
-import {
-  computeMatchOdds,
-  getPredictionPoints,
-  type MatchOdds,
-} from "./scoring";
+import { getMatchOdds, getPredictionPoints } from "./scoring";
 import { formatOneDecimal } from "./format";
 
 type PhaseRow = {
@@ -22,6 +18,9 @@ type MatchRow = {
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
+  odds_home: number | null;
+  odds_draw: number | null;
+  odds_away: number | null;
 };
 
 type PredictionRow = {
@@ -51,11 +50,14 @@ export default function PhaseLeaderboard() {
             match_id,
             predicted_a,
             predicted_b,
-            matches (
+             matches (
               phase,
               score_a,
               score_b,
-              is_finished
+              is_finished,
+              odds_home,
+              odds_draw,
+              odds_away
             )
           `)
           .order("match_id", { ascending: true })
@@ -83,28 +85,7 @@ export default function PhaseLeaderboard() {
       ])
     );
 
-    const safePredictions = (predictions ?? []) as PredictionRow[];
-    const matchOddsMap = new Map<number, { predicted_a: number; predicted_b: number }[]>();
-
-    for (const prediction of safePredictions) {
-      const match = Array.isArray(prediction.matches)
-        ? prediction.matches[0]
-        : prediction.matches;
-
-      if (!match) continue;
-
-      const current = matchOddsMap.get(prediction.match_id) ?? [];
-      current.push({
-        predicted_a: prediction.predicted_a,
-        predicted_b: prediction.predicted_b,
-      });
-      matchOddsMap.set(prediction.match_id, current);
-    }
-
-    const oddsByMatchId = new Map<number, MatchOdds>();
-    for (const [matchId, list] of matchOddsMap.entries()) {
-      oddsByMatchId.set(matchId, computeMatchOdds(list));
-    }
+        const safePredictions = (predictions ?? []) as PredictionRow[];
 
     const rowsByPhase = new Map<string, PhaseRow[]>();
 
@@ -115,7 +96,7 @@ export default function PhaseLeaderboard() {
 
       if (!match) continue;
 
-      const odds = oddsByMatchId.get(prediction.match_id) ?? { one: 1, draw: 1, two: 1 };
+      const odds = getMatchOdds(match);
       const points = getPredictionPoints(
         prediction.predicted_a,
         prediction.predicted_b,

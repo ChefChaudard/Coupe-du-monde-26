@@ -18,7 +18,7 @@ export default function LoginPage() {
       const { data } = await supabase.auth.getUser();
 
       if (data.user) {
-        router.replace("/dashboard");
+        router.replace("/");
       }
     }
 
@@ -27,7 +27,7 @@ export default function LoginPage() {
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (session?.user) {
-          router.replace("/dashboard");
+          router.replace("/");
         }
       }
     );
@@ -63,7 +63,7 @@ export default function LoginPage() {
       localStorage.removeItem("rememberMe");
     }
 
-    router.push("/dashboard");
+    router.push("/");
   }
 
   return (

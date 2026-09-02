@@ -8,7 +8,8 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { isAdmin } from "@/lib/roles";
 import PredictionForm from "@/app/dashboard/prediction-form";
-import { computeMatchOdds, getPredictionPoints, type MatchOdds } from "@/app/dashboard/scoring";
+import { getMatchOdds, getPredictionPoints } from "@/app/dashboard/scoring";
+import { isGroupPhase } from "@/lib/phase";
 
 export const metadata: Metadata = {
   title: "Matchs de groupe",
@@ -30,6 +31,9 @@ type Match = {
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
+  odds_home: number | null;
+  odds_draw: number | null;
+  odds_away: number | null;
 };
 
 type PredictionRow = {
@@ -38,10 +42,6 @@ type PredictionRow = {
   predicted_a: number;
   predicted_b: number;
 };
-
-function isGroupPhase(phase: string) {
-  return phase.toLowerCase().includes("group");
-}
 
 export default async function GroupMatchesPage() {
   const supabase = await createClient();
@@ -87,8 +87,7 @@ export default async function GroupMatchesPage() {
       .order("user_id", { ascending: true })
   );
 
-  const matchStats: Record<number, MatchStats> = {};
-  const matchPredictionCounts: Record<number, MatchOdds> = {};
+    const matchStats: Record<number, MatchStats> = {};
 
   // Total number of players in the competition (everyone who has made at least
   // one prediction). Used so the per-match average spreads points over all
@@ -100,24 +99,7 @@ export default async function GroupMatchesPage() {
       (p) => p.match_id === match.id
     );
 
-    const predictionCounts = matchPredictions.reduce<MatchOdds>(
-      (acc, prediction) => {
-        if (prediction.predicted_a > prediction.predicted_b) {
-          acc.one += 1;
-        } else if (prediction.predicted_a < prediction.predicted_b) {
-          acc.two += 1;
-        } else {
-          acc.draw += 1;
-        }
-
-        return acc;
-      },
-      { one: 0, draw: 0, two: 0 }
-    );
-
-    matchPredictionCounts[match.id] = predictionCounts;
-
-    const matchOddsForMatch = computeMatchOdds(matchPredictions);
+    const matchOddsForMatch = getMatchOdds(match);
 
     if (!match.is_finished || match.score_a === null || match.score_b === null) {
       matchStats[match.id] = {
@@ -180,12 +162,11 @@ export default async function GroupMatchesPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-8 text-slate-900">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <PredictionForm
+                <PredictionForm
           matches={matches}
           existingPredictions={myPredictions}
           userId={user.id}
           matchStats={matchStats}
-          matchPredictionCounts={matchPredictionCounts}
           isAdmin={isAdminUser}
           createKnockoutMatches={createKnockoutMatches}
           syncRealKnockoutMatches={syncRealKnockoutMatches}

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -95,22 +94,8 @@ export default async function AdminUsersPage() {
     })
     .sort((left, right) => left.email.localeCompare(right.email));
 
-  return (
+return (
     <main className="mx-auto max-w-6xl p-8 space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <Link href="/" className="text-blue-600 hover:underline">
-          ← Accueil
-        </Link>
-
-        <Link href="/dashboard" className="text-blue-600 hover:underline">
-          Dashboard →
-        </Link>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-        Seuls les administrateurs peuvent modifier des comptes. Ce tableau sert aussi à définir un nouveau mot de passe pour un joueur qui en fait la demande.
-      </div>
-
       <h1 className="mb-6 text-3xl font-bold">Comptes existants et mots de passe</h1>
 
       <section className="rounded-2xl border p-6">

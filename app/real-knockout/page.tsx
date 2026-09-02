@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { computeMatchOdds, getPredictionPoints, type MatchOdds } from "@/app/dashboard/scoring";
+import { getMatchOdds, getPredictionPoints, type MatchOdds } from "@/app/dashboard/scoring";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -33,6 +33,9 @@ type Match = {
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
+  odds_home: number | null;
+  odds_draw: number | null;
+  odds_away: number | null;
 };
 
 type Prediction = {
@@ -360,14 +363,7 @@ export default async function RealKnockoutPage() {
   const matchOdds: MatchOddsById = {};
 
   for (const match of realMatches) {
-    const matchPredictions = ((predictions ?? []) as Prediction[])
-      .filter((prediction) => prediction.match_id === match.id)
-      .map((prediction) => ({
-        predicted_a: prediction.predicted_a,
-        predicted_b: prediction.predicted_b,
-      }));
-
-    matchOdds[match.id] = computeMatchOdds(matchPredictions);
+    matchOdds[match.id] = getMatchOdds(match);
   }
 
   const matchStats: Record<number, MatchStats> = {};

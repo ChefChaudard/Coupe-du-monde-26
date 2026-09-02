@@ -8,11 +8,10 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { isAdmin } from "@/lib/roles";
 import { getMatchOdds, getPredictionPoints } from "@/app/dashboard/scoring";
-import MobilePredictionForm from "./MobilePredictionForm";
-import { isGroupPhase } from "@/lib/phase";
+import KnockoutMobilePredictionForm from "./KnockoutMobilePredictionForm";
 
 export const metadata: Metadata = {
-  title: "Mobile T1",
+  title: "Mobile 2e tour",
 };
 
 type MatchStats = {
@@ -43,7 +42,17 @@ type PredictionRow = {
   predicted_b: number;
 };
 
-export default async function MobileFirstRoundPage() {
+function isKnockoutPhase(phase: string) {
+  const normalized = phase.toLowerCase();
+  return (
+    normalized.includes("8e") ||
+    normalized.includes("quart") ||
+    normalized.includes("demi") ||
+    normalized.includes("finale")
+  );
+}
+
+export default async function MobileSecondRoundPage() {
   const supabase = await createClient();
 
   const {
@@ -67,7 +76,7 @@ export default async function MobileFirstRoundPage() {
     .order("kickoff_at", { ascending: true });
 
   const matches = (allMatches ?? [])
-    .filter((match: Match) => isGroupPhase(match.phase))
+    .filter((match: Match) => isKnockoutPhase(match.phase))
     .slice()
     .sort(
       (a: Match, b: Match) =>
@@ -151,17 +160,14 @@ export default async function MobileFirstRoundPage() {
     "use server";
 
     revalidatePath("/real-knockout");
-    revalidatePath("/groupes/mobile");
-    revalidatePath("/groupes/matchs");
+    revalidatePath("/knockout/mobile");
     revalidatePath("/dashboard");
   }
 
   return (
     <main className="min-h-screen bg-slate-50 px-3 py-4 text-slate-900">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
-
-
-        <MobilePredictionForm
+        <KnockoutMobilePredictionForm
           matches={matches}
           existingPredictions={myPredictions}
           userId={user.id}

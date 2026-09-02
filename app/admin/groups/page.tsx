@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -283,21 +282,8 @@ export default async function AdminGroupsPage() {
     Array.from(membershipsByGroup.entries())
   );
 
-  return (
+return (
     <main className="mx-auto max-w-6xl p-8 space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <Link href="/" className="text-blue-600 hover:underline">
-          ← Accueil
-        </Link>
-        <Link href="/dashboard" className="text-blue-600 hover:underline">
-          Dashboard →
-        </Link>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-        Seuls les administrateurs peuvent créer et modifier des groupes. La suppression d’un groupe ne supprime pas les utilisateurs, pronostics ou historiques.
-      </div>
-
       <section className="rounded-2xl border p-6">
         <h1 className="mb-4 text-3xl font-bold">Créer un groupe</h1>
 

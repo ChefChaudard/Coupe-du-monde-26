@@ -1,14 +1,26 @@
 import {
-  computeMatchOdds,
+  getMatchOdds,
   getPhasePointBase,
   getPredictionPoints,
   getTopScorerPoints,
   TOP_SCORER_POINTS,
+  computeLeagueRealRanking,
+  getTeamRankingPoints,
+  computeRealTeamsByTier,
+  getQualifiesTierPoints,
   type MatchOdds,
 } from "./scoring";
 
 // Coefficient de base appliqué au bonus de classement de groupe.
 const GROUP_PLACEMENT_BASE_POINTS = 1;
+const TEAM_RANKING_PHASE = "Classement equipes";
+
+type GroupPredictionRow = {
+  user_id: string;
+  group_name: string;
+  team_name: string;
+  predicted_position: number;
+};
 
 type MatchRow = {
   id: number;
@@ -19,6 +31,9 @@ type MatchRow = {
   score_b: number | null;
   is_finished: boolean | null;
   kickoff_at?: string | null;
+  odds_home: number | null;
+  odds_draw: number | null;
+  odds_away: number | null;
 };
 
 type GroupStandingRow = {
@@ -128,6 +143,28 @@ export type ScoreReportRow =
       player: string;
       participants: number;
       predictedCount: number;
+    }
+  | {
+      reportId: string;
+      kind: "teamRanking";
+      phase: string;
+      label: string;
+      points: number;
+      base: number;
+      odds: number;
+      team: string;
+      predictedPosition: number;
+      actualPosition: number;
+    }
+  | {
+      reportId: string;
+      kind: "qualifiesPlacement";
+      phase: string;
+      label: string;
+      points: number;
+      base: number;
+      odds: number;
+      team: string;
     };
 
 export type LeaderboardPayload = {
@@ -142,14 +179,24 @@ export type LeaderboardPayload = {
 function getScoreBreakdownLabel(phase: string) {
   const normalizedPhase = phase.toLowerCase();
 
-  if (normalizedPhase.includes("group")) return "Groupes";
+  if (
+    normalizedPhase.includes("group") ||
+    phase === "Phase de ligue" ||
+    phase === TEAM_RANKING_PHASE
+  ) {
+    return "Groupes";
+  }
   if (normalizedPhase.includes("buteur") || normalizedPhase.includes("scorer")) {
     return "Meilleur buteur";
   }
   if (
     normalizedPhase.includes("reel") ||
     normalizedPhase.includes("réel") ||
-    normalizedPhase.includes("real")
+    normalizedPhase.includes("real") ||
+    phase === "8e de finale" ||
+    phase === "Quarts de finale" ||
+    phase === "Demi-finales" ||
+    phase === "Finale"
   ) {
     return "Pronostics réel";
   }
@@ -713,7 +760,8 @@ export function computeLeaderboardData(
   groupMemberIds: Set<string> | null,
   knockoutPredictions: KnockoutPredictionRow[] = [],
   matches: MatchRow[] = [],
-  realTopScorers: RealTopScorerRow[] = []
+  realTopScorers: RealTopScorerRow[] = [],
+  groupPredictions: GroupPredictionRow[] = []
 ): LeaderboardPayload {
   const profileMap = new Map(
     profiles.map((profile) => [profile.id, profile.nickname ?? "Inconnu"])
@@ -722,12 +770,14 @@ export function computeLeaderboardData(
   const scoreMap = new Map<string, number>();
   const phaseDetailsMap = new Map<string, Map<string, number>>();
   const scoreReportMap = new Map<string, ScoreReportRow[]>();
-  const matchOddsMap = new Map<number, { predicted_a: number; predicted_b: number }[]>();
   const uniqueMatchesById = new Map<number, MatchRow>();
 
   const isGroupFilterActive = groupMemberIds !== null;
   const relevantPredictions = predictions.filter((prediction) =>
     isGroupFilterActive ? groupMemberIds.has(prediction.user_id) : true
+  );
+  const relevantGroupPredictions = groupPredictions.filter((row) =>
+    isGroupFilterActive ? groupMemberIds.has(row.user_id) : true
   );
 
   for (const prediction of relevantPredictions) {
@@ -738,18 +788,11 @@ export function computeLeaderboardData(
     if (!match) continue;
 
     uniqueMatchesById.set(prediction.match_id, match);
-
-    const current = matchOddsMap.get(prediction.match_id) ?? [];
-    current.push({
-      predicted_a: prediction.predicted_a,
-      predicted_b: prediction.predicted_b,
-    });
-    matchOddsMap.set(prediction.match_id, current);
   }
 
   const computedOddsByMatchId = new Map<number, MatchOdds>();
-  for (const [matchId, matchPredictionList] of matchOddsMap.entries()) {
-    computedOddsByMatchId.set(matchId, computeMatchOdds(matchPredictionList));
+  for (const [matchId, match] of uniqueMatchesById.entries()) {
+    computedOddsByMatchId.set(matchId, getMatchOdds(match));
   }
 
   const knockoutMatchInfoById = buildKnockoutMatchInfo(matches);
@@ -865,6 +908,8 @@ export function computeLeaderboardData(
           : predictedOutcome === "B"
             ? odds.two
             : odds.draw;
+      const isExactScore =
+        prediction.predicted_a === match.score_a && prediction.predicted_b === match.score_b;
 
       const reportRows = scoreReportMap.get(prediction.user_id) ?? [];
       reportRows.push({
@@ -874,7 +919,7 @@ export function computeLeaderboardData(
         phase: match.phase,
         label: `${match.team_a ?? "Equipe A"} vs ${match.team_b ?? "Equipe B"}`,
         points,
-        base: getPhasePointBase(match.phase),
+        base: isExactScore ? 2 : 1,
         odds: oddsUsed,
         predictedScore: `${prediction.predicted_a}-${prediction.predicted_b}`,
         actualScore: `${match.score_a ?? 0}-${match.score_b ?? 0}`,
@@ -1063,6 +1108,86 @@ export function computeLeaderboardData(
       reportRows.push(reportRow);
     }
     scoreReportMap.set(userId, reportRows);
+  }
+
+  // ----- Classement equipes (1-36), CL26 -----
+  const leagueRealRankByTeam = computeLeagueRealRanking(matches);
+  const teamRankingRows = relevantGroupPredictions.filter(
+    (row) => row.group_name === "Phase de ligue"
+  );
+  for (const row of teamRankingRows) {
+    const actualRank = leagueRealRankByTeam[row.team_name];
+    const points = getTeamRankingPoints(row.predicted_position, actualRank);
+    if (points <= 0) continue;
+
+    scoreMap.set(row.user_id, (scoreMap.get(row.user_id) ?? 0) + points);
+    const userPhaseMap = phaseDetailsMap.get(row.user_id) ?? new Map<string, number>();
+    userPhaseMap.set(TEAM_RANKING_PHASE, (userPhaseMap.get(TEAM_RANKING_PHASE) ?? 0) + points);
+    phaseDetailsMap.set(row.user_id, userPhaseMap);
+
+    const reportRows = scoreReportMap.get(row.user_id) ?? [];
+    reportRows.push({
+      reportId: `teamRanking-${row.user_id}-${row.team_name}`,
+      kind: "teamRanking",
+      phase: TEAM_RANKING_PHASE,
+      label: `${row.team_name} (pronostic ${row.predicted_position}e, reel ${actualRank ?? "?"}e)`,
+      points,
+      base: points,
+      odds: 1,
+      team: row.team_name,
+      predictedPosition: row.predicted_position,
+      actualPosition: actualRank ?? 0,
+    });
+    scoreReportMap.set(row.user_id, reportRows);
+  }
+
+  // ----- Qualifies (quarts / demi / finale / vainqueur), CL26 -----
+  const realTiers = computeRealTeamsByTier(matches);
+  const qualifiesGroupNames = ["Quarts de finale", "Demi-finales", "Finale", "Vainqueur"];
+  const qualifiesRows = relevantGroupPredictions.filter((row) =>
+    qualifiesGroupNames.includes(row.group_name)
+  );
+  for (const row of qualifiesRows) {
+    let isCorrect = false;
+
+    if (row.group_name === "Quarts de finale") {
+      isCorrect = realTiers.quarts.has(row.team_name);
+    } else if (row.group_name === "Demi-finales") {
+      isCorrect = realTiers.demi.has(row.team_name);
+    } else if (row.group_name === "Finale") {
+      isCorrect = realTiers.finale.has(row.team_name);
+    } else if (row.group_name === "Vainqueur") {
+      isCorrect = realTiers.vainqueur !== null && realTiers.vainqueur === row.team_name;
+    }
+
+    if (!isCorrect) continue;
+
+    const points = getQualifiesTierPoints(row.group_name);
+    if (points <= 0) continue;
+
+    // Libelle de phase distinct de celui des pronostics de scores du 2e tour
+    // reel (meme nom de phase cote table matches : "Quarts de finale" etc.),
+    // pour que le classement distingue "2e tours" (choix d'equipes) de
+    // "2e tours reel" (scores).
+    const qualifiesPhaseLabel = `Qualifies - ${row.group_name}`;
+
+    scoreMap.set(row.user_id, (scoreMap.get(row.user_id) ?? 0) + points);
+    const userPhaseMap = phaseDetailsMap.get(row.user_id) ?? new Map<string, number>();
+    userPhaseMap.set(qualifiesPhaseLabel, (userPhaseMap.get(qualifiesPhaseLabel) ?? 0) + points);
+    phaseDetailsMap.set(row.user_id, userPhaseMap);
+
+    const reportRows = scoreReportMap.get(row.user_id) ?? [];
+    reportRows.push({
+      reportId: `qualifies-${row.user_id}-${row.group_name}-${row.team_name}`,
+      kind: "qualifiesPlacement",
+      phase: qualifiesPhaseLabel,
+      label: `${row.team_name} qualifiee (${row.group_name})`,
+      points,
+      base: points,
+      odds: 1,
+      team: row.team_name,
+    });
+    scoreReportMap.set(row.user_id, reportRows);
   }
 
   const rows = Array.from(scoreMap.entries())

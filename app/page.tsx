@@ -46,12 +46,12 @@ export default async function Home() {
           </h2>
 
           <div className="mt-4 flex flex-wrap gap-3">
-            <Link
-              href="/classement/mobile"
-              className="rounded-full bg-slate-900 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800"
-            >
-              CL 26-27
-            </Link>
+              <Link
+                href="/groupes/mobile"
+                className="rounded-full bg-slate-900 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800"
+              >
+                CL 26-27
+              </Link>
 
             {user ? (
               <Link

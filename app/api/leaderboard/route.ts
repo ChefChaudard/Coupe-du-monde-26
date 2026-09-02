@@ -61,7 +61,7 @@ export async function GET(request: Request) {
           .order("match_id", { ascending: true })
           .order("user_id", { ascending: true })
       ),
-      client.from("profiles").select("id, nickname"),
+      client.from("profiles").select("id, nickname, has_paid"),
       client
         .from("matches")
         .select(
@@ -162,9 +162,14 @@ export async function GET(request: Request) {
       matches: matchesById.get(prediction.match_id) ?? null,
     })
   );
+  const paidProfiles = (profiles ?? []).filter(
+    (profile: { id: string; nickname: string | null; has_paid: boolean | null }) =>
+      profile.has_paid === true
+  );
+
   const payload = computeLeaderboardData(
     predictionsWithMatches as unknown as Parameters<typeof computeLeaderboardData>[0],
-    (profiles ?? []) as unknown as Parameters<typeof computeLeaderboardData>[1],
+    paidProfiles as unknown as Parameters<typeof computeLeaderboardData>[1],
     groupMemberIds,
     (knockoutPredictions ?? []) as unknown as Parameters<typeof computeLeaderboardData>[3],
     (matches ?? []) as unknown as Parameters<typeof computeLeaderboardData>[4],

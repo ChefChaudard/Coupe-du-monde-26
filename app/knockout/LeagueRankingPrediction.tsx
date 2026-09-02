@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { getTeamRankingPoints } from "@/app/dashboard/scoring";
 
 const GROUP_NAME = "Phase de ligue";
 const POSITION_OFFSET = 1000;
@@ -31,6 +32,27 @@ export default function LeagueRankingPrediction({
 
   const holdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const zoneTotals = useMemo(() => {
+    let qualifies = 0;
+    let barrages = 0;
+    let eliminees = 0;
+
+    orderedTeams.forEach((team, index) => {
+      const actualRank = realRankByTeam[team];
+      const points = actualRank !== undefined ? getTeamRankingPoints(index + 1, actualRank) : 0;
+
+      if (index < 8) {
+        qualifies += points;
+      } else if (index < 24) {
+        barrages += points;
+      } else {
+        eliminees += points;
+      }
+    });
+
+    return { qualifies, barrages, eliminees };
+  }, [orderedTeams, realRankByTeam]);
 
   useEffect(() => {
     async function loadPrediction() {
@@ -212,26 +234,34 @@ export default function LeagueRankingPrediction({
           {orderedTeams.map((team, index) => {
             const tierLabel =
               index === 0
-                ? { text: "Qualifies pour les 8emes", className: "bg-[#014421]" }
+                ? { text: "Qualifies pour les 8emes", className: "bg-[#014421]", points: zoneTotals.qualifies }
                 : index === 8
-                  ? { text: "Qualifiees pour les Barrages", className: "bg-orange-600" }
+                  ? { text: "Qualifiees pour les Barrages", className: "bg-orange-600", points: zoneTotals.barrages }
                   : index === 24
-                    ? { text: "Eliminees", className: "bg-red-700" }
+                    ? { text: "Eliminees", className: "bg-red-700", points: zoneTotals.eliminees }
                     : null;
 
             const teamTextClassName = index < 8 ? "text-[#014421]" : index < 24 ? "text-orange-700" : "text-red-700";
+            const actualRank = realRankByTeam[team];
+            const teamPoints = actualRank !== undefined ? getTeamRankingPoints(index + 1, actualRank) : null;
 
             return (
               <li key={team}>
                 {tierLabel ? (
-                  <div className={`px-4 py-2 text-xs font-bold uppercase tracking-wide text-white ${tierLabel.className}`}>
-                    {tierLabel.text}
+                  <div className={`flex items-center justify-between px-4 py-2 text-xs font-bold uppercase tracking-wide text-white ${tierLabel.className}`}>
+                    <span>{tierLabel.text}</span>
+                    <span>{tierLabel.points} pts</span>
                   </div>
                 ) : null}
 
                 <div className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
                   <span className="w-8 shrink-0 text-right text-sm font-semibold text-slate-500">{index + 1}</span>
-                  <span className={`flex-1 text-sm font-semibold ${teamTextClassName}`}>{team}</span>
+                  <span className={`flex-1 text-sm font-semibold ${teamTextClassName}`}>
+                    {team}
+                    <span className="ml-2 text-xs font-normal text-slate-500">
+                      {teamPoints !== null ? `${teamPoints} pts` : "-"}
+                    </span>
+                  </span>
                   <div className="flex shrink-0 items-center gap-1">
                     <span className="text-xs font-semibold text-slate-400">
                       ({realRankByTeam[team] ?? "-"})

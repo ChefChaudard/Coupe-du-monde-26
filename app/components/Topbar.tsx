@@ -35,15 +35,14 @@ type CurrentUserResponse = {
     timeZone?: string | null;
     roles?: string[] | null;
   } | null;
+  competitionStarted?: boolean;
 };
 
 async function fetchCurrentUser() {
   const response = await fetch("/api/me", { cache: "no-store" });
-
-  if (!response.ok) return null;
-
+  if (!response.ok) return { user: null, competitionStarted: false };
   const payload = (await response.json()) as CurrentUserResponse;
-  return payload.user;
+  return { user: payload.user, competitionStarted: payload.competitionStarted ?? false };
 }
 
 function formatDateTimeLocalValue(value: string) {
@@ -60,6 +59,7 @@ function formatDateTimeLocalValue(value: string) {
 
 export default function Topbar() {
   const [userName, setUserName] = useState<string | null>(null);
+  const [competitionStarted, setCompetitionStarted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
    const [timeZone, setTimeZone] = useState(DEFAULT_TIME_ZONE);
@@ -79,8 +79,8 @@ export default function Topbar() {
 
   useEffect(() => {
     async function loadCurrentUser() {
-      const apiUser = await fetchCurrentUser();
-
+      const { user: apiUser, competitionStarted: started } = await fetchCurrentUser();
+      setCompetitionStarted(started);
       if (!apiUser) {
         setIsAuthenticated(false);
         setIsSuperAdmin(false);
@@ -442,9 +442,13 @@ if (
 
          <nav className="flex shrink-0 items-center gap-1.5 lg:ml-3">
           {navItems
-            .filter((item) =>
-              item.key === "quote" ? canSyncOdds : visibleNavKeys.includes(item.key)
-            )
+            .filter((item) => {
+              if (item.key === "quote") return canSyncOdds;
+              if (item.key === "mobileClassement") {
+                return visibleNavKeys.includes(item.key) && competitionStarted;
+              }
+              return visibleNavKeys.includes(item.key);
+            })
             .map((item) =>
               item.key === "quote" ? (
                 <button

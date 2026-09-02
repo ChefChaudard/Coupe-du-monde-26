@@ -28,17 +28,28 @@ function isTopScorerReportItem(item: ScoreReportRow): item is TopScorerReportIte
 
 function getReportSectionKey(item: ScoreReportRow) {
   const kind = (item as { kind: string }).kind;
-
   if (kind === "groupPlacement") return "groupPlacement";
   if (kind === "topScorer") return "topScorer";
+  if (kind === "teamRanking") return "groupPlacement";
+  if (kind === "qualifiesPlacement") return "knockoutQualification";
 
   const normalizedPhase = item.phase.toLowerCase();
 
-  if (normalizedPhase.includes("reel") || normalizedPhase.includes("réel") || normalizedPhase.includes("real")) {
-    return "realKnockout";
+  if (item.phase === "Phase de ligue" || normalizedPhase.includes("group")) {
+    return "groupMatches";
   }
 
-  if (normalizedPhase.includes("group")) return "groupMatches";
+  if (
+    item.phase === "8e de finale" ||
+    item.phase === "Quarts de finale" ||
+    item.phase === "Demi-finales" ||
+    item.phase === "Finale" ||
+    normalizedPhase.includes("reel") ||
+    normalizedPhase.includes("réel") ||
+    normalizedPhase.includes("real")
+  ) {
+    return "realKnockout";
+  }
 
   return "knockoutQualification";
 }

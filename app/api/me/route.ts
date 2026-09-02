@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEFAULT_TIME_ZONE, getSafeTimeZone, isValidTimeZone } from "@/app/lib/time-zone";
 import { getRoleLabels } from "@/lib/roles";
+import { hasCompetitionStarted } from "@/lib/competition-lock";
 
 type GroupRow = {
   id: string;
@@ -27,9 +28,9 @@ export async function GET() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
+  const competitionStarted = await hasCompetitionStarted(supabase);
   if (!user) {
-    return NextResponse.json({ user: null });
+    return NextResponse.json({ user: null, competitionStarted });
   }
 
   const { data: profile, error } = await supabase
@@ -82,6 +83,7 @@ export async function GET() {
       groups,
       roles: getRoleLabels(profile ?? undefined),
     },
+    competitionStarted,
   });
 }
 

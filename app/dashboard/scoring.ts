@@ -171,58 +171,65 @@ export function computeLeagueRealRanking(
     points: number;
     goalDifference: number;
     goalsFor: number;
+    awayGoalsFor: number;
+    wins: number;
+    awayWins: number;
   };
-
   const statsByTeam = new Map<string, Standing>();
-
   const ensureTeam = (team: string) => {
     if (!statsByTeam.has(team)) {
-      statsByTeam.set(team, { team, points: 0, goalDifference: 0, goalsFor: 0 });
+      statsByTeam.set(team, {
+        team,
+        points: 0,
+        goalDifference: 0,
+        goalsFor: 0,
+        awayGoalsFor: 0,
+        wins: 0,
+        awayWins: 0,
+      });
     }
     return statsByTeam.get(team)!;
   };
-
   for (const match of matches) {
     if (match.phase !== "Phase de ligue") continue;
     if (!match.team_a || !match.team_b) continue;
-
     const teamA = ensureTeam(match.team_a);
     const teamB = ensureTeam(match.team_b);
-
     if (!match.is_finished || match.score_a === null || match.score_b === null) {
       continue;
     }
-
     teamA.goalsFor += match.score_a;
     teamB.goalsFor += match.score_b;
+    teamB.awayGoalsFor += match.score_b;
     teamA.goalDifference += match.score_a - match.score_b;
     teamB.goalDifference += match.score_b - match.score_a;
-
     if (match.score_a > match.score_b) {
       teamA.points += 3;
+      teamA.wins += 1;
     } else if (match.score_a < match.score_b) {
       teamB.points += 3;
+      teamB.wins += 1;
+      teamB.awayWins += 1;
     } else {
       teamA.points += 1;
       teamB.points += 1;
     }
   }
-
   const sortedTeams = Array.from(statsByTeam.values()).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
     if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
+    if (b.awayGoalsFor !== a.awayGoalsFor) return b.awayGoalsFor - a.awayGoalsFor;
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    if (b.awayWins !== a.awayWins) return b.awayWins - a.awayWins;
     return a.team.localeCompare(b.team);
   });
-
   const rankByTeam: Record<string, number> = {};
   sortedTeams.forEach((team, index) => {
     rankByTeam[team.team] = index + 1;
   });
-
   return rankByTeam;
 }
-
 // ----- Qualifies (quarts / demi / finale / vainqueur), CL26 -----
 
 export const QUALIFIES_HUITIEMES_POINTS = 3;

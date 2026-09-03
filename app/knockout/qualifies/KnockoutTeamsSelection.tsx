@@ -3,8 +3,6 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 
-const POSITION_OFFSET = 1000;
-
 const TIERS = [
   { key: "huitiemes", groupName: "8emes de finale", label: "8emes", count: 16 },
   { key: "quarts", groupName: "Quarts de finale", label: "Quarts", count: 8 },
@@ -78,37 +76,36 @@ export default function KnockoutTeamsSelection({
           updated_at: new Date().toISOString(),
         }));
 
-        // Meme technique que pour le classement 1-36 : on ecrit d'abord des
-        // positions temporaires hors plage pour eviter tout conflit avec la
-        // contrainte unique (user_id, group_name, predicted_position) lors
-        // d'un reenregistrement.
-        const tempRows = finalRows.map((row) => ({
-          ...row,
-          predicted_position: row.predicted_position + POSITION_OFFSET,
-        }));
-
-        const { error: tempError } = await supabase
+        // Supprime toutes les lignes existantes pour ce tier avant de
+        // reinserer : une simple upsert par team_name laissait des lignes
+        // obsoletes (equipes qui ne font plus partie du pool actuel) sur
+        // d'anciennes positions, qui entraient alors en collision avec la
+        // contrainte unique (user_id, group_name, predicted_position) des
+        // qu'une nouvelle equipe reclamait la meme position.
+        const { error: deleteError } = await supabase
           .from("group_predictions")
-          .upsert(tempRows, { onConflict: "user_id,group_name,team_name" });
+          .delete()
+          .eq("user_id", userId)
+          .eq("group_name", tier.groupName);
 
-        if (tempError) {
+        if (deleteError) {
           console.error(
-            `Erreur sauvegarde ${tier.groupName} (phase 1):`,
-            JSON.stringify(tempError, null, 2)
+            `Erreur suppression ${tier.groupName}:`,
+            JSON.stringify(deleteError, null, 2)
           );
           setSaveMessage("Erreur lors de la sauvegarde.");
           setSaving(false);
           return;
         }
 
-        const { error: finalError } = await supabase
+        const { error: insertError } = await supabase
           .from("group_predictions")
-          .upsert(finalRows, { onConflict: "user_id,group_name,team_name" });
+          .insert(finalRows);
 
-        if (finalError) {
+        if (insertError) {
           console.error(
-            `Erreur sauvegarde ${tier.groupName} (phase 2):`,
-            JSON.stringify(finalError, null, 2)
+            `Erreur sauvegarde ${tier.groupName}:`,
+            JSON.stringify(insertError, null, 2)
           );
           setSaveMessage("Erreur lors de la sauvegarde.");
           setSaving(false);
@@ -120,7 +117,7 @@ export default function KnockoutTeamsSelection({
     } finally {
       setSaving(false);
     }
-  }
+    }
 
   return (
     <section className="space-y-4 text-slate-900">

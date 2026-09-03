@@ -247,8 +247,10 @@ type KnockoutMatchForQualifies = {
   score_a: number | null;
   score_b: number | null;
   is_finished: boolean | null;
+  tie_id?: string | null;
+  leg?: number | null;
+  winner_team?: string | null;
 };
-
 export type RealQualifiesTeams = {
   huitiemes: Set<string>;
   quarts: Set<string>;
@@ -256,10 +258,55 @@ export type RealQualifiesTeams = {
   finale: Set<string>;
   vainqueur: string | null;
 };
-
-// Equipes reellement presentes en quarts / demi / finale, et vainqueur reel
-// de la finale, deduits directement de la table matches (une equipe apparait
-// dans une phase des qu'un match de cette phase est cree pour elle).
+// Vainqueurs des 8 barrages aller-retour (phase "Barrages"), a partir du
+// score cumule des 2 manches. En cas d'egalite cumulee (tirs au but), le
+// champ winner_team (saisi manuellement sur la manche retour) tranche.
+function computeBarrageTieWinners(
+  matches: KnockoutMatchForQualifies[]
+): Set<string> {
+  const winners = new Set<string>();
+  const legsByTie = new Map<string, KnockoutMatchForQualifies[]>();
+  for (const match of matches) {
+    if (match.phase !== "Barrages" || !match.tie_id) continue;
+    if (!legsByTie.has(match.tie_id)) legsByTie.set(match.tie_id, []);
+    legsByTie.get(match.tie_id)!.push(match);
+  }
+  for (const legs of legsByTie.values()) {
+    const leg1 = legs.find((m) => m.leg === 1);
+    const leg2 = legs.find((m) => m.leg === 2);
+    if (!leg1 || !leg2) continue;
+    if (
+      !leg1.is_finished ||
+      !leg2.is_finished ||
+      leg1.score_a === null ||
+      leg1.score_b === null ||
+      leg2.score_a === null ||
+      leg2.score_b === null ||
+      !leg1.team_a ||
+      !leg1.team_b
+    ) {
+      continue;
+    }
+    const teamX = leg1.team_a;
+    const teamY = leg1.team_b;
+    const aggregateX = leg1.score_a + leg2.score_b;
+    const aggregateY = leg1.score_b + leg2.score_a;
+    if (aggregateX > aggregateY) {
+      winners.add(teamX);
+    } else if (aggregateY > aggregateX) {
+      winners.add(teamY);
+    } else {
+      const winner = leg2.winner_team ?? leg1.winner_team ?? null;
+      if (winner) winners.add(winner);
+    }
+  }
+  return winners;
+}
+// Equipes reellement qualifiees en 8emes : top 8 du classement reel de la
+// phase de ligue + les 8 vainqueurs des barrages aller-retour. Equipes
+// reellement presentes en quarts / demi / finale, et vainqueur reel de la
+// finale, deduits directement de la table matches (une equipe apparait dans
+// une phase des qu'un match de cette phase est cree pour elle).
 export function computeRealTeamsByTier(
   matches: KnockoutMatchForQualifies[]
 ): RealQualifiesTeams {
@@ -268,11 +315,19 @@ export function computeRealTeamsByTier(
   const demi = new Set<string>();
   const finale = new Set<string>();
   let vainqueur: string | null = null;
+
+  const leagueRanking = computeLeagueRealRanking(
+    matches as unknown as Parameters<typeof computeLeagueRealRanking>[0]
+  );
+  for (const team of Object.keys(leagueRanking)) {
+    if (leagueRanking[team] <= 8) huitiemes.add(team);
+  }
+  for (const team of computeBarrageTieWinners(matches)) {
+    huitiemes.add(team);
+  }
+
   for (const match of matches) {
-    if (match.phase === "8e de finale") {
-      if (match.team_a) huitiemes.add(match.team_a);
-      if (match.team_b) huitiemes.add(match.team_b);
-    } else if (match.phase === "Quarts de finale") {
+    if (match.phase === "Quarts de finale") {
       if (match.team_a) quarts.add(match.team_a);
       if (match.team_b) quarts.add(match.team_b);
     } else if (match.phase === "Demi-finales") {

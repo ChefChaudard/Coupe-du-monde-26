@@ -318,7 +318,7 @@ useEffect(() => {
                     : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
                 }`}
               >
-                J{index + 1}
+                {index < 8 ? `J${index + 1}` : "JB"}
               </button>
             ))}
           </div>
@@ -329,7 +329,7 @@ useEffect(() => {
             disabled={savingAll}
             className="rounded-full bg-[#7a1f2c] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#5f1822] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {savingAll ? "Sauvegarde..." : "Sauvegarder"}
+            {savingAll ? "Sauvegarde..." : "Update"}
           </button>
         </div>
       </section>

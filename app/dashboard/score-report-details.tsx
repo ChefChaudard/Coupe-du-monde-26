@@ -35,9 +35,13 @@ function getReportSectionKey(item: ScoreReportRow) {
 
   const normalizedPhase = item.phase.toLowerCase();
 
-  if (item.phase === "Phase de ligue" || normalizedPhase.includes("group")) {
-    return "groupMatches";
-  }
+      if (
+        item.phase === "Phase de ligue" ||
+        normalizedPhase.includes("group") ||
+        normalizedPhase.includes("barrage")
+      ) {
+        return "groupMatches";
+      }
 
   if (
     item.phase === "8e de finale" ||

@@ -181,6 +181,7 @@ function getScoreBreakdownLabel(phase: string) {
 
   if (
     normalizedPhase.includes("group") ||
+    normalizedPhase.includes("barrage") ||
     phase === "Phase de ligue" ||
     phase === TEAM_RANKING_PHASE
   ) {

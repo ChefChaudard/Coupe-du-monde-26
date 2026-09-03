@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { computeLeaderboardData } from "@/app/dashboard/leaderboard-data";
+import { isGroupPhase } from "@/lib/phase";
 export async function GET(request: Request) {
   const supabase = await createClient();
   const {
@@ -162,19 +163,61 @@ export async function GET(request: Request) {
       matches: matchesById.get(prediction.match_id) ?? null,
     })
   );
-  const paidProfiles = (profiles ?? []).filter(
+   const paidProfiles = (profiles ?? []).filter(
     (profile: { id: string; nickname: string | null; has_paid: boolean | null }) =>
       profile.has_paid === true
   );
 
+  const { data: pointSettingsRows } = await supabase
+    .from("app_settings")
+    .select("key, value")
+    .in("key", [
+      "points_1er_tour_enabled",
+      "points_classement_equipes_enabled",
+      "points_qualifies_8emes_enabled",
+      "points_qualifies_autres_tours_enabled",
+    ]);
+  const pointSettingValue = new Map(
+    (pointSettingsRows ?? []).map((row: { key: string; value: string }) => [row.key, row.value])
+  );
+  const points1erTourEnabled = pointSettingValue.get("points_1er_tour_enabled") === "true";
+  const pointsClassementEquipesEnabled =
+    pointSettingValue.get("points_classement_equipes_enabled") === "true";
+  const pointsQualifies8emesEnabled =
+    pointSettingValue.get("points_qualifies_8emes_enabled") === "true";
+  const pointsQualifiesAutresToursEnabled =
+    pointSettingValue.get("points_qualifies_autres_tours_enabled") === "true";
+
+  const filteredPredictionsWithMatches = predictionsWithMatches.filter(
+    (prediction: { matches: { phase?: string } | null }) => {
+      if (isGroupPhase(prediction.matches?.phase ?? "")) {
+        return points1erTourEnabled;
+      }
+      return true;
+    }
+  );
+
+  const filteredGroupPredictions = (groupPredictions ?? []).filter(
+    (row: { group_name: string }) => {
+      if (row.group_name === "Phase de ligue") return pointsClassementEquipesEnabled;
+      if (row.group_name === "8emes de finale") return pointsQualifies8emesEnabled;
+      if (
+        ["Quarts de finale", "Demi-finales", "Finale", "Vainqueur"].includes(row.group_name)
+      ) {
+        return pointsQualifiesAutresToursEnabled;
+      }
+      return true;
+    }
+  );
+
   const payload = computeLeaderboardData(
-    predictionsWithMatches as unknown as Parameters<typeof computeLeaderboardData>[0],
+    filteredPredictionsWithMatches as unknown as Parameters<typeof computeLeaderboardData>[0],
     paidProfiles as unknown as Parameters<typeof computeLeaderboardData>[1],
     groupMemberIds,
     (knockoutPredictions ?? []) as unknown as Parameters<typeof computeLeaderboardData>[3],
     (matches ?? []) as unknown as Parameters<typeof computeLeaderboardData>[4],
     (realTopScorers ?? []) as unknown as Parameters<typeof computeLeaderboardData>[5],
-    (groupPredictions ?? []) as unknown as Parameters<typeof computeLeaderboardData>[6]
+    filteredGroupPredictions as unknown as Parameters<typeof computeLeaderboardData>[6]
   );
   return NextResponse.json(payload);
 }

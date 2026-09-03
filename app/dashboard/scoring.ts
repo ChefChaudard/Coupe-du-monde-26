@@ -137,20 +137,16 @@ export function getLeagueZoneForRank(rank: number): LeagueZone {
 }
 
 export const TEAM_RANKING_ZONE_POINTS = 3;
-export const TEAM_RANKING_EXACT_POINTS = 6;
-
 export function getTeamRankingPoints(
   predictedPosition: number,
   actualRank: number | undefined
 ) {
   if (!actualRank) return 0;
-  if (predictedPosition === actualRank) return TEAM_RANKING_EXACT_POINTS;
   if (getLeagueZoneForRank(predictedPosition) === getLeagueZoneForRank(actualRank)) {
     return TEAM_RANKING_ZONE_POINTS;
   }
   return 0;
 }
-
 type LeagueMatchForRanking = {
   phase: string;
   team_a: string | null;

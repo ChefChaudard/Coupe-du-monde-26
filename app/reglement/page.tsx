@@ -125,9 +125,8 @@ export default async function ReglementPage() {
               <h3 className="font-semibold text-slate-900">
                 Classement des 36 equipes (1er tour)
               </h3>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
+               <ul className="mt-2 list-disc space-y-1 pl-5">
                 <li>Equipe placee dans la bonne zone (qualifies 8emes / barrages / eliminees) : 3 points.</li>
-                <li>Equipe placee exactement au bon rang (1 a 36) : 6 points.</li>
               </ul>
             </div>
             <div>

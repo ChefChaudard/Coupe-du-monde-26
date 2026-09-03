@@ -5,7 +5,6 @@ import { supabase } from "@/lib/supabase/client";
 import { getTeamRankingPoints } from "@/app/dashboard/scoring";
 
 const GROUP_NAME = "Phase de ligue";
-const POSITION_OFFSET = 1000;
 const HOLD_INITIAL_DELAY_MS = 400;
 const HOLD_REPEAT_INTERVAL_MS = 150;
 
@@ -152,7 +151,7 @@ export default function LeagueRankingPrediction({
     stopRepeat();
   }
 
-  async function handleSave() {
+    async function handleSave() {
     if (saving || locked) return;
 
     setSaving(true);
@@ -166,30 +165,33 @@ export default function LeagueRankingPrediction({
       updated_at: new Date().toISOString(),
     }));
 
-    const tempRows = finalRows.map((row) => ({
-      ...row,
-      predicted_position: row.predicted_position + POSITION_OFFSET,
-    }));
-
-    const { error: tempError } = await supabase
+    // Supprime toutes les lignes existantes avant de reinserer : une simple
+    // upsert par team_name laissait des lignes obsoletes (equipes qui ne
+    // font plus partie du classement actuel) sur d'anciennes positions, qui
+    // entraient alors en collision avec la contrainte unique (user_id,
+    // group_name, predicted_position) des qu'une nouvelle equipe reclamait
+    // la meme position.
+    const { error: deleteError } = await supabase
       .from("group_predictions")
-      .upsert(tempRows, { onConflict: "user_id,group_name,team_name" });
+      .delete()
+      .eq("user_id", userId)
+      .eq("group_name", GROUP_NAME);
 
-    if (tempError) {
-      console.error("Erreur sauvegarde classement (phase 1):", JSON.stringify(tempError, null, 2));
+    if (deleteError) {
+      console.error("Erreur suppression classement:", JSON.stringify(deleteError, null, 2));
       setSaveMessage("Erreur lors de la sauvegarde.");
       setSaving(false);
       return;
     }
 
-    const { error: finalErrorResult } = await supabase
+    const { error: insertError } = await supabase
       .from("group_predictions")
-      .upsert(finalRows, { onConflict: "user_id,group_name,team_name" });
+      .insert(finalRows);
 
     setSaving(false);
 
-    if (finalErrorResult) {
-      console.error("Erreur sauvegarde classement (phase 2):", JSON.stringify(finalErrorResult, null, 2));
+    if (insertError) {
+      console.error("Erreur sauvegarde classement:", JSON.stringify(insertError, null, 2));
       setSaveMessage("Erreur lors de la sauvegarde.");
       return;
     }

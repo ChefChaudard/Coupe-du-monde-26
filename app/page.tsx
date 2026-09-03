@@ -121,7 +121,12 @@ export default async function Home() {
               >
                 Créer / gérer groupes
               </Link>
-
+                <Link
+                  href="/parametres-points"
+                  className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  Parametres Points
+                </Link>
               <Link
                 href="/administration"
                 className="rounded-full bg-slate-900 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800"

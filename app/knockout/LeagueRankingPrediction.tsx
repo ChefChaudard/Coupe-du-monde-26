@@ -184,15 +184,34 @@ export default function LeagueRankingPrediction({
       return;
     }
 
-    const { error: insertError } = await supabase
+    const { data: insertedRows, error: insertError } = await supabase
       .from("group_predictions")
-      .insert(finalRows);
+      .insert(finalRows)
+      .select("team_name");
 
     setSaving(false);
 
     if (insertError) {
       console.error("Erreur sauvegarde classement:", JSON.stringify(insertError, null, 2));
       setSaveMessage("Erreur lors de la sauvegarde.");
+      return;
+    }
+
+    // Verifie que les lignes sont bien reellement en base (et relisibles,
+    // donc pas filtrees par une policy RLS) avant d'annoncer un succes : un
+    // insert() peut repondre sans erreur mais avec moins de lignes que
+    // prevu si une policy bloque silencieusement une partie de l'ecriture.
+    if (!insertedRows || insertedRows.length !== finalRows.length) {
+      console.error(
+        "Sauvegarde incomplete:",
+        insertedRows?.length ?? 0,
+        "/",
+        finalRows.length,
+        "lignes confirmees"
+      );
+      setSaveMessage(
+        `Sauvegarde incomplete (${insertedRows?.length ?? 0}/${finalRows.length} equipes). Reessayez.`
+      );
       return;
     }
 

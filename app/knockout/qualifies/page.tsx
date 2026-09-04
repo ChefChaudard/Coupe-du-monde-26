@@ -11,9 +11,6 @@ export const metadata: Metadata = {
   title: "Equipes qualifiees",
 };
 
-const LEAGUE_GROUP_NAME = "Phase de ligue";
-const POOL_SIZE = 24;
-
 const TIERS = [
   { key: "huitiemes", groupName: "8emes de finale", label: "8emes", count: 16 },
   { key: "quarts", groupName: "Quarts de finale", label: "Quarts", count: 8 },
@@ -28,6 +25,22 @@ type GroupPredictionRow = {
   predicted_position: number;
 };
 
+type MatchRow = {
+  phase: string;
+  team_a: string;
+  team_b: string;
+};
+
+function collectLeaguePhaseTeams(matches: MatchRow[]) {
+  const teams = new Set<string>();
+  for (const match of matches) {
+    if (match.phase !== "Phase de ligue") continue;
+    if (match.team_a) teams.add(match.team_a);
+    if (match.team_b) teams.add(match.team_b);
+  }
+  return Array.from(teams).sort((left, right) => left.localeCompare(right));
+}
+
 export default async function KnockoutTeamsPage() {
   const supabase = await createClient();
   const {
@@ -37,16 +50,15 @@ export default async function KnockoutTeamsPage() {
 
   if (error || !user) redirect("/login");
 
-  const { data: rankingRows } = await supabase
-    .from("group_predictions")
-    .select("group_name, team_name, predicted_position")
-    .eq("user_id", user.id)
-    .eq("group_name", LEAGUE_GROUP_NAME)
-    .order("predicted_position", { ascending: true });
+  // Le pool doit couvrir les 36 equipes possibles de la competition (et non
+  // se limiter aux 24 premieres du classement pronostique par le joueur) :
+  // n'importe laquelle des 36 peut theoriquement atteindre les 8emes si le
+  // classement predit s'avere faux.
+  const { data: matches } = await supabase
+    .from("matches")
+    .select("phase, team_a, team_b");
 
-  const pool = ((rankingRows ?? []) as GroupPredictionRow[])
-    .slice(0, POOL_SIZE)
-    .map((row) => row.team_name);
+  const pool = collectLeaguePhaseTeams((matches ?? []) as MatchRow[]);
 
   const { data: tierRows } = await supabase
     .from("group_predictions")

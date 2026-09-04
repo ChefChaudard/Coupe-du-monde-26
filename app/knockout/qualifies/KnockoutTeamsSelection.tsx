@@ -129,7 +129,7 @@ export default function KnockoutTeamsSelection({
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Choisissez {activeTier.count} equipe
             {activeTier.count > 1 ? "s" : ""} pour {activeTier.label.toLowerCase()}{" "}
-            parmi vos 24 premieres equipes du classement.
+            parmi les 36 equipes de la competition.
           </p>
         </div>
 
@@ -171,8 +171,7 @@ export default function KnockoutTeamsSelection({
 
       {pool.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-center text-sm text-slate-500 shadow-sm">
-          Sauvegardez d&apos;abord votre classement (page Classement) pour
-          disposer de vos 24 premieres equipes.
+          Aucune equipe disponible pour le moment.
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">

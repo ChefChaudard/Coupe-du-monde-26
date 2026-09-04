@@ -109,7 +109,7 @@ export default async function ReglementPage() {
           <div className="mt-4 space-y-4 text-sm leading-6 text-slate-700">
             <div>
               <h3 className="font-semibold text-slate-900">
-                Pronostics de matchs (1er tour, barrages, 2e tour reel)
+                Pronostics de matchs (1er tour et barrages)
               </h3>
               <p className="mt-1">
                 Chaque match pronostique rapporte des points bases sur la
@@ -123,10 +123,24 @@ export default async function ReglementPage() {
             </div>
             <div>
               <h3 className="font-semibold text-slate-900">
+                Matchs reels du 2e tour (8emes, quarts, demi, finale)
+              </h3>
+              <p className="mt-1">
+                Meme principe que le 1er tour, avec un multiplicateur x6
+                pour equilibrer le poids de ce bloc face aux 3 autres :
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                <li>Bonne issue trouvee : 6 fois la cote.</li>
+                <li>Score exact trouve : 12 fois la cote.</li>
+                <li>Issue incorrecte : 0 point.</li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900">
                 Classement des 36 equipes (1er tour)
               </h3>
                <ul className="mt-2 list-disc space-y-1 pl-5">
-                <li>Equipe placee dans la bonne zone (qualifies 8emes / barrages / eliminees) : 3 points.</li>
+                <li>Equipe placee dans la bonne zone (qualifies 8emes / barrages / eliminees) : 18 points.</li>
               </ul>
             </div>
             <div>
@@ -134,11 +148,11 @@ export default async function ReglementPage() {
                 Equipes qualifiees (8emes, quarts, demi, finale, vainqueur)
               </h3>
               <ul className="mt-2 list-disc space-y-1 pl-5">
-                <li>Equipe pronostiquee qui atteint reellement les 8emes de finale : 3 points.</li>
-                <li>Equipe pronostiquee qui atteint reellement les quarts : 6 points.</li>
-                <li>Equipe pronostiquee qui atteint reellement les demi-finales : 6 points.</li>
-                <li>Equipe pronostiquee qui atteint reellement la finale : 12 points.</li>
-                <li>Vainqueur pronostique qui remporte reellement la competition : 12 points.</li>
+                <li>Equipe pronostiquee qui atteint reellement les 8emes de finale : 12 points.</li>
+                <li>Equipe pronostiquee qui atteint reellement les quarts : 24 points.</li>
+                <li>Equipe pronostiquee qui atteint reellement les demi-finales : 24 points.</li>
+                <li>Equipe pronostiquee qui atteint reellement la finale : 48 points.</li>
+                <li>Vainqueur pronostique qui remporte reellement la competition : 48 points.</li>
               </ul>
             </div>
           </div>

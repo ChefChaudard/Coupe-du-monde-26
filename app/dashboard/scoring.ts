@@ -93,19 +93,27 @@ export function getMatchOdds(match: BookmakerOdds): MatchOdds {
   };
 }
 
-// Formule de points par match (1er tour, barrages, et 2e tour reel confondus) :
+// Formule de points par match :
 // - issue (1/N/2) incorrecte : 0 point
 // - issue correcte : 1 x la cote de cette issue
 // - score exact trouve : 2 x la cote de cette issue (au lieu de 1x)
-// Le parametre `phase` n'influence plus le calcul (conserve pour compatibilite
-// de signature avec les appelants existants).
+// Pour les matchs reels du 2e tour (8e de finale, quarts, demi, finale), un
+// multiplicateur supplementaire s'applique pour equilibrer le poids de ce
+// bloc face aux 3 autres blocs d'attribution des points (~25% chacun).
+export const REAL_KNOCKOUT_POINTS_MULTIPLIER = 6;
+const REAL_KNOCKOUT_PHASES = [
+  "8e de finale",
+  "Quarts de finale",
+  "Demi-finales",
+  "Finale",
+];
 export function getPredictionPoints(
   predictedA: number,
   predictedB: number,
   actualA: number | null,
   actualB: number | null,
   isFinished: boolean | null,
-  _phase: string,
+  phase: string,
   odds: MatchOdds
 ) {
   if (!isFinished || actualA === null || actualB === null) return 0;
@@ -122,8 +130,11 @@ export function getPredictionPoints(
 
   const isExactScore = predictedA === actualA && predictedB === actualB;
   const multiplier = isExactScore ? 2 : 1;
+  const phaseMultiplier = REAL_KNOCKOUT_PHASES.includes(phase)
+    ? REAL_KNOCKOUT_POINTS_MULTIPLIER
+    : 1;
 
-  return Math.round(multiplier * cote * 100) / 100;
+  return Math.round(multiplier * cote * phaseMultiplier * 100) / 100;
 }
 
 // ----- Classement equipes (1-36), CL26 -----
@@ -136,7 +147,7 @@ export function getLeagueZoneForRank(rank: number): LeagueZone {
   return "eliminees";
 }
 
-export const TEAM_RANKING_ZONE_POINTS = 3;
+export const TEAM_RANKING_ZONE_POINTS = 18;
 export function getTeamRankingPoints(
   predictedPosition: number,
   actualRank: number | undefined
@@ -228,11 +239,11 @@ export function computeLeagueRealRanking(
 }
 // ----- Qualifies (quarts / demi / finale / vainqueur), CL26 -----
 
-export const QUALIFIES_HUITIEMES_POINTS = 3;
-export const QUALIFIES_QUARTS_POINTS = 6;
-export const QUALIFIES_DEMI_POINTS = 6;
-export const QUALIFIES_FINALE_POINTS = 12;
-export const QUALIFIES_VAINQUEUR_POINTS = 12;
+export const QUALIFIES_HUITIEMES_POINTS = 12;
+export const QUALIFIES_QUARTS_POINTS = 24;
+export const QUALIFIES_DEMI_POINTS = 24;
+export const QUALIFIES_FINALE_POINTS = 48;
+export const QUALIFIES_VAINQUEUR_POINTS = 48;
 
 export function getQualifiesTierPoints(groupName: string) {
   if (groupName === "8emes de finale") return QUALIFIES_HUITIEMES_POINTS;

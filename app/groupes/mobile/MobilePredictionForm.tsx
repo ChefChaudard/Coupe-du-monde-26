@@ -100,6 +100,22 @@ export default function MobilePredictionForm({
   }, [matches]);
   const [selectedJournee, setSelectedJournee] = useState(0);
     const [savingAll, setSavingAll] = useState(false);
+  // Cote moyenne de la journee, utilisee comme repli d'affichage quand le
+  // bookmaker n'a pas encore publie de cote pour un match donne (moyenne
+  // des 1, des N et des 2 separement, calculee sur les seuls matchs de la
+  // meme journee qui ont une cote reelle).
+  const journeeOddsAverage = useMemo(() => {
+    const average = (values: (number | null)[]) => {
+      const known = values.filter((v): v is number => v !== null);
+      if (known.length === 0) return null;
+      return known.reduce((sum, v) => sum + v, 0) / known.length;
+    };
+    return journees.map((journeeMatches) => ({
+      one: average(journeeMatches.map((m) => m.odds_home)),
+      draw: average(journeeMatches.map((m) => m.odds_draw)),
+      two: average(journeeMatches.map((m) => m.odds_away)),
+    }));
+  }, [journees]);
 
   useEffect(() => {
     let cancelled = false;
@@ -329,6 +345,13 @@ useEffect(() => {
           Aucun match du premier tour n&apos;est disponible pour le moment.
         </div>
       ) : null}
+      {visibleMatches.some(
+        (match) => match.odds_home === null || match.odds_draw === null || match.odds_away === null
+      ) ? (
+        <p className="px-1 text-[11px] text-slate-400">
+          * cote non publiee par le bookmaker : moyenne des cotes de la journee affichee a titre indicatif.
+        </p>
+      ) : null}
       {visibleMatches.map((match) => {
         const kickoffDate = new Date(match.kickoff_at);
         const hasStarted = kickoffDate.getTime() <= appNowTime;
@@ -346,11 +369,17 @@ useEffect(() => {
         const stats = matchStats[match.id];
         const myPoints = stats?.myPoints ?? null;
         const averagePoints = stats?.averagePoints ?? null;
-               const odds = {
-          one: match.odds_home,
-          draw: match.odds_draw,
-          two: match.odds_away,
+               const journeeAverage =
+          journeeOddsAverage[selectedJournee] ?? { one: null, draw: null, two: null };
+        const oneIsFallback = match.odds_home === null && journeeAverage.one !== null;
+        const drawIsFallback = match.odds_draw === null && journeeAverage.draw !== null;
+        const twoIsFallback = match.odds_away === null && journeeAverage.two !== null;
+        const odds = {
+          one: match.odds_home ?? journeeAverage.one,
+          draw: match.odds_draw ?? journeeAverage.draw,
+          two: match.odds_away ?? journeeAverage.two,
         };
+        const hasFallbackOdds = oneIsFallback || drawIsFallback || twoIsFallback;
         const partnerLeg =
           match.phase === "Barrages" && match.leg === 2 && match.tie_id
             ? matches.find(
@@ -487,7 +516,7 @@ useEffect(() => {
                <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs">
               <div className="rounded-lg bg-slate-50 px-2 py-1.5">
                 <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                  Cote 1-N-2
+                  Cote 1-N-2{hasFallbackOdds ? "*" : ""}
                 </p>
                 <p className="mt-0.5 font-mono text-[11px] font-semibold text-slate-700">
                   {odds.one !== null ? formatOneDecimal(odds.one) : "-"} /{" "}

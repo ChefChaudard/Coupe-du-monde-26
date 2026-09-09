@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { getQualifiesTierPoints } from "@/app/dashboard/scoring";
 
 const TIERS = [
   { key: "huitiemes", groupName: "8emes de finale", label: "8emes", count: 16 },
@@ -11,16 +12,30 @@ const TIERS = [
   { key: "vainqueur", groupName: "Vainqueur", label: "Vainqueur", count: 1 },
 ];
 
+type RealTeamsByTier = {
+  huitiemes: string[];
+  quarts: string[];
+  demi: string[];
+  finale: string[];
+  vainqueur: string | null;
+};
+
 export default function KnockoutTeamsSelection({
   userId,
   pool,
   initialSelectedByTier,
   locked = false,
+  realTeamsByTier,
+  pointsQualifies8emesEnabled = false,
+  pointsQualifiesAutresToursEnabled = false,
 }: {
   userId: string;
   pool: string[];
   initialSelectedByTier: Record<string, string[]>;
   locked?: boolean;
+  realTeamsByTier?: RealTeamsByTier;
+  pointsQualifies8emesEnabled?: boolean;
+  pointsQualifiesAutresToursEnabled?: boolean;
 }) {
   const [selectedByTier, setSelectedByTier] = useState<Record<string, string[]>>(
     initialSelectedByTier
@@ -32,6 +47,32 @@ export default function KnockoutTeamsSelection({
   const activeTier = TIERS[activeTierIndex];
   const selectedTeams = selectedByTier[activeTier.key] ?? [];
   const availableTeams = pool.filter((team) => !selectedTeams.includes(team));
+
+  // Points reellement rapportes par une equipe choisie dans le tour actif :
+  // seulement si le parametre point de ce tour est actif ET que l'equipe a
+  // effectivement atteint ce tour en realite (0 sinon, par defaut).
+  const isTierPointsEnabled =
+    activeTier.key === "huitiemes"
+      ? pointsQualifies8emesEnabled
+      : pointsQualifiesAutresToursEnabled;
+
+  function getTeamQualifiesPoints(team: string): number {
+    if (!isTierPointsEnabled || !realTeamsByTier) return 0;
+
+    const isReallyQualified =
+      activeTier.key === "vainqueur"
+        ? realTeamsByTier.vainqueur === team
+        : (realTeamsByTier[activeTier.key as "huitiemes" | "quarts" | "demi" | "finale"] ?? []).includes(
+            team
+          );
+
+    return isReallyQualified ? getQualifiesTierPoints(activeTier.groupName) : 0;
+  }
+
+  const activeTierTotalPoints = selectedTeams.reduce(
+    (total, team) => total + getTeamQualifiesPoints(team),
+    0
+  );
 
   function moveToSelected(team: string) {
     if (locked) return;
@@ -202,28 +243,41 @@ export default function KnockoutTeamsSelection({
           </div>
 
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-600">
-              {activeTier.label} ({selectedTeams.length}/{activeTier.count})
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-600">
+              <span>
+                {activeTier.label} ({selectedTeams.length}/{activeTier.count})
+              </span>
+              <span className="text-center">{activeTierTotalPoints} pts</span>
             </div>
             <ul className="divide-y divide-slate-100">
-              {selectedTeams.map((team) => (
-                <li
-                  key={team}
-                  className="flex items-center justify-between gap-2 px-3 py-2"
-                >
-                  <button
-                    type="button"
-                    onClick={() => moveToAvailable(team)}
-                    disabled={locked}
-                    aria-label={`Retirer ${team}`}
-                    className="shrink-0 rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                    dangerouslySetInnerHTML={{ __html: "&larr;" }}
-                  />
-                  <span className="flex-1 text-right text-sm font-medium text-slate-900">
-                    {team}
-                  </span>
-                </li>
-              ))}
+              {selectedTeams.map((team) => {
+                const teamPoints = getTeamQualifiesPoints(team);
+                return (
+                  <li
+                    key={team}
+                    className="flex items-center justify-between gap-2 px-3 py-2"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => moveToAvailable(team)}
+                      disabled={locked}
+                      aria-label={`Retirer ${team}`}
+                      className="shrink-0 rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      dangerouslySetInnerHTML={{ __html: "&larr;" }}
+                    />
+                    <span
+                      className={`flex-1 text-right text-sm font-medium ${
+                        teamPoints > 0 ? "text-[#7a1f2c]" : "text-slate-900"
+                      }`}
+                    >
+                      {team}
+                    </span>
+                    <span className="w-12 shrink-0 text-right text-xs font-semibold text-slate-500">
+                      {teamPoints} pts
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>

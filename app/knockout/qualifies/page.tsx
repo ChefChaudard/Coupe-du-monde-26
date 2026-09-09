@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompetitionStarted } from "@/lib/competition-lock";
+import { computeRealTeamsByTier } from "@/app/dashboard/scoring";
 import KnockoutTeamsSelection from "./KnockoutTeamsSelection";
 import type { Metadata } from "next";
 
@@ -31,6 +32,18 @@ type MatchRow = {
   team_b: string;
 };
 
+type KnockoutMatchRow = {
+  phase: string;
+  team_a: string | null;
+  team_b: string | null;
+  score_a: number | null;
+  score_b: number | null;
+  is_finished: boolean | null;
+  tie_id: string | null;
+  leg: number | null;
+  winner_team: string | null;
+};
+
 function collectLeaguePhaseTeams(matches: MatchRow[]) {
   const teams = new Set<string>();
   for (const match of matches) {
@@ -56,9 +69,30 @@ export default async function KnockoutTeamsPage() {
   // classement predit s'avere faux.
   const { data: matches } = await supabase
     .from("matches")
-    .select("phase, team_a, team_b");
+    .select("phase, team_a, team_b, score_a, score_b, is_finished, tie_id, leg, winner_team");
 
   const pool = collectLeaguePhaseTeams((matches ?? []) as MatchRow[]);
+
+  const realTeams = computeRealTeamsByTier((matches ?? []) as KnockoutMatchRow[]);
+  const realTeamsByTier = {
+    huitiemes: Array.from(realTeams.huitiemes),
+    quarts: Array.from(realTeams.quarts),
+    demi: Array.from(realTeams.demi),
+    finale: Array.from(realTeams.finale),
+    vainqueur: realTeams.vainqueur,
+  };
+
+  const { data: pointSettingRows } = await supabase
+    .from("app_settings")
+    .select("key, value")
+    .in("key", ["points_qualifies_8emes_enabled", "points_qualifies_autres_tours_enabled"]);
+  const pointSettingValue = new Map(
+    (pointSettingRows ?? []).map((row) => [row.key, row.value])
+  );
+  const pointsQualifies8emesEnabled =
+    pointSettingValue.get("points_qualifies_8emes_enabled") === "true";
+  const pointsQualifiesAutresToursEnabled =
+    pointSettingValue.get("points_qualifies_autres_tours_enabled") === "true";
 
   const { data: tierRows } = await supabase
     .from("group_predictions")
@@ -94,6 +128,9 @@ export default async function KnockoutTeamsPage() {
           pool={pool}
           initialSelectedByTier={initialSelectedByTier}
           locked={locked}
+          realTeamsByTier={realTeamsByTier}
+          pointsQualifies8emesEnabled={pointsQualifies8emesEnabled}
+          pointsQualifiesAutresToursEnabled={pointsQualifiesAutresToursEnabled}
         />
       </div>
     </main>

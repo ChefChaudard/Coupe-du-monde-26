@@ -18,11 +18,13 @@ export default function LeagueRankingPrediction({
   teams,
   realRankByTeam,
   locked = false,
+  pointsEnabled = false,
 }: {
   userId: string;
   teams: string[];
   realRankByTeam: Record<string, number>;
   locked?: boolean;
+  pointsEnabled?: boolean;
 }) {
   const [orderedTeams, setOrderedTeams] = useState<string[]>(teams);
   const [loading, setLoading] = useState(true);
@@ -39,7 +41,13 @@ export default function LeagueRankingPrediction({
 
     orderedTeams.forEach((team, index) => {
       const actualRank = realRankByTeam[team];
-      const points = actualRank !== undefined ? getTeamRankingPoints(index + 1, actualRank) : 0;
+      // Tant que le parametre "points_classement_equipes_enabled" n'est pas
+      // actif, aucun point n'est attribue : chaque equipe et chaque bandeau
+      // de zone doivent rester a 0.
+      const points =
+        pointsEnabled && actualRank !== undefined
+          ? getTeamRankingPoints(index + 1, actualRank)
+          : 0;
 
       if (index < 8) {
         qualifies += points;
@@ -51,7 +59,7 @@ export default function LeagueRankingPrediction({
     });
 
     return { qualifies, barrages, eliminees };
-  }, [orderedTeams, realRankByTeam]);
+  }, [orderedTeams, realRankByTeam, pointsEnabled]);
 
   useEffect(() => {
     async function loadPrediction() {
@@ -264,7 +272,10 @@ export default function LeagueRankingPrediction({
 
             const teamTextClassName = index < 8 ? "text-[#014421]" : index < 24 ? "text-orange-700" : "text-red-700";
             const actualRank = realRankByTeam[team];
-            const teamPoints = actualRank !== undefined ? getTeamRankingPoints(index + 1, actualRank) : null;
+            const teamPoints =
+              pointsEnabled && actualRank !== undefined
+                ? getTeamRankingPoints(index + 1, actualRank)
+                : 0;
 
             return (
               <li key={team}>
@@ -280,7 +291,7 @@ export default function LeagueRankingPrediction({
                   <span className={`flex-1 text-sm font-semibold ${teamTextClassName}`}>
                     {team}
                     <span className="ml-2 text-xs font-normal text-slate-500">
-                      {teamPoints !== null ? `${teamPoints} pts` : "-"}
+                      {teamPoints} pts
                     </span>
                   </span>
                   <div className="flex shrink-0 items-center gap-1">

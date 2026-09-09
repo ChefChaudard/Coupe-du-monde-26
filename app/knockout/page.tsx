@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompetitionStarted } from "@/lib/competition-lock";
+import { computeLeagueRealRanking } from "@/app/dashboard/scoring";
 import LeagueRankingPrediction from "./LeagueRankingPrediction";
 import type { Metadata } from "next";
 
@@ -27,63 +28,6 @@ function collectLeaguePhaseTeams(matches: MatchRow[]) {
   return Array.from(teams).sort((left, right) => left.localeCompare(right));
 }
 
-type TeamStanding = {
-  team: string;
-  points: number;
-  goalDifference: number;
-  goalsFor: number;
-};
-
-function computeRealRanking(matches: MatchRow[]) {
-  const statsByTeam = new Map<string, TeamStanding>();
-
-  function ensureTeam(team: string) {
-    if (!statsByTeam.has(team)) {
-      statsByTeam.set(team, { team, points: 0, goalDifference: 0, goalsFor: 0 });
-    }
-    return statsByTeam.get(team)!;
-  }
-
-  for (const match of matches) {
-    if (match.phase !== "Phase de ligue") continue;
-
-    const teamA = ensureTeam(match.team_a);
-    const teamB = ensureTeam(match.team_b);
-
-    if (!match.is_finished || match.score_a === null || match.score_b === null) {
-      continue;
-    }
-
-    teamA.goalsFor += match.score_a;
-    teamB.goalsFor += match.score_b;
-    teamA.goalDifference += match.score_a - match.score_b;
-    teamB.goalDifference += match.score_b - match.score_a;
-
-    if (match.score_a > match.score_b) {
-      teamA.points += 3;
-    } else if (match.score_a < match.score_b) {
-      teamB.points += 3;
-    } else {
-      teamA.points += 1;
-      teamB.points += 1;
-    }
-  }
-
-  const sortedTeams = Array.from(statsByTeam.values()).sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points;
-    if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
-    if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
-    return a.team.localeCompare(b.team);
-  });
-
-  const rankByTeam: Record<string, number> = {};
-  sortedTeams.forEach((team, index) => {
-    rankByTeam[team.team] = index + 1;
-  });
-
-  return rankByTeam;
-}
-
 export default async function KnockoutPage() {
   const supabase = await createClient();
   const {
@@ -100,8 +44,20 @@ export default async function KnockoutPage() {
     .select("phase, team_a, team_b, score_a, score_b, is_finished");
 
   const leaguePhaseTeams = collectLeaguePhaseTeams(matches ?? []);
-  const realRankByTeam = computeRealRanking(matches ?? []);
+  // computeLeagueRealRanking ne tient compte que des matchs deja termines
+  // (is_finished + scores non nuls) et applique les criteres UEFA complets
+  // (points, difference de buts, buts marques, buts marques a l'exterieur,
+  // victoires, victoires a l'exterieur, alphabetique).
+  const realRankByTeam = computeLeagueRealRanking(matches ?? []);
   const locked = await hasCompetitionStarted(supabase);
+
+  const { data: pointSettingRows } = await supabase
+    .from("app_settings")
+    .select("key, value")
+    .eq("key", "points_classement_equipes_enabled");
+  const pointsEnabled =
+    (pointSettingRows ?? []).find((row) => row.key === "points_classement_equipes_enabled")
+      ?.value === "true";
 
   return (
     <main className="min-h-screen bg-slate-50 p-6">
@@ -111,6 +67,7 @@ export default async function KnockoutPage() {
           teams={leaguePhaseTeams}
           realRankByTeam={realRankByTeam}
           locked={locked}
+          pointsEnabled={pointsEnabled}
         />
       </div>
     </main>

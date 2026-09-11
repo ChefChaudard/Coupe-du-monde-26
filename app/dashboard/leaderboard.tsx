@@ -19,7 +19,7 @@ import type {
 } from "./leaderboard-data";
 import { formatOneDecimal } from "./format";
 import ScoreReportDetails from "./score-report-details";
-import { WeeklyPointsChart } from "./weekly-points-chart";
+import { MultiPlayerWeeklyPointsChart } from "./weekly-points-chart";
 
 const STORAGE_KEY = "activeGroupId";
 
@@ -33,7 +33,6 @@ type LeaderboardRowItemProps = {
   groupPlacementPoints?: number;
   phaseDetails?: PhaseDetailRow[];
   displayPoints?: number;
-  weeklyPoints?: WeeklyPoint[];
   onShowReport?: (userId: string, sectionKey?: string) => void;
   rowRef?: (element: HTMLDivElement | null) => void;
 };
@@ -144,7 +143,6 @@ function LeaderboardRowItem({
   groupPlacementPoints,
   phaseDetails,
   displayPoints,
-  weeklyPoints,
   onShowReport,
   rowRef,
 }: LeaderboardRowItemProps) {
@@ -152,11 +150,6 @@ function LeaderboardRowItem({
   const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>({});
   const anchorRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-
-  const [isTotalHovered, setIsTotalHovered] = useState(false);
-  const [totalTooltipStyle, setTotalTooltipStyle] = useState<CSSProperties>({});
-  const totalAnchorRef = useRef<HTMLElement>(null);
-  const totalTooltipRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (!isHovered) return;
@@ -211,63 +204,6 @@ function LeaderboardRowItem({
       setTooltipStyle({});
     }
   }, [isHovered]);
-
-  useLayoutEffect(() => {
-    if (!isTotalHovered) return;
-
-    const updateTotalTooltipPosition = () => {
-      const anchor = totalAnchorRef.current;
-      const tooltip = totalTooltipRef.current;
-
-      if (!anchor || !tooltip || typeof window === "undefined") return;
-
-      const anchorRect = anchor.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const margin = 12;
-      const preferredWidth = Math.min(340, viewportWidth - margin * 2);
-      const tooltipWidth = Math.max(280, preferredWidth);
-      const maxTooltipHeight = Math.max(160, viewportHeight - margin * 2);
-      const tooltipHeight = Math.min(tooltip.offsetHeight || 220, maxTooltipHeight);
-
-      const spaceBelow = viewportHeight - anchorRect.bottom - margin;
-      const spaceAbove = anchorRect.top - margin;
-      const placeAbove = spaceBelow < tooltipHeight && spaceAbove >= tooltipHeight;
-
-      const top = placeAbove
-        ? Math.max(margin, anchorRect.top - tooltipHeight - margin)
-        : Math.min(viewportHeight - tooltipHeight - margin, anchorRect.bottom + margin);
-
-      const left = Math.max(
-        margin,
-        Math.min(viewportWidth - tooltipWidth - margin, anchorRect.right - tooltipWidth)
-      );
-
-      setTotalTooltipStyle({
-        position: "fixed",
-        top,
-        left,
-        width: tooltipWidth,
-        maxHeight: maxTooltipHeight,
-        overflowY: "auto",
-      });
-    };
-
-    updateTotalTooltipPosition();
-    window.addEventListener("resize", updateTotalTooltipPosition);
-    window.addEventListener("scroll", updateTotalTooltipPosition, true);
-
-    return () => {
-      window.removeEventListener("resize", updateTotalTooltipPosition);
-      window.removeEventListener("scroll", updateTotalTooltipPosition, true);
-    };
-  }, [isTotalHovered, weeklyPoints]);
-
-  useEffect(() => {
-    if (!isTotalHovered) {
-      setTotalTooltipStyle({});
-    }
-  }, [isTotalHovered]);
 
   return (
     <div
@@ -340,31 +276,9 @@ function LeaderboardRowItem({
         ) : null}
       </span>
 
-      <span
-        className="relative inline-flex shrink-0"
-        onMouseEnter={() => setIsTotalHovered(true)}
-        onMouseLeave={() => setIsTotalHovered(false)}
-      >
-        <strong
-          ref={totalAnchorRef}
-          className="cursor-help rounded-full bg-slate-900 px-3 py-1 text-sm text-white"
-        >
-          {formatOneDecimal(displayPoints ?? row.points)} pts
-        </strong>
-
-        {isTotalHovered ? (
-          <div
-            ref={totalTooltipRef}
-            style={totalTooltipStyle}
-            className="z-50 rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
-          >
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Evolution des points de <span className="text-slate-900">{row.nickname}</span>
-            </p>
-            <WeeklyPointsChart points={weeklyPoints ?? []} nickname={row.nickname} />
-          </div>
-        ) : null}
-      </span>
+      <strong className="shrink-0 rounded-full bg-slate-900 px-3 py-1 text-sm text-white">
+        {formatOneDecimal(displayPoints ?? row.points)} pts
+      </strong>
     </div>
   );
 }
@@ -387,6 +301,68 @@ export default function Leaderboard() {
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const router = useRouter();
 
+  const [isTotalMetricHovered, setIsTotalMetricHovered] = useState(false);
+  const [totalMetricTooltipStyle, setTotalMetricTooltipStyle] = useState<CSSProperties>({});
+  const totalMetricAnchorRef = useRef<HTMLLabelElement>(null);
+  const totalMetricTooltipRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!isTotalMetricHovered) return;
+
+    const updateTotalMetricTooltipPosition = () => {
+      const anchor = totalMetricAnchorRef.current;
+      const tooltip = totalMetricTooltipRef.current;
+
+      if (!anchor || !tooltip || typeof window === "undefined") return;
+
+      const anchorRect = anchor.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const margin = 12;
+      const preferredWidth = Math.min(380, viewportWidth - margin * 2);
+      const tooltipWidth = Math.max(300, preferredWidth);
+      const maxTooltipHeight = Math.max(160, viewportHeight - margin * 2);
+      const tooltipHeight = Math.min(tooltip.offsetHeight || 260, maxTooltipHeight);
+
+      const spaceBelow = viewportHeight - anchorRect.bottom - margin;
+      const spaceAbove = anchorRect.top - margin;
+      const placeAbove = spaceBelow < tooltipHeight && spaceAbove >= tooltipHeight;
+
+      const top = placeAbove
+        ? Math.max(margin, anchorRect.top - tooltipHeight - margin)
+        : Math.min(viewportHeight - tooltipHeight - margin, anchorRect.bottom + margin);
+
+      const left = Math.max(
+        margin,
+        Math.min(viewportWidth - tooltipWidth - margin, anchorRect.left)
+      );
+
+      setTotalMetricTooltipStyle({
+        position: "fixed",
+        top,
+        left,
+        width: tooltipWidth,
+        maxHeight: maxTooltipHeight,
+        overflowY: "auto",
+      });
+    };
+
+    updateTotalMetricTooltipPosition();
+    window.addEventListener("resize", updateTotalMetricTooltipPosition);
+    window.addEventListener("scroll", updateTotalMetricTooltipPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateTotalMetricTooltipPosition);
+      window.removeEventListener("scroll", updateTotalMetricTooltipPosition, true);
+    };
+  }, [isTotalMetricHovered]);
+
+  useEffect(() => {
+    if (!isTotalMetricHovered) {
+      setTotalMetricTooltipStyle({});
+    }
+  }, [isTotalMetricHovered]);
+
   const selectedRow = useMemo(
     () => rows.find((row) => row.user_id === selectedUserId) ?? null,
     [rows, selectedUserId]
@@ -405,6 +381,16 @@ export default function Leaderboard() {
       }))
       .sort((a, b) => b.value - a.value || b.row.points - a.row.points);
   }, [rows, rankingMetric, detailsByUser, groupPlacementPointsByUser]);
+
+  const weeklySeries = useMemo(
+    () =>
+      rankedRows.map(({ row }) => ({
+        userId: row.user_id,
+        nickname: row.nickname,
+        points: weeklyPointsByUser[row.user_id] ?? [],
+      })),
+    [rankedRows, weeklyPointsByUser]
+  );
 
   const selectedReport = selectedUserId ? scoreReportByUser[selectedUserId] ?? [] : [];
 
@@ -610,23 +596,43 @@ export default function Leaderboard() {
                 const isTotalActive = rankingMetric === totalMetric.key;
 
                 return (
-                  <label
-                    className={`inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                      isTotalActive
-                        ? "border-red-600 bg-red-600 text-white"
-                        : "border-red-200 bg-white text-red-600 hover:border-red-400"
-                    }`}
+                  <span
+                    className="relative inline-flex"
+                    onMouseEnter={() => setIsTotalMetricHovered(true)}
+                    onMouseLeave={() => setIsTotalMetricHovered(false)}
                   >
-                    <input
-                      type="radio"
-                      name="ranking-metric"
-                      value={totalMetric.key}
-                      checked={isTotalActive}
-                      onChange={() => setRankingMetric(totalMetric.key)}
-                      className="sr-only"
-                    />
-                    {totalMetric.label}
-                  </label>
+                    <label
+                      ref={totalMetricAnchorRef}
+                      className={`inline-flex cursor-help items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                        isTotalActive
+                          ? "border-red-600 bg-red-600 text-white"
+                          : "border-red-200 bg-white text-red-600 hover:border-red-400"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="ranking-metric"
+                        value={totalMetric.key}
+                        checked={isTotalActive}
+                        onChange={() => setRankingMetric(totalMetric.key)}
+                        className="sr-only"
+                      />
+                      {totalMetric.label}
+                    </label>
+
+                    {isTotalMetricHovered ? (
+                      <div
+                        ref={totalMetricTooltipRef}
+                        style={totalMetricTooltipStyle}
+                        className="z-50 rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
+                      >
+                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          Evolution des points cumules des joueurs
+                        </p>
+                        <MultiPlayerWeeklyPointsChart series={weeklySeries} />
+                      </div>
+                    ) : null}
+                  </span>
                 );
               })()}
 
@@ -668,7 +674,6 @@ export default function Leaderboard() {
                 groupPlacementPoints={groupPlacementPointsByUser[row.user_id]}
                 phaseDetails={phaseDetailsByUser[row.user_id]}
                 displayPoints={value}
-                weeklyPoints={weeklyPointsByUser[row.user_id]}
                 onShowReport={(userId, sectionKey) => {
                   setSelectedUserId(userId);
                   setSelectedSectionKey(sectionKey);

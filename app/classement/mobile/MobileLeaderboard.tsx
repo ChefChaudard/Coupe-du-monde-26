@@ -18,7 +18,7 @@ import type {
 } from "@/app/dashboard/leaderboard-data";
 import { formatOneDecimal } from "@/app/dashboard/format";
 import ScoreReportDetails from "@/app/dashboard/score-report-details";
-import { WeeklyPointsChart } from "@/app/dashboard/weekly-points-chart";
+import { MultiPlayerWeeklyPointsChart } from "@/app/dashboard/weekly-points-chart";
 
 const STORAGE_KEY = "activeGroupId";
 const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
@@ -103,17 +103,17 @@ export default function MobileLeaderboard() {
     return window.localStorage.getItem(STORAGE_KEY);
   });
 
-  const [hoveredTotalUserId, setHoveredTotalUserId] = useState<string | null>(null);
-  const [totalTooltipStyle, setTotalTooltipStyle] = useState<CSSProperties>({});
-  const totalAnchorRefs = useRef<Record<string, HTMLElement | null>>({});
-  const totalTooltipRef = useRef<HTMLDivElement>(null);
+  const [isTotalMetricHovered, setIsTotalMetricHovered] = useState(false);
+  const [totalMetricTooltipStyle, setTotalMetricTooltipStyle] = useState<CSSProperties>({});
+  const totalMetricAnchorRef = useRef<HTMLLabelElement>(null);
+  const totalMetricTooltipRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    if (!hoveredTotalUserId) return;
+    if (!isTotalMetricHovered) return;
 
-    const updateTotalTooltipPosition = () => {
-      const anchor = totalAnchorRefs.current[hoveredTotalUserId];
-      const tooltip = totalTooltipRef.current;
+    const updateTotalMetricTooltipPosition = () => {
+      const anchor = totalMetricAnchorRef.current;
+      const tooltip = totalMetricTooltipRef.current;
 
       if (!anchor || !tooltip || typeof window === "undefined") return;
 
@@ -124,7 +124,7 @@ export default function MobileLeaderboard() {
       const preferredWidth = Math.min(340, viewportWidth - margin * 2);
       const tooltipWidth = Math.max(280, preferredWidth);
       const maxTooltipHeight = Math.max(160, viewportHeight - margin * 2);
-      const tooltipHeight = Math.min(tooltip.offsetHeight || 220, maxTooltipHeight);
+      const tooltipHeight = Math.min(tooltip.offsetHeight || 260, maxTooltipHeight);
 
       const spaceBelow = viewportHeight - anchorRect.bottom - margin;
       const spaceAbove = anchorRect.top - margin;
@@ -136,10 +136,10 @@ export default function MobileLeaderboard() {
 
       const left = Math.max(
         margin,
-        Math.min(viewportWidth - tooltipWidth - margin, anchorRect.right - tooltipWidth)
+        Math.min(viewportWidth - tooltipWidth - margin, anchorRect.left)
       );
 
-      setTotalTooltipStyle({
+      setTotalMetricTooltipStyle({
         position: "fixed",
         top,
         left,
@@ -149,21 +149,21 @@ export default function MobileLeaderboard() {
       });
     };
 
-    updateTotalTooltipPosition();
-    window.addEventListener("resize", updateTotalTooltipPosition);
-    window.addEventListener("scroll", updateTotalTooltipPosition, true);
+    updateTotalMetricTooltipPosition();
+    window.addEventListener("resize", updateTotalMetricTooltipPosition);
+    window.addEventListener("scroll", updateTotalMetricTooltipPosition, true);
 
     return () => {
-      window.removeEventListener("resize", updateTotalTooltipPosition);
-      window.removeEventListener("scroll", updateTotalTooltipPosition, true);
+      window.removeEventListener("resize", updateTotalMetricTooltipPosition);
+      window.removeEventListener("scroll", updateTotalMetricTooltipPosition, true);
     };
-  }, [hoveredTotalUserId]);
+  }, [isTotalMetricHovered]);
 
   useEffect(() => {
-    if (!hoveredTotalUserId) {
-      setTotalTooltipStyle({});
+    if (!isTotalMetricHovered) {
+      setTotalMetricTooltipStyle({});
     }
-  }, [hoveredTotalUserId]);
+  }, [isTotalMetricHovered]);
 
   useEffect(() => {
     const handleActiveGroupUpdated = () => {
@@ -280,6 +280,16 @@ export default function MobileLeaderboard() {
     [rows, rankingMetric, detailsByUser, groupPlacementPointsByUser]
   );
 
+  const weeklySeries = useMemo(
+    () =>
+      sortedRows.map(({ row }) => ({
+        userId: row.user_id,
+        nickname: row.nickname || "Joueur",
+        points: weeklyPointsByUser[row.user_id] ?? [],
+      })),
+    [sortedRows, weeklyPointsByUser]
+  );
+
   const reportRow = useMemo(
     () =>
       sortedRows.find((entry) => entry.row.user_id === reportUserId)?.row ?? null,
@@ -330,23 +340,43 @@ export default function MobileLeaderboard() {
           const isTotalActive = rankingMetric === totalMetric.key;
 
           return (
-            <label
-              className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition ${
-                isTotalActive
-                  ? "border-red-600 bg-red-600 text-white"
-                  : "border-red-200 bg-white text-red-600"
-              }`}
+            <span
+              className="relative flex"
+              onMouseEnter={() => setIsTotalMetricHovered(true)}
+              onMouseLeave={() => setIsTotalMetricHovered(false)}
             >
-              <input
-                type="radio"
-                name="ranking-metric-mobile"
-                value={totalMetric.key}
-                checked={isTotalActive}
-                onChange={() => setRankingMetric(totalMetric.key)}
-                className="sr-only"
-              />
-              {totalMetric.label}
-            </label>
+              <label
+                ref={totalMetricAnchorRef}
+                className={`flex w-full cursor-help items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                  isTotalActive
+                    ? "border-red-600 bg-red-600 text-white"
+                    : "border-red-200 bg-white text-red-600"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="ranking-metric-mobile"
+                  value={totalMetric.key}
+                  checked={isTotalActive}
+                  onChange={() => setRankingMetric(totalMetric.key)}
+                  className="sr-only"
+                />
+                {totalMetric.label}
+              </label>
+
+              {isTotalMetricHovered ? (
+                <div
+                  ref={totalMetricTooltipRef}
+                  style={totalMetricTooltipStyle}
+                  className="z-50 rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
+                >
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Evolution des points cumules des joueurs
+                  </p>
+                  <MultiPlayerWeeklyPointsChart series={weeklySeries} />
+                </div>
+              ) : null}
+            </span>
           );
         })()}
 
@@ -389,19 +419,12 @@ export default function MobileLeaderboard() {
             key={row.user_id}
             className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
           >
-            <div
-              role="button"
-              tabIndex={0}
+            <button
+              type="button"
               onClick={() =>
                 setExpandedUserId(isExpanded ? null : row.user_id)
               }
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  setExpandedUserId(isExpanded ? null : row.user_id);
-                }
-              }}
-              className="flex w-full cursor-pointer items-center gap-3 px-3 py-3 text-left"
+              className="flex w-full items-center gap-3 px-3 py-3 text-left"
             >
               <span
                 className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black ${rankBadgeClasses(
@@ -415,41 +438,8 @@ export default function MobileLeaderboard() {
                 {row.nickname || "Joueur"}
               </span>
 
-              <span
-                className="relative inline-flex shrink-0"
-                onClick={(event) => event.stopPropagation()}
-                onMouseEnter={() => setHoveredTotalUserId(row.user_id)}
-                onMouseLeave={() =>
-                  setHoveredTotalUserId((current) =>
-                    current === row.user_id ? null : current
-                  )
-                }
-              >
-                <span
-                  ref={(element) => {
-                    totalAnchorRefs.current[row.user_id] = element;
-                  }}
-                  className="cursor-help rounded-full bg-slate-900 px-3 py-1 text-sm font-black text-white"
-                >
-                  {formatOneDecimal(value)}
-                </span>
-
-                {hoveredTotalUserId === row.user_id ? (
-                  <div
-                    ref={totalTooltipRef}
-                    style={totalTooltipStyle}
-                    className="z-50 rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
-                  >
-                    <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                      Evolution des points de{" "}
-                      <span className="text-slate-900">{row.nickname || "Joueur"}</span>
-                    </p>
-                    <WeeklyPointsChart
-                      points={weeklyPointsByUser[row.user_id] ?? []}
-                      nickname={row.nickname || "Joueur"}
-                    />
-                  </div>
-                ) : null}
+              <span className="shrink-0 rounded-full bg-slate-900 px-3 py-1 text-sm font-black text-white">
+                {formatOneDecimal(value)}
               </span>
 
               <svg
@@ -466,7 +456,7 @@ export default function MobileLeaderboard() {
                   clipRule="evenodd"
                 />
               </svg>
-            </div>
+            </button>
 
             {isExpanded && breakdown ? (
               <div className="border-t border-slate-100 bg-slate-50 px-3 py-3">

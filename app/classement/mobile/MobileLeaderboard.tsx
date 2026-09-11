@@ -1,15 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import type {
   LeaderboardPayload,
   ScoreBreakdown,
   ScoreReportRow,
+  WeeklyPoint,
 } from "@/app/dashboard/leaderboard-data";
 import { formatOneDecimal } from "@/app/dashboard/format";
 import ScoreReportDetails from "@/app/dashboard/score-report-details";
+import { WeeklyPointsChart } from "@/app/dashboard/weekly-points-chart";
 
 const STORAGE_KEY = "activeGroupId";
 const LEADERBOARD_REFRESH_EVENT = "leaderboard-data-refresh";
@@ -81,6 +90,9 @@ export default function MobileLeaderboard() {
   const [scoreReportByUser, setScoreReportByUser] = useState<
     Record<string, ScoreReportRow[]>
   >({});
+  const [weeklyPointsByUser, setWeeklyPointsByUser] = useState<
+    Record<string, WeeklyPoint[]>
+  >({});
   const [message, setMessage] = useState("Chargement...");
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [reportUserId, setReportUserId] = useState<string | null>(null);
@@ -90,6 +102,68 @@ export default function MobileLeaderboard() {
     if (typeof window === "undefined") return null;
     return window.localStorage.getItem(STORAGE_KEY);
   });
+
+  const [hoveredTotalUserId, setHoveredTotalUserId] = useState<string | null>(null);
+  const [totalTooltipStyle, setTotalTooltipStyle] = useState<CSSProperties>({});
+  const totalAnchorRefs = useRef<Record<string, HTMLElement | null>>({});
+  const totalTooltipRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!hoveredTotalUserId) return;
+
+    const updateTotalTooltipPosition = () => {
+      const anchor = totalAnchorRefs.current[hoveredTotalUserId];
+      const tooltip = totalTooltipRef.current;
+
+      if (!anchor || !tooltip || typeof window === "undefined") return;
+
+      const anchorRect = anchor.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const margin = 12;
+      const preferredWidth = Math.min(340, viewportWidth - margin * 2);
+      const tooltipWidth = Math.max(280, preferredWidth);
+      const maxTooltipHeight = Math.max(160, viewportHeight - margin * 2);
+      const tooltipHeight = Math.min(tooltip.offsetHeight || 220, maxTooltipHeight);
+
+      const spaceBelow = viewportHeight - anchorRect.bottom - margin;
+      const spaceAbove = anchorRect.top - margin;
+      const placeAbove = spaceBelow < tooltipHeight && spaceAbove >= tooltipHeight;
+
+      const top = placeAbove
+        ? Math.max(margin, anchorRect.top - tooltipHeight - margin)
+        : Math.min(viewportHeight - tooltipHeight - margin, anchorRect.bottom + margin);
+
+      const left = Math.max(
+        margin,
+        Math.min(viewportWidth - tooltipWidth - margin, anchorRect.right - tooltipWidth)
+      );
+
+      setTotalTooltipStyle({
+        position: "fixed",
+        top,
+        left,
+        width: tooltipWidth,
+        maxHeight: maxTooltipHeight,
+        overflowY: "auto",
+      });
+    };
+
+    updateTotalTooltipPosition();
+    window.addEventListener("resize", updateTotalTooltipPosition);
+    window.addEventListener("scroll", updateTotalTooltipPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateTotalTooltipPosition);
+      window.removeEventListener("scroll", updateTotalTooltipPosition, true);
+    };
+  }, [hoveredTotalUserId]);
+
+  useEffect(() => {
+    if (!hoveredTotalUserId) {
+      setTotalTooltipStyle({});
+    }
+  }, [hoveredTotalUserId]);
 
   useEffect(() => {
     const handleActiveGroupUpdated = () => {
@@ -137,6 +211,7 @@ export default function MobileLeaderboard() {
           payload.groupPlacementPointsByUser ?? {}
         );
         setScoreReportByUser(payload.scoreReportByUser ?? {});
+        setWeeklyPointsByUser(payload.weeklyPointsByUser ?? {});
         setMessage(payload.message);
       } catch (error) {
         console.error("Erreur leaderboard mobile:", error);
@@ -314,12 +389,19 @@ export default function MobileLeaderboard() {
             key={row.user_id}
             className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
           >
-            <button
-              type="button"
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() =>
                 setExpandedUserId(isExpanded ? null : row.user_id)
               }
-              className="flex w-full items-center gap-3 px-3 py-3 text-left"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setExpandedUserId(isExpanded ? null : row.user_id);
+                }
+              }}
+              className="flex w-full cursor-pointer items-center gap-3 px-3 py-3 text-left"
             >
               <span
                 className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black ${rankBadgeClasses(
@@ -333,8 +415,41 @@ export default function MobileLeaderboard() {
                 {row.nickname || "Joueur"}
               </span>
 
-              <span className="shrink-0 rounded-full bg-slate-900 px-3 py-1 text-sm font-black text-white">
-                {formatOneDecimal(value)}
+              <span
+                className="relative inline-flex shrink-0"
+                onClick={(event) => event.stopPropagation()}
+                onMouseEnter={() => setHoveredTotalUserId(row.user_id)}
+                onMouseLeave={() =>
+                  setHoveredTotalUserId((current) =>
+                    current === row.user_id ? null : current
+                  )
+                }
+              >
+                <span
+                  ref={(element) => {
+                    totalAnchorRefs.current[row.user_id] = element;
+                  }}
+                  className="cursor-help rounded-full bg-slate-900 px-3 py-1 text-sm font-black text-white"
+                >
+                  {formatOneDecimal(value)}
+                </span>
+
+                {hoveredTotalUserId === row.user_id ? (
+                  <div
+                    ref={totalTooltipRef}
+                    style={totalTooltipStyle}
+                    className="z-50 rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
+                  >
+                    <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Evolution des points de{" "}
+                      <span className="text-slate-900">{row.nickname || "Joueur"}</span>
+                    </p>
+                    <WeeklyPointsChart
+                      points={weeklyPointsByUser[row.user_id] ?? []}
+                      nickname={row.nickname || "Joueur"}
+                    />
+                  </div>
+                ) : null}
               </span>
 
               <svg
@@ -351,7 +466,7 @@ export default function MobileLeaderboard() {
                   clipRule="evenodd"
                 />
               </svg>
-            </button>
+            </div>
 
             {isExpanded && breakdown ? (
               <div className="border-t border-slate-100 bg-slate-50 px-3 py-3">

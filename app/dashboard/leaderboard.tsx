@@ -15,6 +15,7 @@ import type {
   PhaseDetailRow,
   ScoreBreakdown,
   ScoreReportRow,
+  WeeklyPoint,
 } from "./leaderboard-data";
 import { formatOneDecimal } from "./format";
 import ScoreReportDetails from "./score-report-details";
@@ -31,6 +32,7 @@ type LeaderboardRowItemProps = {
   groupPlacementPoints?: number;
   phaseDetails?: PhaseDetailRow[];
   displayPoints?: number;
+  weeklyPoints?: WeeklyPoint[];
   onShowReport?: (userId: string, sectionKey?: string) => void;
   rowRef?: (element: HTMLDivElement | null) => void;
 };
@@ -125,6 +127,77 @@ function getBreakdownForUser(rows: PhaseDetailRow[]) {
   }, createEmptyBreakdown());
 }
 
+function formatWeekLabel(weekStart: string) {
+  const [, month, day] = weekStart.split("-");
+  return `${day}/${month}`;
+}
+
+// Petit graphique en ligne (SVG, sans dependance externe) de l'evolution
+// hebdomadaire des points cumules d'un joueur. N'affiche que les semaines ou
+// au moins un point a ete attribue a l'un des joueurs (deja filtre en amont
+// par computeWeeklyPointsByUser).
+function WeeklyPointsChart({ points, nickname }: { points: WeeklyPoint[]; nickname: string }) {
+  if (points.length === 0) {
+    return <p className="text-xs text-slate-500">Aucun point attribue pour le moment.</p>;
+  }
+
+  const width = 300;
+  const height = 140;
+  const padLeft = 34;
+  const padRight = 12;
+  const padTop = 12;
+  const padBottom = 24;
+  const maxValue = Math.max(...points.map((p) => p.cumulativePoints), 1);
+  const plotWidth = width - padLeft - padRight;
+  const plotHeight = height - padTop - padBottom;
+
+  const xFor = (index: number) =>
+    points.length === 1
+      ? padLeft + plotWidth / 2
+      : padLeft + (index / (points.length - 1)) * plotWidth;
+  const yFor = (value: number) => padTop + plotHeight - (value / maxValue) * plotHeight;
+
+  const polylinePoints = points.map((p, i) => `${xFor(i)},${yFor(p.cumulativePoints)}`).join(" ");
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={`Evolution hebdomadaire des points cumules de ${nickname}`}
+      className="w-full"
+    >
+      <line
+        x1={padLeft}
+        y1={padTop + plotHeight}
+        x2={width - padRight}
+        y2={padTop + plotHeight}
+        stroke="#e2e8f0"
+        strokeWidth={1}
+      />
+      <text x={padLeft - 6} y={padTop + 4} textAnchor="end" fontSize={9} fill="#94a3b8">
+        {Math.round(maxValue * 100) / 100}
+      </text>
+      <text x={padLeft - 6} y={padTop + plotHeight} textAnchor="end" fontSize={9} fill="#94a3b8">
+        0
+      </text>
+
+      {points.length > 1 ? (
+        <polyline points={polylinePoints} fill="none" stroke="#7a1f2c" strokeWidth={2} />
+      ) : null}
+
+      {points.map((p, i) => (
+        <circle key={p.weekStart} cx={xFor(i)} cy={yFor(p.cumulativePoints)} r={4} fill="#7a1f2c" stroke="#ffffff" strokeWidth={1.5} />
+      ))}
+
+      {points.map((p, i) => (
+        <text key={p.weekStart} x={xFor(i)} y={height - 6} textAnchor="middle" fontSize={9} fill="#94a3b8">
+          {formatWeekLabel(p.weekStart)}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
 function getRankBadgeClass(index: number) {
   if (index === 0) return "border-slate-300 bg-slate-100 text-slate-900";
   if (index === 1) return "border-slate-200 bg-white text-slate-700";
@@ -141,6 +214,7 @@ function LeaderboardRowItem({
   groupPlacementPoints,
   phaseDetails,
   displayPoints,
+  weeklyPoints,
   onShowReport,
   rowRef,
 }: LeaderboardRowItemProps) {
@@ -148,6 +222,11 @@ function LeaderboardRowItem({
   const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>({});
   const anchorRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+
+  const [isTotalHovered, setIsTotalHovered] = useState(false);
+  const [totalTooltipStyle, setTotalTooltipStyle] = useState<CSSProperties>({});
+  const totalAnchorRef = useRef<HTMLElement>(null);
+  const totalTooltipRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (!isHovered) return;
@@ -202,6 +281,63 @@ function LeaderboardRowItem({
       setTooltipStyle({});
     }
   }, [isHovered]);
+
+  useLayoutEffect(() => {
+    if (!isTotalHovered) return;
+
+    const updateTotalTooltipPosition = () => {
+      const anchor = totalAnchorRef.current;
+      const tooltip = totalTooltipRef.current;
+
+      if (!anchor || !tooltip || typeof window === "undefined") return;
+
+      const anchorRect = anchor.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const margin = 12;
+      const preferredWidth = Math.min(340, viewportWidth - margin * 2);
+      const tooltipWidth = Math.max(280, preferredWidth);
+      const maxTooltipHeight = Math.max(160, viewportHeight - margin * 2);
+      const tooltipHeight = Math.min(tooltip.offsetHeight || 220, maxTooltipHeight);
+
+      const spaceBelow = viewportHeight - anchorRect.bottom - margin;
+      const spaceAbove = anchorRect.top - margin;
+      const placeAbove = spaceBelow < tooltipHeight && spaceAbove >= tooltipHeight;
+
+      const top = placeAbove
+        ? Math.max(margin, anchorRect.top - tooltipHeight - margin)
+        : Math.min(viewportHeight - tooltipHeight - margin, anchorRect.bottom + margin);
+
+      const left = Math.max(
+        margin,
+        Math.min(viewportWidth - tooltipWidth - margin, anchorRect.right - tooltipWidth)
+      );
+
+      setTotalTooltipStyle({
+        position: "fixed",
+        top,
+        left,
+        width: tooltipWidth,
+        maxHeight: maxTooltipHeight,
+        overflowY: "auto",
+      });
+    };
+
+    updateTotalTooltipPosition();
+    window.addEventListener("resize", updateTotalTooltipPosition);
+    window.addEventListener("scroll", updateTotalTooltipPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateTotalTooltipPosition);
+      window.removeEventListener("scroll", updateTotalTooltipPosition, true);
+    };
+  }, [isTotalHovered, weeklyPoints]);
+
+  useEffect(() => {
+    if (!isTotalHovered) {
+      setTotalTooltipStyle({});
+    }
+  }, [isTotalHovered]);
 
   return (
     <div
@@ -274,9 +410,31 @@ function LeaderboardRowItem({
         ) : null}
       </span>
 
-      <strong className="shrink-0 rounded-full bg-slate-900 px-3 py-1 text-sm text-white">
-        {formatOneDecimal(displayPoints ?? row.points)} pts
-      </strong>
+      <span
+        className="relative inline-flex shrink-0"
+        onMouseEnter={() => setIsTotalHovered(true)}
+        onMouseLeave={() => setIsTotalHovered(false)}
+      >
+        <strong
+          ref={totalAnchorRef}
+          className="cursor-help rounded-full bg-slate-900 px-3 py-1 text-sm text-white"
+        >
+          {formatOneDecimal(displayPoints ?? row.points)} pts
+        </strong>
+
+        {isTotalHovered ? (
+          <div
+            ref={totalTooltipRef}
+            style={totalTooltipStyle}
+            className="z-50 rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
+          >
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Evolution des points de <span className="text-slate-900">{row.nickname}</span>
+            </p>
+            <WeeklyPointsChart points={weeklyPoints ?? []} nickname={row.nickname} />
+          </div>
+        ) : null}
+      </span>
     </div>
   );
 }
@@ -287,6 +445,7 @@ export default function Leaderboard() {
   const [groupPlacementPointsByUser, setGroupPlacementPointsByUser] = useState<Record<string, number>>({});
   const [phaseDetailsByUser, setPhaseDetailsByUser] = useState<Record<string, PhaseDetailRow[]>>({});
   const [scoreReportByUser, setScoreReportByUser] = useState<Record<string, ScoreReportRow[]>>({});
+  const [weeklyPointsByUser, setWeeklyPointsByUser] = useState<Record<string, WeeklyPoint[]>>({});
   const [message, setMessage] = useState("Chargement...");
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [selectedSectionKey, setSelectedSectionKey] = useState<string | undefined>(undefined);
@@ -368,6 +527,7 @@ export default function Leaderboard() {
         setGroupPlacementPointsByUser(payload.groupPlacementPointsByUser ?? {});
         setPhaseDetailsByUser(payload.phaseDetailsByUser);
         setScoreReportByUser(payload.scoreReportByUser ?? {});
+        setWeeklyPointsByUser(payload.weeklyPointsByUser ?? {});
         setMessage(payload.message);
       } catch (error) {
         console.error("Erreur leaderboard:", error);
@@ -578,6 +738,7 @@ export default function Leaderboard() {
                 groupPlacementPoints={groupPlacementPointsByUser[row.user_id]}
                 phaseDetails={phaseDetailsByUser[row.user_id]}
                 displayPoints={value}
+                weeklyPoints={weeklyPointsByUser[row.user_id]}
                 onShowReport={(userId, sectionKey) => {
                   setSelectedUserId(userId);
                   setSelectedSectionKey(sectionKey);

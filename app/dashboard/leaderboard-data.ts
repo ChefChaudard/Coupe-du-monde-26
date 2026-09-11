@@ -167,14 +167,97 @@ export type ScoreReportRow =
       team: string;
     };
 
+export type WeeklyPoint = {
+  weekStart: string;
+  cumulativePoints: number;
+};
+
 export type LeaderboardPayload = {
   rows: LeaderboardRow[];
   detailsByUser: Record<string, ScoreBreakdown>;
   groupPlacementPointsByUser: Record<string, number>;
   phaseDetailsByUser: Record<string, PhaseDetailRow[]>;
   scoreReportByUser: Record<string, ScoreReportRow[]>;
+  weeklyPointsByUser: Record<string, WeeklyPoint[]>;
   message: string;
 };
+
+// Lundi (ISO) de la semaine contenant la date donnee, au format YYYY-MM-DD.
+function getIsoWeekStart(dateInput: string) {
+  const date = new Date(dateInput);
+  const day = date.getUTCDay();
+  // getUTCDay(): 0=dimanche, 1=lundi, ... 6=samedi. On recule jusqu'au lundi.
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  const monday = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - diffToMonday)
+  );
+  return monday.toISOString().slice(0, 10);
+}
+
+// Courbe d'evolution hebdomadaire des points de chaque joueur, basee sur les
+// evenements de score datables (matchs du 1er tour / barrages / 2e tour reel,
+// via scoreReportByUser). Les categories non datables individuellement
+// (classement equipes, qualifies, buteur, champion...) ne sont pas reparties
+// dans le temps ici : seuls les points "match" alimentent la courbe.
+// Une semaine n'apparait dans le resultat que si au moins un point a ete
+// attribue a l'un des joueurs cette semaine-la (regle demandee).
+export function computeWeeklyPointsByUser(
+  scoreReportByUser: Record<string, ScoreReportRow[]>,
+  matches: MatchRow[]
+): Record<string, WeeklyPoint[]> {
+  const kickoffByMatchId = new Map<number, string>();
+  for (const match of matches) {
+    if (match.kickoff_at) kickoffByMatchId.set(match.id, match.kickoff_at);
+  }
+
+  type DatedEvent = { userId: string; weekStart: string; points: number };
+  const events: DatedEvent[] = [];
+
+  for (const [userId, reportRows] of Object.entries(scoreReportByUser)) {
+    for (const row of reportRows) {
+      if (row.kind !== "match") continue;
+      const kickoffAt = kickoffByMatchId.get(row.matchId);
+      if (!kickoffAt) continue;
+
+      events.push({
+        userId,
+        weekStart: getIsoWeekStart(kickoffAt),
+        points: row.points,
+      });
+    }
+  }
+
+  const totalPointsByWeek = new Map<string, number>();
+  for (const event of events) {
+    totalPointsByWeek.set(event.weekStart, (totalPointsByWeek.get(event.weekStart) ?? 0) + event.points);
+  }
+
+  const plotWeeks = Array.from(totalPointsByWeek.entries())
+    .filter(([, total]) => total > 0)
+    .map(([weekStart]) => weekStart)
+    .sort((a, b) => a.localeCompare(b));
+
+  const result: Record<string, WeeklyPoint[]> = {};
+
+  for (const userId of Object.keys(scoreReportByUser)) {
+    result[userId] = plotWeeks.map((weekStart) => {
+      const weekEnd = new Date(weekStart);
+      weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+      const weekEndIso = weekEnd.toISOString().slice(0, 10);
+
+      const cumulativePoints = events
+        .filter((event) => event.userId === userId && event.weekStart < weekEndIso)
+        .reduce((sum, event) => sum + event.points, 0);
+
+      return {
+        weekStart,
+        cumulativePoints: Math.round(cumulativePoints * 100) / 100,
+      };
+    });
+  }
+
+  return result;
+}
 
 function getScoreBreakdownLabel(phase: string) {
   const normalizedPhase = phase.toLowerCase();
@@ -1229,6 +1312,7 @@ export function computeLeaderboardData(
     groupPlacementPointsByUser,
     phaseDetailsByUser,
     scoreReportByUser,
+    weeklyPointsByUser: computeWeeklyPointsByUser(scoreReportByUser, matches),
     message: rows.length ? "" : "Aucun score pour le moment.",
   };
 }

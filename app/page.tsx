@@ -3,6 +3,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isSuperAdmin } from "@/lib/roles";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
+import {
+  computePredictionStatus,
+  type PredictionStatusPayload,
+} from "./prediction-status";
+import PredictionStatusPanel from "./PredictionStatusPanel";
 
 export const metadata: Metadata = {
   title: "Accueil",
@@ -24,6 +30,7 @@ export default async function Home() {
 
   let canManageAdmin = false;
   let canManageSuperAdmin = false;
+  let predictionStatus: PredictionStatusPayload | null = null;
 
   if (user) {
     const { data: profile } = await supabase
@@ -34,6 +41,27 @@ export default async function Home() {
 
     canManageAdmin = isAdmin(profile ?? undefined);
     canManageSuperAdmin = isSuperAdmin(profile ?? undefined);
+
+    const [
+      { data: statusMatches },
+      { data: statusPredictions },
+      { data: statusProfiles },
+    ] = await Promise.all([
+      supabase.from("matches").select("id, phase, kickoff_at"),
+      fetchAllRows<{ user_id: string; match_id: number }>(() =>
+        supabase
+          .from("predictions")
+          .select("user_id, match_id")
+          .order("match_id", { ascending: true })
+      ),
+      supabase.from("profiles").select("id, nickname"),
+    ]);
+
+    predictionStatus = computePredictionStatus(
+      statusMatches ?? [],
+      statusPredictions ?? [],
+      statusProfiles ?? []
+    );
   }
 
   return (
@@ -79,6 +107,10 @@ export default async function Home() {
             >
               World Cup 26
             </Link>
+
+            {predictionStatus ? (
+              <PredictionStatusPanel data={predictionStatus} />
+            ) : null}
           </div>
         </section>
 

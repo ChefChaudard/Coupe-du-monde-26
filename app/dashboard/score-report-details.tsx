@@ -126,17 +126,33 @@ function groupMatchReportItemsByPhase(items: ScoreReportRow[]): ReportPhaseGroup
   const groups = new Map<string, ScoreReportRow[]>();
 
   for (const item of items) {
-    const phaseItems = groups.get(item.phase) ?? [];
+    // Matchs du 1er tour : regroupes par journee (J1..J8, JB) plutot que par
+    // phase ("Phase de ligue" unique).
+    const groupKey =
+      item.kind === "match" && item.journee ? item.journee : item.phase;
+    const phaseItems = groups.get(groupKey) ?? [];
     phaseItems.push(item);
-    groups.set(item.phase, phaseItems);
+    groups.set(groupKey, phaseItems);
   }
+
+  const journeeOrder = (key: string) => {
+    if (/^J\d+$/.test(key)) return Number(key.slice(1));
+    if (key === "JB") return 100;
+    return null;
+  };
 
   return Array.from(groups.entries())
     .map(([phase, phaseItems]) => ({
       phase,
       items: phaseItems,
     }))
-    .sort((a, b) => a.phase.localeCompare(b.phase));
+    .sort((a, b) => {
+      const orderA = journeeOrder(a.phase);
+      const orderB = journeeOrder(b.phase);
+      // Journees de la plus recente (JB, J8...) a la plus ancienne (J1).
+      if (orderA !== null && orderB !== null) return orderB - orderA;
+      return a.phase.localeCompare(b.phase);
+    });
 }
 
 function ReportItemContext({ item }: { item: ScoreReportRow }) {
@@ -279,7 +295,9 @@ export default function ScoreReportDetails({
                               ? "Points cumulés sur ce tour."
                               : section.key === "realKnockout"
                                 ? "Points cumulés sur ce tour réel."
-                                : "Points cumulés sur ce groupe.";
+                                : /^J(\d+|B)$/.test(phaseGroup.phase)
+                                  ? "Points cumulés sur cette journée."
+                                  : "Points cumulés sur ce groupe.";
                         const roundTeamCount =
                           section.key === "knockoutQualification"
                             ? KNOCKOUT_ROUND_TEAM_COUNTS[phaseGroup.phase]

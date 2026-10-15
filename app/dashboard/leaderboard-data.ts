@@ -10,6 +10,30 @@ import {
   getQualifiesTierPoints,
   type MatchOdds,
 } from "./scoring";
+import { isGroupPhase } from "@/lib/phase";
+
+// Associe chaque match du 1er tour a sa journee (J1..J8, puis JB), selon le
+// meme decoupage que MobilePredictionForm.tsx : tri par kickoff_at puis id,
+// paquets de 18.
+function buildJourneeByMatchId(
+  matches: { id: number; phase: string; kickoff_at?: string | null }[]
+) {
+  const result = new Map<number, string>();
+  const groupMatches = matches
+    .filter((match) => isGroupPhase(match.phase))
+    .sort((a, b) => {
+      const diff =
+        new Date(a.kickoff_at ?? 0).getTime() - new Date(b.kickoff_at ?? 0).getTime();
+      return diff !== 0 ? diff : a.id - b.id;
+    });
+
+  groupMatches.forEach((match, index) => {
+    const chunkIndex = Math.floor(index / 18);
+    result.set(match.id, chunkIndex < 8 ? `J${chunkIndex + 1}` : "JB");
+  });
+
+  return result;
+}
 
 // Coefficient de base appliqué au bonus de classement de groupe.
 const GROUP_PLACEMENT_BASE_POINTS = 1;
@@ -95,6 +119,9 @@ export type ScoreReportRow =
   reportId: string;
       kind: "match";
   matchId: number;
+      // "J1".."J8"/"JB" pour les matchs du 1er tour (meme decoupage que
+      // l'ecran de saisie : paquets de 18 par ordre de coup d'envoi).
+      journee?: string;
       phase: string;
       label: string;
       points: number;
@@ -1287,6 +1314,7 @@ export function computeLeaderboardData(
   const groupPlacementPointsByUser: Record<string, number> = {};
   const phaseDetailsByUser: Record<string, PhaseDetailRow[]> = {};
   const scoreReportByUser: Record<string, ScoreReportRow[]> = {};
+  const journeeByMatchId = buildJourneeByMatchId(matches);
 
   for (const [userId, phasePoints] of phaseDetailsMap.entries()) {
     const phaseRows = Array.from(phasePoints.entries()).map(([phase, points]) => ({
@@ -1300,10 +1328,16 @@ export function computeLeaderboardData(
       .filter((row) => row.phase.toLowerCase().includes("classement"))
       .reduce((sum, row) => sum + row.points, 0);
     phaseDetailsByUser[userId] = getPhaseDetails(phaseRows);
-    scoreReportByUser[userId] = (scoreReportMap.get(userId) ?? []).sort((a, b) => {
-      if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
-      return a.label.localeCompare(b.label);
-    });
+    scoreReportByUser[userId] = (scoreReportMap.get(userId) ?? [])
+      .map((row) =>
+        row.kind === "match"
+          ? { ...row, journee: journeeByMatchId.get(row.matchId) }
+          : row
+      )
+      .sort((a, b) => {
+        if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
+        return a.label.localeCompare(b.label);
+      });
   }
 
   return {

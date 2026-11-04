@@ -115,6 +115,22 @@ export default function MobilePredictionForm({
     left: number;
     width: number;
   } | null>(null);
+  // Coche verte si le 1N2 du pronostic est correct, croix rouge sinon
+  // (uniquement quand le score reel du match est connu).
+  function renderOutcomeMark(matchId: number, entry: MatchPredictionEntry) {
+    const m = matches.find((x) => x.id === matchId);
+    if (!m || !m.is_finished || m.score_a === null || m.score_b === null) {
+      return null;
+    }
+    const ok =
+      Math.sign(entry.predicted_a - entry.predicted_b) ===
+      Math.sign(m.score_a - m.score_b);
+    return ok ? (
+      <span className="text-emerald-600">✓</span>
+    ) : (
+      <span className="text-red-600">✗</span>
+    );
+  }
   function showPredictionsTooltip(matchId: number, element: HTMLElement) {
     const rect = element.getBoundingClientRect();
     const margin = 12;
@@ -652,6 +668,7 @@ useEffect(() => {
             <table className="w-full text-left">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wide text-slate-400">
+                  <th className="w-5 pb-1"></th>
                   <th className="pb-1 font-medium">Joueur</th>
                   <th className="pb-1 text-center font-medium">Pronostic</th>
                   <th className="pb-1 text-right font-medium">Pts</th>
@@ -661,6 +678,9 @@ useEffect(() => {
                 {(matchPredictionsByMatch[predictionsTooltip.matchId] ?? []).map(
                   (entry) => (
                     <tr key={entry.nickname} className="border-t border-slate-100">
+                      <td className="w-5 py-1 text-center text-sm font-bold">
+                        {renderOutcomeMark(predictionsTooltip.matchId, entry)}
+                      </td>
                       <td className="py-1 font-medium text-slate-900">
                         {entry.nickname}
                       </td>

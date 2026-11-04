@@ -140,6 +140,17 @@ export default function RealKnockoutScoreForm({
     left: number;
     width: number;
   } | null>(null);
+  // Sur mobile (pas de mouseleave), le tableau est ferme des que la page defile.
+  useEffect(() => {
+    if (!predictionsTooltip) return;
+    const close = () => setPredictionsTooltip(null);
+    window.addEventListener("scroll", close, { passive: true });
+    window.addEventListener("touchmove", close, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", close);
+      window.removeEventListener("touchmove", close);
+    };
+  }, [predictionsTooltip]);
   // Coche verte si le 1N2 du pronostic est correct, croix rouge sinon
   // (uniquement quand le score reel du match est connu).
   function renderOutcomeMark(matchId: number, entry: MatchPredictionEntry) {

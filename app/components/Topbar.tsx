@@ -22,7 +22,7 @@ const navItems = [
       { key: "qualifies", label: "Qualifiés", href: "/knockout/qualifies" },
       { key: "realKnockout", label: "2eme Tour Réel", href: "/knockout/mobile" },
        { key: "mobileClassement", label: "Classement Joueurs", href: "/classement/mobile" },
-  { key: "reglement", label: "Reglement CL 26-27", href: "/reglement" },
+  { key: "reglement", label: "Reglement LDC 26-27", href: "/reglement" },
   { key: "quote", label: "Quote", href: "" },
 ];
 

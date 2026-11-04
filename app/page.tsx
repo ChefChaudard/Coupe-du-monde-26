@@ -78,7 +78,7 @@ export default async function Home() {
                 href="/groupes/mobile"
                 className="rounded-full bg-slate-900 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800"
               >
-                CL 26-27
+                LDC 26-27
               </Link>
 
             {user ? (

@@ -50,12 +50,19 @@ type MatchStats = {
   myPoints: number | null;
   averagePoints: number | null;
 };
+type MatchPredictionEntry = {
+  nickname: string;
+  predicted_a: number;
+  predicted_b: number;
+  points: number | null;
+};
 type FormValues = Record<number, { a: string; b: string }>;
 export default function KnockoutMobilePredictionForm({
   matches,
   existingPredictions,
   userId,
   matchStats,
+  matchPredictionsByMatch,
   isAdmin,
   syncRealKnockoutMatches,
 }: {
@@ -63,6 +70,7 @@ export default function KnockoutMobilePredictionForm({
   existingPredictions: Prediction[];
   userId: string;
   matchStats: Record<number, MatchStats>;
+  matchPredictionsByMatch: Record<number, MatchPredictionEntry[]>;
   isAdmin: boolean;
   syncRealKnockoutMatches: (formData: FormData) => Promise<void>;
 }) {
@@ -113,6 +121,24 @@ export default function KnockoutMobilePredictionForm({
   }, [matches]);
   const [selectedRound, setSelectedRound] = useState(0);
   const [savingAll, setSavingAll] = useState(false);
+  // Tableau des pronostics de tous les joueurs, affiche au survol (ou au
+  // toucher) d'un match deja commence.
+  const [predictionsTooltip, setPredictionsTooltip] = useState<{
+    matchId: number;
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+  function showPredictionsTooltip(matchId: number, element: HTMLElement) {
+    const rect = element.getBoundingClientRect();
+    const margin = 12;
+    const width = Math.min(320, window.innerWidth - margin * 2);
+    const left = Math.max(
+      margin,
+      Math.min(window.innerWidth - width - margin, rect.left + rect.width / 2 - width / 2)
+    );
+    setPredictionsTooltip({ matchId, top: rect.bottom + 8, left, width });
+  }
   useEffect(() => {
     let cancelled = false;
     // The database (app_settings.simulated_date) is the single source of
@@ -398,7 +424,27 @@ export default function KnockoutMobilePredictionForm({
                 <div>{formatMatchDate(kickoffDate, timeZone)}</div>
                 <div>{formatMatchTime(kickoffDate, timeZone)}</div>
               </div>
-              <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-center gap-2">
+              <div
+                className={`grid flex-1 grid-cols-[1fr_auto_1fr] items-center gap-2 ${
+                  hasStarted ? "cursor-help" : ""
+                }`}
+                onMouseEnter={
+                  hasStarted
+                    ? (e) => showPredictionsTooltip(match.id, e.currentTarget)
+                    : undefined
+                }
+                onMouseLeave={
+                  hasStarted ? () => setPredictionsTooltip(null) : undefined
+                }
+                onClick={
+                  hasStarted
+                    ? (e) =>
+                        predictionsTooltip?.matchId === match.id
+                          ? setPredictionsTooltip(null)
+                          : showPredictionsTooltip(match.id, e.currentTarget)
+                    : undefined
+                }
+              >
                 <div className="text-right text-sm font-semibold text-slate-900">
                   {match.team_a}
                 </div>
@@ -526,6 +572,53 @@ export default function KnockoutMobilePredictionForm({
           </article>
         );
       })}
+
+      {predictionsTooltip ? (
+        <div
+          style={{
+            position: "fixed",
+            top: predictionsTooltip.top,
+            left: predictionsTooltip.left,
+            width: predictionsTooltip.width,
+          }}
+          className="pointer-events-none z-50 max-h-[70vh] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-[0_18px_45px_rgba(15,23,42,0.18)]"
+        >
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+            Pronostics des joueurs
+          </p>
+          {(matchPredictionsByMatch[predictionsTooltip.matchId] ?? []).length ===
+          0 ? (
+            <p className="text-slate-500">Aucun pronostic saisi.</p>
+          ) : (
+            <table className="w-full text-left">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wide text-slate-400">
+                  <th className="pb-1 font-medium">Joueur</th>
+                  <th className="pb-1 text-center font-medium">Pronostic</th>
+                  <th className="pb-1 text-right font-medium">Pts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(matchPredictionsByMatch[predictionsTooltip.matchId] ?? []).map(
+                  (entry) => (
+                    <tr key={entry.nickname} className="border-t border-slate-100">
+                      <td className="py-1 font-medium text-slate-900">
+                        {entry.nickname}
+                      </td>
+                      <td className="py-1 text-center font-semibold">
+                        {entry.predicted_a} - {entry.predicted_b}
+                      </td>
+                      <td className="py-1 text-right font-semibold">
+                        {entry.points !== null ? formatOneDecimal(entry.points) : "-"}
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

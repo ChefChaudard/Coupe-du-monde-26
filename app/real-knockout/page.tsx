@@ -45,6 +45,13 @@ type Prediction = {
   predicted_b: number;
 };
 
+type MatchPredictionEntry = {
+  nickname: string;
+  predicted_a: number;
+  predicted_b: number;
+  points: number | null;
+};
+
 type MatchOddsById = Record<number, MatchOdds>;
 
 type GroupStandingRow = {
@@ -417,6 +424,61 @@ export default async function RealKnockoutPage() {
     };
   }
 
+  // Pronostics de tous les joueurs par match, transmis uniquement pour les
+  // matchs deja commences (confidentiels avant le coup d'envoi).
+  const { data: simulatedRow } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", "simulated_date")
+    .maybeSingle();
+  const simulatedTime = simulatedRow?.value
+    ? new Date(simulatedRow.value).getTime()
+    : null;
+  const revealTime = Math.max(Date.now(), simulatedTime ?? 0);
+
+  const { data: allProfiles } = await adminSupabase
+    .from("profiles")
+    .select("id, nickname");
+  const nicknameById = new Map<string, string>(
+    (allProfiles ?? []).map((p: { id: string; nickname: string }) => [
+      p.id,
+      p.nickname,
+    ])
+  );
+
+  const matchPredictionsByMatch: Record<number, MatchPredictionEntry[]> = {};
+  for (const match of realMatches) {
+    if (
+      !match.kickoff_at ||
+      new Date(match.kickoff_at).getTime() > revealTime
+    ) {
+      continue;
+    }
+
+    const hasScore =
+      match.is_finished && match.score_a !== null && match.score_b !== null;
+
+    matchPredictionsByMatch[match.id] = ((predictions ?? []) as Prediction[])
+      .filter((p) => p.match_id === match.id)
+      .map((p) => ({
+        nickname: nicknameById.get(p.user_id) ?? "Joueur",
+        predicted_a: p.predicted_a,
+        predicted_b: p.predicted_b,
+        points: hasScore
+          ? getPredictionPoints(
+              p.predicted_a,
+              p.predicted_b,
+              match.score_a,
+              match.score_b,
+              match.is_finished,
+              match.phase,
+              matchOdds[match.id] ?? { one: 1, draw: 1, two: 1 }
+            )
+          : null,
+      }))
+      .sort((a, b) => a.nickname.localeCompare(b.nickname));
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 px-3 py-4 text-slate-900">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
@@ -459,6 +521,7 @@ export default async function RealKnockoutPage() {
           existingPredictions={myPredictions}
           userId={user.id}
           matchStats={matchStats}
+          matchPredictionsByMatch={matchPredictionsByMatch}
           matchOdds={matchOdds}
           isAdmin={isAdminUser}
           firstRoundComplete={firstRoundComplete}

@@ -35,6 +35,13 @@ type Match = {
   odds_away: number | null;
 };
 
+type MatchPredictionEntry = {
+  nickname: string;
+  predicted_a: number;
+  predicted_b: number;
+  points: number | null;
+};
+
 type PredictionRow = {
   user_id: string;
   match_id: number;
@@ -156,6 +163,57 @@ export default async function MobileSecondRoundPage() {
     };
   }
 
+  // Pronostics de tous les joueurs par match, transmis uniquement pour les
+  // matchs deja commences (confidentiels avant le coup d'envoi).
+  const { data: simulatedRow } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", "simulated_date")
+    .maybeSingle();
+  const simulatedTime = simulatedRow?.value
+    ? new Date(simulatedRow.value).getTime()
+    : null;
+  const revealTime = Math.max(Date.now(), simulatedTime ?? 0);
+
+  const { data: allProfiles } = await supabase
+    .from("profiles")
+    .select("id, nickname");
+  const nicknameById = new Map<string, string>(
+    (allProfiles ?? []).map((p: { id: string; nickname: string }) => [
+      p.id,
+      p.nickname,
+    ])
+  );
+
+  const matchPredictionsByMatch: Record<number, MatchPredictionEntry[]> = {};
+  for (const match of matches) {
+    if (new Date(match.kickoff_at).getTime() > revealTime) continue;
+
+    const matchOdds = getMatchOdds(match);
+    const hasScore =
+      match.is_finished && match.score_a !== null && match.score_b !== null;
+
+    matchPredictionsByMatch[match.id] = (predictions ?? [])
+      .filter((p) => p.match_id === match.id)
+      .map((p) => ({
+        nickname: nicknameById.get(p.user_id) ?? "Joueur",
+        predicted_a: p.predicted_a,
+        predicted_b: p.predicted_b,
+        points: hasScore
+          ? getPredictionPoints(
+              p.predicted_a,
+              p.predicted_b,
+              match.score_a,
+              match.score_b,
+              match.is_finished,
+              match.phase,
+              matchOdds
+            )
+          : null,
+      }))
+      .sort((a, b) => a.nickname.localeCompare(b.nickname));
+  }
+
   async function syncRealKnockoutMatches() {
     "use server";
 
@@ -172,6 +230,7 @@ export default async function MobileSecondRoundPage() {
           existingPredictions={myPredictions}
           userId={user.id}
           matchStats={matchStats}
+          matchPredictionsByMatch={matchPredictionsByMatch}
           isAdmin={isAdminUser}
           syncRealKnockoutMatches={syncRealKnockoutMatches}
         />

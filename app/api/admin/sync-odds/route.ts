@@ -64,10 +64,15 @@ export async function POST() {
 
   const adminSupabase = createAdminClient();
 
+  // Les cotes sont figees au coup d'envoi : on ne met a jour que les matchs
+  // non termines ET dont le coup d'envoi n'est pas encore passe (sinon on
+  // enregistrerait des cotes "live" qui fausseraient les points).
+  const nowIso = new Date().toISOString();
   const { data: matches, error: matchesError } = await adminSupabase
     .from("matches")
     .select("id, team_a, team_b")
-    .eq("is_finished", false);
+    .eq("is_finished", false)
+    .gt("kickoff_at", nowIso);
 
   if (matchesError) {
     return NextResponse.json({ error: matchesError.message }, { status: 500 });

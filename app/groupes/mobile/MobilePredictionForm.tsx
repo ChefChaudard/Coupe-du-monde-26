@@ -200,9 +200,37 @@ async function handleSaveAll() {
       const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
       return !hasStarted || (isAdmin && hasStarted);
     });
+    setMessage("");
+    let changedCount = 0;
+    let realScoreChanged = false;
+    let hasError = false;
+    // Ecritures sequentielles mais SANS rafraichissement entre deux matchs :
+    // avant, chaque match relancait un router.refresh() complet de la page
+    // (et une action serveur), ce qui saturait et faisait echouer l'Update
+    // des qu'on modifiait plus de 2 matchs.
     for (const match of editableMatches) {
-      await saveMatch(match);
+      const result = await persistMatch(match);
+      if (result.error) {
+        hasError = true;
+        break;
+      }
+      if (result.changed) changedCount += 1;
+      if (result.realScoreChanged) realScoreChanged = true;
     }
+    if (hasError) return;
+    if (realScoreChanged) {
+      await syncRealKnockoutMatches(new FormData());
+    }
+    window.dispatchEvent(new Event(LEADERBOARD_REFRESH_EVENT));
+    router.refresh();
+    setMessage(
+      changedCount === 0
+        ? "Aucune modification à sauvegarder."
+        : `Sauvegarde effectuée (${changedCount} match${changedCount > 1 ? "s" : ""}).`
+    );
+  } catch (error) {
+    console.error("Erreur handleSaveAll mobile:", error);
+    setMessage("Erreur lors de la sauvegarde.");
   } finally {
     setSavingAll(false);
   }
@@ -241,8 +269,14 @@ useEffect(() => {
       [matchId]: team,
     }));
   }
-  async function saveMatch(match: Match) {
-    setMessage("");
+  // Sauvegarde un match (pronostic et/ou score reel) uniquement s'il a change
+  // par rapport a ce qui est deja en base. Ne rafraichit pas la page : c'est
+  // handleSaveAll qui le fait une seule fois a la fin.
+  async function persistMatch(
+    match: Match
+  ): Promise<{ error: boolean; changed: boolean; realScoreChanged: boolean }> {
+    let changed = false;
+    let realScoreChanged = false;
     setSavingMatch(match.id);
     try {
       const hasStarted = new Date(match.kickoff_at).getTime() <= appNowTime;
@@ -251,7 +285,13 @@ useEffect(() => {
       if (!hasStarted && entry && entry.a !== "" && entry.b !== "") {
         const predictedA = Number(entry.a);
         const predictedB = Number(entry.b);
+        const saved = initialValues[match.id];
+        const predictionUnchanged =
+          saved !== undefined &&
+          Number(saved.a) === predictedA &&
+          Number(saved.b) === predictedB;
         if (
+          !predictionUnchanged &&
           !Number.isNaN(predictedA) &&
           !Number.isNaN(predictedB) &&
           predictedA >= 0 &&
@@ -271,8 +311,9 @@ useEffect(() => {
           );
           if (error) {
             setMessage(`Erreur sauvegarde pronostic : ${error.message}`);
-            return;
+            return { error: true, changed, realScoreChanged };
           }
+          changed = true;
         }
       }
       // Real score (admin only, after kickoff).
@@ -300,24 +341,32 @@ useEffect(() => {
             if (match.phase === "Barrages" && match.leg === 2) {
               updatePayload.winner_team = winnerTeams[match.id] ?? null;
             }
-            const { error } = await supabase
-              .from("matches")
-              .update(updatePayload)
-              .eq("id", match.id);
-            if (error) {
-              setMessage(`Erreur sauvegarde score réel : ${error.message}`);
-              return;
+            const realUnchanged =
+              match.is_finished === true &&
+              match.score_a === scoreA &&
+              match.score_b === scoreB &&
+              (updatePayload.winner_team === undefined ||
+                (match.winner_team ?? null) === updatePayload.winner_team);
+            if (!realUnchanged) {
+              const { error } = await supabase
+                .from("matches")
+                .update(updatePayload)
+                .eq("id", match.id);
+              if (error) {
+                setMessage(`Erreur sauvegarde score réel : ${error.message}`);
+                return { error: true, changed, realScoreChanged };
+              }
+              changed = true;
+              realScoreChanged = true;
             }
-            await syncRealKnockoutMatches(new FormData());
           }
         }
       }
-      window.dispatchEvent(new Event(LEADERBOARD_REFRESH_EVENT));
-      router.refresh();
-      setMessage("Sauvegarde effectuée.");
+      return { error: false, changed, realScoreChanged };
     } catch (error) {
-      console.error("Erreur saveMatch mobile:", error);
+      console.error("Erreur persistMatch mobile:", error);
       setMessage("Erreur lors de la sauvegarde.");
+      return { error: true, changed, realScoreChanged };
     } finally {
       setSavingMatch(null);
     }

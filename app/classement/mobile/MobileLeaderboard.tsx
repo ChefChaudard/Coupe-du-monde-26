@@ -107,6 +107,27 @@ export default function MobileLeaderboard() {
   const [totalMetricTooltipStyle, setTotalMetricTooltipStyle] = useState<CSSProperties>({});
   const totalMetricAnchorRef = useRef<HTMLLabelElement>(null);
   const totalMetricTooltipRef = useRef<HTMLDivElement>(null);
+  const totalMetricPointerTypeRef = useRef<string>("mouse");
+
+  // Tactile : un appui en dehors du bouton Total / du graphique le ferme.
+  useEffect(() => {
+    if (!isTotalMetricHovered) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType === "mouse") return;
+      const target = event.target as Node;
+      if (
+        totalMetricAnchorRef.current?.contains(target) ||
+        totalMetricTooltipRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setIsTotalMetricHovered(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isTotalMetricHovered]);
 
   useLayoutEffect(() => {
     if (!isTotalMetricHovered) return;
@@ -342,8 +363,23 @@ export default function MobileLeaderboard() {
           return (
             <span
               className="relative flex"
-              onMouseEnter={() => setIsTotalMetricHovered(true)}
-              onMouseLeave={() => setIsTotalMetricHovered(false)}
+              onPointerDown={(e) => {
+                totalMetricPointerTypeRef.current = e.pointerType;
+              }}
+              onPointerEnter={(e) => {
+                if (e.pointerType === "mouse") setIsTotalMetricHovered(true);
+              }}
+              onPointerLeave={(e) => {
+                if (e.pointerType === "mouse") setIsTotalMetricHovered(false);
+              }}
+              onClick={(e) => {
+                // Tactile : un appui sur "Total" ouvre/ferme le graphique.
+                // Le clic synthetique du label sur l'input est ignore.
+                if ((e.target as HTMLElement).tagName === "INPUT") return;
+                if (totalMetricPointerTypeRef.current !== "mouse") {
+                  setIsTotalMetricHovered((value) => !value);
+                }
+              }}
             >
               <label
                 ref={totalMetricAnchorRef}

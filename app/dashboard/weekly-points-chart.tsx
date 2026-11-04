@@ -110,31 +110,34 @@ export function MultiPlayerWeeklyPointsChart({ series }: { series: PlayerWeeklyS
   }
 
   const width = 340;
-  const height = 190;
-  const padLeft = 34;
+  const height = 220;
+  const padLeft = 40;
   const padRight = 12;
   const padTop = 12;
   const padBottom = 24;
   const plotWidth = width - padLeft - padRight;
   const plotHeight = height - padTop - padBottom;
 
-  // Axe des ordonnees resserre sur l'ecart reel entre joueurs : le minimum
-  // correspond au total actuel du plus mauvais joueur moins 5%, le maximum
-  // au total actuel du meilleur joueur plus 5% (plutot que de partir de 0,
-  // ce qui ecraserait les courbes en haut du graphique).
-  const finalValues = series
-    .filter((s) => s.points.length > 0)
-    .map((s) => s.points[s.points.length - 1].cumulativePoints);
-  const worstValue = Math.min(...finalValues, 0);
-  const bestValue = Math.max(...finalValues, 0);
-
-  let axisMin = worstValue - Math.abs(worstValue) * 0.05;
-  let axisMax = bestValue + Math.abs(bestValue) * 0.05;
+  // Axe des ordonnees resserre sur les valeurs reellement tracees : le
+  // minimum de l'axe est la plus basse valeur de tous les points (tous
+  // joueurs, toutes semaines), le maximum la plus haute. Plusieurs graduations
+  // regulieres sont affichees entre les deux pour mieux separer les joueurs.
+  const allValues = series.flatMap((s) => s.points.map((p) => p.cumulativePoints));
+  let axisMin = Math.min(...allValues);
+  let axisMax = Math.max(...allValues);
 
   if (axisMax - axisMin < 1) {
     axisMin -= 0.5;
     axisMax += 0.5;
   }
+
+  const TICK_COUNT = 6;
+  const tickValues = Array.from(
+    { length: TICK_COUNT },
+    (_, i) => axisMin + ((axisMax - axisMin) * i) / (TICK_COUNT - 1)
+  );
+  const formatTick = (value: number) =>
+    axisMax - axisMin >= 20 ? String(Math.round(value)) : String(Math.round(value * 10) / 10);
 
   const xFor = (index: number) =>
     weeks.length === 1 ? padLeft + plotWidth / 2 : padLeft + (index / (weeks.length - 1)) * plotWidth;
@@ -149,20 +152,21 @@ export function MultiPlayerWeeklyPointsChart({ series }: { series: PlayerWeeklyS
         aria-label="Evolution hebdomadaire des points cumules des joueurs"
         className="w-full"
       >
-        <line
-          x1={padLeft}
-          y1={padTop + plotHeight}
-          x2={width - padRight}
-          y2={padTop + plotHeight}
-          stroke="#e2e8f0"
-          strokeWidth={1}
-        />
-        <text x={padLeft - 6} y={padTop + 4} textAnchor="end" fontSize={9} fill="#94a3b8">
-          {Math.round(axisMax * 100) / 100}
-        </text>
-        <text x={padLeft - 6} y={padTop + plotHeight} textAnchor="end" fontSize={9} fill="#94a3b8">
-          {Math.round(axisMin * 100) / 100}
-        </text>
+        {tickValues.map((tick, i) => (
+          <g key={i}>
+            <line
+              x1={padLeft}
+              y1={yFor(tick)}
+              x2={width - padRight}
+              y2={yFor(tick)}
+              stroke="#e2e8f0"
+              strokeWidth={1}
+            />
+            <text x={padLeft - 6} y={yFor(tick) + 3} textAnchor="end" fontSize={9} fill="#94a3b8">
+              {formatTick(tick)}
+            </text>
+          </g>
+        ))}
 
         {series.map((s, seriesIndex) => {
           const color = SERIES_COLORS[seriesIndex % SERIES_COLORS.length];

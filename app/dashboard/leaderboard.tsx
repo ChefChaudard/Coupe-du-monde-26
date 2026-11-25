@@ -20,6 +20,12 @@ import type {
 import { formatOneDecimal } from "./format";
 import ScoreReportDetails from "./score-report-details";
 import { MultiPlayerWeeklyPointsChart } from "./weekly-points-chart";
+import {
+  computeJourneeRanking,
+  JourneeRankingTable,
+  TooltipPortal,
+  useAnchoredTooltip,
+} from "./journee-ranking";
 
 const STORAGE_KEY = "activeGroupId";
 
@@ -384,6 +390,9 @@ export default function Leaderboard() {
     }
   }, [isTotalMetricHovered]);
 
+  // Tableau classement / points par journee, au survol du bouton "Matchs 1T".
+  const groupTooltip = useAnchoredTooltip(460, 300);
+
   const selectedRow = useMemo(
     () => rows.find((row) => row.user_id === selectedUserId) ?? null,
     [rows, selectedUserId]
@@ -411,6 +420,11 @@ export default function Leaderboard() {
         points: weeklyPointsByUser[row.user_id] ?? [],
       })),
     [rankedRows, weeklyPointsByUser]
+  );
+
+  const journeeRanking = useMemo(
+    () => computeJourneeRanking(rankedRows.map(({ row }) => row), scoreReportByUser),
+    [rankedRows, scoreReportByUser]
   );
 
   const selectedReport = selectedUserId ? scoreReportByUser[selectedUserId] ?? [] : [];
@@ -675,11 +689,15 @@ export default function Leaderboard() {
               <div className="grid grid-cols-2 gap-2">
                 {RANKING_METRICS.slice(1).map((metric) => {
                   const isActive = rankingMetric === metric.key;
+                  const isGroupMetric = metric.key === "group";
 
-                  return (
+                  const label = (
                     <label
-                      key={metric.key}
-                      className={`inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      key={isGroupMetric ? undefined : metric.key}
+                      ref={isGroupMetric ? groupTooltip.anchorRef : undefined}
+                      className={`inline-flex ${
+                        isGroupMetric ? "w-full cursor-help" : "cursor-pointer"
+                      } items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                         isActive
                           ? "border-slate-900 bg-slate-900 text-white"
                           : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
@@ -695,6 +713,40 @@ export default function Leaderboard() {
                       />
                       {metric.label}
                     </label>
+                  );
+
+                  if (!isGroupMetric) return label;
+
+                  return (
+                    <span
+                      key={metric.key}
+                      className="relative flex"
+                      onPointerDown={(e) => {
+                        groupTooltip.pointerTypeRef.current = e.pointerType;
+                      }}
+                      onPointerEnter={(e) => {
+                        if (e.pointerType === "mouse") groupTooltip.setIsOpen(true);
+                      }}
+                      onPointerLeave={(e) => {
+                        if (e.pointerType === "mouse") groupTooltip.setIsOpen(false);
+                      }}
+                      onClick={(e) => {
+                        // Tactile : un appui sur "Matchs 1T" ouvre/ferme le tableau.
+                        if ((e.target as HTMLElement).tagName === "INPUT") return;
+                        if (groupTooltip.pointerTypeRef.current !== "mouse") {
+                          groupTooltip.setIsOpen((value) => !value);
+                        }
+                      }}
+                    >
+                      {label}
+
+                      <TooltipPortal tooltip={groupTooltip}>
+                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          Classement par journée (1er tour)
+                        </p>
+                        <JourneeRankingTable data={journeeRanking} />
+                      </TooltipPortal>
+                    </span>
                   );
                 })}
               </div>

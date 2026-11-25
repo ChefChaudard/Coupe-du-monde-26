@@ -740,10 +740,10 @@ export default function Leaderboard() {
                     >
                       {label}
 
-                      <TooltipPortal tooltip={groupTooltip}>
-                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                          Classement par journée (1er tour)
-                        </p>
+                      <TooltipPortal
+                        tooltip={groupTooltip}
+                        title="Classement par journée (1er tour)"
+                      >
                         <JourneeRankingTable data={journeeRanking} />
                       </TooltipPortal>
                     </span>

@@ -115,9 +115,11 @@ export function useAnchoredTooltip(preferredMaxWidth: number, minWidth: number) 
 // decalee par rapport au bouton.
 export function TooltipPortal({
   tooltip,
+  title,
   children,
 }: {
   tooltip: ReturnType<typeof useAnchoredTooltip>;
+  title: string;
   children: ReactNode;
 }) {
   if (!tooltip.isOpen || typeof document === "undefined") return null;
@@ -126,8 +128,24 @@ export function TooltipPortal({
     <div
       ref={tooltip.tooltipRef}
       style={tooltip.style}
+      // Evite que un clic dans l'infobulle remonte (via l'arbre React) au
+      // bouton ancre, qui basculerait son ouverture.
+      onClick={(e) => e.stopPropagation()}
       className="z-50 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
     >
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+          {title}
+        </p>
+        <button
+          type="button"
+          aria-label="Fermer"
+          onClick={() => tooltip.setIsOpen(false)}
+          className="-mr-1 -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+        >
+          ✕
+        </button>
+      </div>
       {children}
     </div>,
     document.body

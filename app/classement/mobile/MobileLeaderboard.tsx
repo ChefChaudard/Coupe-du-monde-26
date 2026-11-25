@@ -628,11 +628,22 @@ export default function MobileLeaderboard() {
                   <div
                     ref={groupTooltip.tooltipRef}
                     style={groupTooltip.style}
+                    onClick={(e) => e.stopPropagation()}
                     className="z-50 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
                   >
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                      Classement par journée (1er tour)
-                    </p>
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Classement par journée (1er tour)
+                      </p>
+                      <button
+                        type="button"
+                        aria-label="Fermer"
+                        onClick={() => groupTooltip.setIsOpen(false)}
+                        className="-mr-1 -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                      >
+                        ✕
+                      </button>
+                    </div>
                     {journeeTable.journees.length === 0 ? (
                       <p className="text-slate-500">
                         Aucun point attribue pour le moment.
